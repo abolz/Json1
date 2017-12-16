@@ -1,0 +1,125 @@
+newoption {
+    trigger = "cxxflags",
+    description = "Additional build options",
+}
+
+--------------------------------------------------------------------------------
+workspace "Json"
+    configurations { "release", "debug" }
+    platforms { "x64" }
+
+    filter {}
+
+    warnings "Extra"
+
+    -- exceptionhandling "Off"
+    -- rtti "Off"
+
+    flags {
+        "StaticRuntime",
+    }
+
+    configuration { "debug" }
+        defines { "_DEBUG" }
+        symbols "On"
+
+    configuration { "release" }
+        defines { "NDEBUG" }
+        symbols "On" -- for profiling...
+        optimize "Full"
+            -- On ==> -O2
+            -- Full ==> -O3
+
+    configuration { "gmake" }
+        buildoptions {
+            "-std=c++14",
+            "-march=native",
+            "-Wformat",
+            -- "-Wsign-compare",
+            -- "-Wsign-conversion",
+            -- "-pedantic",
+            -- "-fno-omit-frame-pointer",
+            -- "-ftime-report",
+        }
+
+    configuration { "gmake", "debug", "linux" }
+        buildoptions {
+            -- "-fno-omit-frame-pointer",
+            -- "-fsanitize=undefined",
+            -- "-fsanitize=address",
+            -- "-fsanitize=memory",
+            -- "-fsanitize-memory-track-origins",
+        }
+        linkoptions {
+            -- "-fsanitize=undefined",
+            -- "-fsanitize=address",
+            -- "-fsanitize=memory",
+        }
+
+    configuration { "vs*" }
+        buildoptions {
+            "/utf-8",
+            -- "/std:c++latest",
+            -- "/EHsc",
+            -- "/arch:AVX2",
+            -- "/GR-",
+        }
+        defines {
+            -- "_CRT_SECURE_NO_WARNINGS=1",
+            -- "_SCL_SECURE_NO_WARNINGS=1",
+            -- "_HAS_EXCEPTIONS=0",
+        }
+
+    configuration { "windows" }
+        characterset "MBCS"
+
+    if _OPTIONS["cxxflags"] then
+        configuration {}
+            buildoptions {
+                _OPTIONS["cxxflags"],
+            }
+    end
+
+--------------------------------------------------------------------------------
+group "Libs"
+
+project "json"
+    language "C++"
+    kind "StaticLib"
+    files {
+        "src/**.cc",
+        "src/**.h",
+    }
+    configuration { "gmake" }
+        buildoptions {
+            "-Wsign-compare",
+            "-Wsign-conversion",
+            "-Wold-style-cast",
+            "-Wshadow",
+            "-Wconversion",
+            "-pedantic",
+        }
+
+--------------------------------------------------------------------------------
+group "Tests"
+
+project "test"
+    language "C++"
+    kind "ConsoleApp"
+    files {
+        "catch.hpp",
+        "catch_main.cc",
+        "test.cc",
+    }
+    links {
+        "json",
+    }
+    configuration { "gmake" }
+        buildoptions {
+            "-Wsign-compare",
+            "-Wsign-conversion",
+            "-Wold-style-cast",
+            "-Wshadow",
+            "-Wconversion",
+            "-pedantic",
+        }
