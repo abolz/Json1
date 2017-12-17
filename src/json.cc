@@ -535,50 +535,89 @@ void Value::assign_null() noexcept
     type_ = Type::null;
 }
 
-void Value::assign_boolean(bool v) noexcept
+bool& Value::assign_boolean(bool v) noexcept
 {
     assign_null(); // release resources
 
     data_.boolean = v;
     type_ = Type::boolean;
+
+    return as_boolean();
 }
 
-void Value::assign_number(double v) noexcept
+double& Value::assign_number(double v) noexcept
 {
     assign_null(); // release resources
 
     data_.number = v;
     type_ = Type::number;
+
+    return as_number();
 }
 
-void Value::assign_string(String const& v)
+String& Value::assign_string(String const& v)
 {
-    _assign_string(v);
+    return _assign_string(v);
 }
 
-void Value::assign_string(String&& v)
+String& Value::assign_string(String&& v)
 {
-    _assign_string(std::move(v));
+    return _assign_string(std::move(v));
 }
 
-void Value::assign_array(Array const& v)
+Array& Value::assign_array(Array const& v)
 {
-    _assign_array(v);
+    return _assign_array(v);
 }
 
-void Value::assign_array(Array&& v)
+Array& Value::assign_array(Array&& v)
 {
-    _assign_array(std::move(v));
+    return _assign_array(std::move(v));
 }
 
-void Value::assign_object(Object const& v)
+Object& Value::assign_object(Object const& v)
 {
-    _assign_object(v);
+    return _assign_object(v);
 }
 
-void Value::assign_object(Object&& v)
+Object& Value::assign_object(Object&& v)
 {
-    _assign_object(std::move(v));
+    return _assign_object(std::move(v));
+}
+
+bool& Value::create_boolean() noexcept
+{
+    assign_null(); // release resources
+
+    data_.boolean = bool{};
+    type_ = Type::boolean;
+
+    return as_boolean();
+}
+
+double& Value::create_number() noexcept
+{
+    assign_null(); // release resources
+
+    data_.number = double{};
+    type_ = Type::number;
+
+    return as_number();
+}
+
+String& Value::create_string()
+{
+    return _assign_string();
+}
+
+Array& Value::create_array()
+{
+    return _assign_array();
+}
+
+Object& Value::create_object()
+{
+    return _assign_object();
 }
 
 //
@@ -850,28 +889,29 @@ Array& Value::inplace_convert_to_array()
         break;
     case Type::boolean:
         {
-            auto new_val = data_.boolean;
             auto p = std::make_unique<Array>();
-            p->emplace_back(new_val);
+            p->emplace_back(data_.boolean);
+            // nothrow ->
             data_.array = p.release();
             type_ = Type::array;
         }
         break;
     case Type::number:
         {
-            auto new_val = data_.number;
             auto p = std::make_unique<Array>();
-            p->emplace_back(new_val);
+            p->emplace_back(data_.number);
+            // nothrow ->
             data_.array = p.release();
             type_ = Type::array;
         }
         break;
     case Type::string:
         {
-            auto new_val = std::move(*data_.string);
             auto p = std::make_unique<Array>();
-            p->emplace_back(std::move(new_val));
-            delete data_.string;
+            p->emplace_back();
+            // nothrow ->
+            p->back().data_ = data_;
+            p->back().type_ = type_;
             data_.array = p.release();
             type_ = Type::array;
         }
@@ -880,10 +920,11 @@ Array& Value::inplace_convert_to_array()
         break;
     case Type::object:
         {
-            auto new_val = std::move(*data_.object);
             auto p = std::make_unique<Array>();
-            p->emplace_back(std::move(new_val));
-            delete data_.object;
+            p->emplace_back();
+            // nothrow ->
+            p->back().data_ = data_;
+            p->back().type_ = type_;
             data_.array = p.release();
             type_ = Type::array;
         }
@@ -909,6 +950,7 @@ Object& Value::inplace_convert_to_object()
     case Type::string:
         {
             auto p = std::make_unique<Object>();
+            // nothrow ->
             delete data_.string;
             data_.object = p.release();
             type_ = Type::object;
@@ -917,6 +959,7 @@ Object& Value::inplace_convert_to_object()
     case Type::array:
         {
             auto p = std::make_unique<Object>();
+            // nothrow ->
             delete data_.array;
             data_.object = p.release();
             type_ = Type::object;
@@ -928,6 +971,34 @@ Object& Value::inplace_convert_to_object()
         JSON_UNREACHABLE();
         break;
     }
+
+    return as_object();
+}
+
+Array& Value::embed_in_array()
+{
+    auto p = std::make_unique<Array>();
+    p->emplace_back();
+
+    // nothrow ->
+    p->back().data_ = data_;
+    p->back().type_ = type_;
+    data_.array = p.release();
+    type_ = Type::array;
+
+    return as_array();
+}
+
+Object& Value::embed_in_object(String key)
+{
+    auto p = std::make_unique<Object>();
+    (*p)[std::move(key)] = {};
+
+    // nothrow ->
+    p->begin()->second.data_ = data_;
+    p->begin()->second.type_ = type_;
+    data_.object = p.release();
+    type_ = Type::object;
 
     return as_object();
 }
@@ -1266,23 +1337,23 @@ Object::iterator Value::erase(Object::const_iterator pos)
     return obj.erase(pos);
 }
 
-template <typename V>
-void Value::_assign_string(V&& val)
+template <typename ...Args>
+String& Value::_assign_string(Args&&... args)
 {
     switch (type_)
     {
     case Type::null:
     case Type::boolean:
     case Type::number:
-        data_.string = new String(std::forward<V>(val));
+        data_.string = new String(std::forward<Args>(args)...);
         type_ = Type::string;
         break;
     case Type::string:
-        *data_.string = std::forward<V>(val);
+        *data_.string = String(std::forward<Args>(args)...);
         break;
     case Type::array:
         {
-            auto p = std::make_unique<String>(std::forward<V>(val));
+            auto p = std::make_unique<String>(std::forward<Args>(args)...);
             delete data_.array;
             data_.string = p.release();
             type_ = Type::string;
@@ -1290,7 +1361,7 @@ void Value::_assign_string(V&& val)
         break;
     case Type::object:
         {
-            auto p = std::make_unique<String>(std::forward<V>(val));
+            auto p = std::make_unique<String>(std::forward<Args>(args)...);
             delete data_.object;
             data_.string = p.release();
             type_ = Type::string;
@@ -1300,33 +1371,35 @@ void Value::_assign_string(V&& val)
         JSON_UNREACHABLE();
         break;
     }
+
+    return as_string();
 }
 
-template <typename V>
-void Value::_assign_array(V&& val)
+template <typename ...Args>
+Array& Value::_assign_array(Args&&... args)
 {
     switch (type_)
     {
     case Type::null:
     case Type::boolean:
     case Type::number:
-        data_.array = new Array(std::forward<V>(val));
+        data_.array = new Array(std::forward<Args>(args)...);
         type_ = Type::array;
         break;
     case Type::string:
         {
-            auto p = std::make_unique<Array>(std::forward<V>(val));
+            auto p = std::make_unique<Array>(std::forward<Args>(args)...);
             delete data_.string;
             data_.array = p.release();
             type_ = Type::array;
         }
         break;
     case Type::array:
-        *data_.array = std::forward<V>(val);
+        *data_.array = Array(std::forward<Args>(args)...);
         break;
     case Type::object:
         {
-            auto p = std::make_unique<Array>(std::forward<V>(val));
+            auto p = std::make_unique<Array>(std::forward<Args>(args)...);
             delete data_.object;
             data_.array = p.release();
             type_ = Type::array;
@@ -1336,22 +1409,24 @@ void Value::_assign_array(V&& val)
         JSON_UNREACHABLE();
         break;
     }
+
+    return as_array();
 }
 
-template <typename V>
-void Value::_assign_object(V&& val)
+template <typename ...Args>
+Object& Value::_assign_object(Args&&... args)
 {
     switch (type_)
     {
     case Type::null:
     case Type::boolean:
     case Type::number:
-        data_.object = new Object(std::forward<V>(val));
+        data_.object = new Object(std::forward<Args>(args)...);
         type_ = Type::object;
         break;
     case Type::string:
         {
-            auto p = std::make_unique<Object>(std::forward<V>(val));
+            auto p = std::make_unique<Object>(std::forward<Args>(args)...);
             delete data_.string;
             data_.object = p.release();
             type_ = Type::object;
@@ -1359,19 +1434,21 @@ void Value::_assign_object(V&& val)
         break;
     case Type::array:
         {
-            auto p = std::make_unique<Object>(std::forward<V>(val));
+            auto p = std::make_unique<Object>(std::forward<Args>(args)...);
             delete data_.array;
             data_.object = p.release();
             type_ = Type::object;
         }
         break;
     case Type::object:
-        *data_.object = std::forward<V>(val);
+        *data_.object = Object(std::forward<Args>(args)...);
         break;
     default:
         JSON_UNREACHABLE();
         break;
     }
+
+    return as_object();
 }
 
 //==================================================================================================

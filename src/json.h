@@ -478,15 +478,15 @@ public:
     // assignment operator is used. Otherwise the copy/move constructor will be
     // used to construct a new X.
 
-    void assign_null   () noexcept;
-    void assign_boolean(bool          v) noexcept;
-    void assign_number (double        v) noexcept;
-    void assign_string (String const& v);
-    void assign_string (String&&      v);
-    void assign_array  (Array const&  v);
-    void assign_array  (Array&&       v);
-    void assign_object (Object const& v);
-    void assign_object (Object&&      v);
+    void    assign_null   () noexcept;
+    bool&   assign_boolean(bool          v) noexcept;
+    double& assign_number (double        v) noexcept;
+    String& assign_string (String const& v);
+    String& assign_string (String&&      v);
+    Array&  assign_array  (Array const&  v);
+    Array&  assign_array  (Array&&       v);
+    Object& assign_object (Object const& v);
+    Object& assign_object (Object&&      v);
 
     // isa<T>
 
@@ -512,6 +512,12 @@ public:
 #endif
 #endif
 
+    bool&    create_boolean() noexcept;
+    double&  create_number() noexcept;
+    String&  create_string();
+    Array&   create_array();
+    Object&  create_object();
+
     // inplace_convert_to_X converts the value stored in this JSON object into a value of type X.
     //
     // If the value stored in this JSON object is already of type X, calling
@@ -523,6 +529,12 @@ public:
     String&  inplace_convert_to_string();
     Array&   inplace_convert_to_array();
     Object&  inplace_convert_to_object();
+
+    // Embed the current JSON value into an array.
+    Array& embed_in_array();
+
+    // Embed the current JSON value into an object.
+    Object& embed_in_object(String key);
 
     // convert_to_X returns a copy of the value stored in this JSON object converted to X.
     //
@@ -638,9 +650,9 @@ public:
     Object::iterator erase(Object::const_iterator pos);
 
 private:
-    template <typename V> void _assign_string(V&& val);
-    template <typename V> void _assign_array(V&& val);
-    template <typename V> void _assign_object(V&& val);
+    template <typename ...Args> String& _assign_string(Args&&... args);
+    template <typename ...Args> Array&  _assign_array (Args&&... args);
+    template <typename ...Args> Object& _assign_object(Args&&... args);
 };
 
 inline void swap(Value& lhs, Value& rhs) noexcept
