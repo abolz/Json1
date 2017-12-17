@@ -309,8 +309,8 @@ private:
     Value(Tag_object,  Object&&      v);
 
     // to_json might return a 'Value'
-    template <typename Tag> Value(Tag, Value const& v) { *this = v; }
-    template <typename Tag> Value(Tag, Value&&      v) { *this = std::move(v); }
+    template <Type Ty> Value(Type_const<Ty>, Value const& v) { *this = v; }
+    template <Type Ty> Value(Type_const<Ty>, Value&&      v) { *this = std::move(v); }
 
 public:
     template <typename T, std::enable_if_t< AllowConversion<T>::value && IsConvertible<T>::value, int > = 0>
@@ -337,8 +337,8 @@ private:
     void _assign_from(Tag_object,  Object&&      v)          { assign_object(std::move(v)); }
 
     // to_json might return a 'Value'
-    template <typename Tag> void _assign_from(Tag, Value const& v) { *this = v; }
-    template <typename Tag> void _assign_from(Tag, Value&&      v) { *this = std::move(v); }
+    template <Type Ty> void _assign_from(Type_const<Ty>, Value const& v) { *this = v; }
+    template <Type Ty> void _assign_from(Type_const<Ty>, Value&&      v) { *this = std::move(v); }
 
 public:
     template <typename T, std::enable_if_t< AllowConversion<T>::value && IsConvertible<T>::value, int > = 0>
