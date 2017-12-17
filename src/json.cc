@@ -1171,22 +1171,6 @@ Value const* Value::at(size_t index) const
     return nullptr;
 }
 
-Value& Value::push_back(Value const& value)
-{
-    assert(is_null() || is_array());
-    auto& arr = inplace_convert_to_array();
-    arr.emplace_back(value);
-    return arr.back();
-}
-
-Value& Value::push_back(Value&& value)
-{
-    assert(is_null() || is_array());
-    auto& arr = inplace_convert_to_array();
-    arr.emplace_back(std::move(value));
-    return arr.back();
-}
-
 void Value::pop_back()
 {
     as_array().pop_back();

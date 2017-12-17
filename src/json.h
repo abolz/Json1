@@ -551,8 +551,7 @@ public:
     // PRE: is_string() or is_array() or is_object()
     bool empty() const noexcept;
 
-    // Traits this value into an array an return a reference to the index-th
-    // element.
+    // Traits this value into an array an return a reference to the index-th element.
     // PRE: is_array() or is_null()
     Value& operator[](size_t index);
 
@@ -566,10 +565,21 @@ public:
     Value*       at(size_t index);
     Value const* at(size_t index) const;
 
-    // Traits this value to an array and append the given value to the array.
+    // Convert this value into an array and append a new element constructed from the given arguments.
     // PRE: is_array() or is_null()
-    Value& push_back(Value const& value);
-    Value& push_back(Value&& value);
+    template <typename ...Args>
+    Value& emplace_back(Args&&... args)
+    {
+        assert(is_null() || is_array());
+        auto& arr = inplace_convert_to_array();
+        arr.emplace_back(std::forward<Args>(args)...);
+        return arr.back();
+    }
+
+    // Convert this value into an array and append a new element.
+    // PRE: is_array() or is_null()
+    Value& push_back(Value const& value) { return emplace_back(value); }
+    Value& push_back(Value&&      value) { return emplace_back(std::move(value)); }
 
     // Remove the last element of the array.
     // PRE: is_array()
@@ -581,8 +591,7 @@ public:
     // PRE: index < size()
     void erase(size_t index);
 
-    // Traits this value into an object and return a reference to the value
-    // with the given key.
+    // Convert this value into an object and return a reference to the value with the given key.
     // PRE: is_object() or is_null()
     Value& operator[](Object::key_type const& key);
     Value& operator[](Object::key_type&& key);
