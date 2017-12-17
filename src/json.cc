@@ -2547,7 +2547,7 @@ ErrorCode json::parse(Value& value, cxx::string_view str, ParseOptions const& op
 // stringify
 //==================================================================================================
 
-static bool Stringify(std::string& str, Value const& value, StringifyOptions const& options, int curr_indent);
+static bool StringifyValue(std::string& str, Value const& value, StringifyOptions const& options, int curr_indent);
 
 static bool StringifyNull(std::string& str)
 {
@@ -2759,31 +2759,42 @@ static bool StringifyArray(std::string& str, Array const& value, StringifyOption
     auto const E = value.end();
     if (I != E)
     {
-        curr_indent += options.indent_width;
-
-        for (;;)
+        if (options.indent_width >= 0)
         {
-            if (options.indent_width >= 0)
+            assert(curr_indent <= INT_MAX - options.indent_width);
+            curr_indent += options.indent_width;
+
+            for (;;)
             {
                 str += '\n';
                 str.append(static_cast<size_t>(curr_indent), ' ');
+
+                if (!StringifyValue(str, *I, options, curr_indent))
+                    return false;
+
+                if (++I == E)
+                    break;
+
+                str += ',';
             }
 
-            if (!Stringify(str, *I, options, curr_indent))
-                return false;
+            curr_indent -= options.indent_width;
 
-            if (++I == E)
-                break;
-
-            str += ',';
-        }
-
-        curr_indent -= options.indent_width;
-
-        if (options.indent_width >= 0)
-        {
             str += '\n';
             str.append(static_cast<size_t>(curr_indent), ' ');
+        }
+        else
+        {
+            for (;;)
+            {
+                if (!StringifyValue(str, *I, options, curr_indent))
+                    return false;
+
+                if (++I == E)
+                    break;
+
+                str += ',';
+            }
         }
     }
 
@@ -2800,38 +2811,49 @@ static bool StringifyObject(std::string& str, Object const& value, StringifyOpti
     auto const E = value.end();
     if (I != E)
     {
-        curr_indent += options.indent_width;
-
-        for (;;)
+        if (options.indent_width >= 0)
         {
-            if (options.indent_width >= 0)
+            assert(curr_indent <= INT_MAX - options.indent_width);
+            curr_indent += options.indent_width;
+
+            for (;;)
             {
                 str += '\n';
                 str.append(static_cast<size_t>(curr_indent), ' ');
+
+                if (!StringifyString(str, I->first, options))
+                    return false;
+                str += ':';
+                str += ' ';
+                if (!StringifyValue(str, I->second, options, curr_indent))
+                    return false;
+
+                if (++I == E)
+                    break;
+
+                str += ',';
             }
 
-            if (!StringifyString(str, I->first, options))
-                return false;
+            curr_indent -= options.indent_width;
 
-            str += ':';
-            if (options.indent_width >= 0)
-                str += ' ';
-
-            if (!Stringify(str, I->second, options, curr_indent))
-                return false;
-
-            if (++I == E)
-                break;
-
-            str += ',';
-        }
-
-        curr_indent -= options.indent_width;
-
-        if (options.indent_width >= 0)
-        {
             str += '\n';
             str.append(static_cast<size_t>(curr_indent), ' ');
+        }
+        else
+        {
+            for (;;)
+            {
+                if (!StringifyString(str, I->first, options))
+                    return false;
+                str += ':';
+                if (!StringifyValue(str, I->second, options, curr_indent))
+                    return false;
+
+                if (++I == E)
+                    break;
+
+                str += ',';
+            }
         }
     }
 
@@ -2840,7 +2862,7 @@ static bool StringifyObject(std::string& str, Object const& value, StringifyOpti
     return true;
 }
 
-static bool Stringify(std::string& str, Value const& value, StringifyOptions const& options, int curr_indent)
+static bool StringifyValue(std::string& str, Value const& value, StringifyOptions const& options, int curr_indent)
 {
     switch (value.type())
     {
@@ -2864,5 +2886,5 @@ static bool Stringify(std::string& str, Value const& value, StringifyOptions con
 
 bool json::stringify(std::string& str, Value const& value, StringifyOptions const& options)
 {
-    return Stringify(str, value, options, 0);
+    return StringifyValue(str, value, options, 0);
 }
