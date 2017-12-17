@@ -1086,6 +1086,12 @@ size_t Value::hash() const noexcept
     }
 }
 
+void Value::swap(Value& other) noexcept
+{
+    std::swap(data_, other.data_);
+    std::swap(type_, other.type_);
+}
+
 size_t Value::size() const noexcept
 {
     switch (type())

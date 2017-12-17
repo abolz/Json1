@@ -543,6 +543,9 @@ public:
     // Compute a hash value for this JSON value.
     size_t hash() const noexcept;
 
+    // Swap this value with another
+    void swap(Value& other) noexcept;
+
     // Returns the size of this string or array or object.
     // PRE: is_string() or is_array() or is_object()
     size_t size() const noexcept;
@@ -630,6 +633,11 @@ private:
     template <typename V> void _assign_array(V&& val);
     template <typename V> void _assign_object(V&& val);
 };
+
+inline void swap(Value& lhs, Value& rhs) noexcept
+{
+    lhs.swap(rhs);
+}
 
 inline bool operator==(Value const& lhs, Value const& rhs) noexcept
 {
