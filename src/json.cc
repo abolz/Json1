@@ -1236,18 +1236,6 @@ Value const* Value::find(cxx::string_view key) const
     return nullptr;
 }
 
-std::pair<Object::iterator, bool> Value::insert(Object::value_type const& pair)
-{
-    assert(is_null() || is_object());
-    return inplace_convert_to_object().insert(pair);
-}
-
-std::pair<Object::iterator, bool> Value::insert(Object::value_type&& pair)
-{
-    assert(is_null() || is_object());
-    return inplace_convert_to_object().insert(std::move(pair));
-}
-
 size_t Value::erase(cxx::string_view key)
 {
 #if 1

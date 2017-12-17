@@ -615,10 +615,19 @@ public:
         return find(key) != nullptr;
     }
 
-    // Traits this value to an object and insert the given {key, value} pair.
+    // Convert this value into an object and insert a new element constructed from the given arguments.
     // PRE: is_object() or is_null()
-    std::pair<Object::iterator, bool> insert(Object::value_type const& pair);
-    std::pair<Object::iterator, bool> insert(Object::value_type&& pair);
+    template <typename ...Args>
+    std::pair<Object::iterator, bool> emplace(Args&&... args)
+    {
+        assert(is_null() || is_object());
+        return inplace_convert_to_object().emplace(std::forward<Args>(args)...);
+    }
+
+    // Convert this value to an object and insert the given {key, value} pair.
+    // PRE: is_object() or is_null()
+    std::pair<Object::iterator, bool> insert(Object::value_type const& pair) { return emplace(pair); }
+    std::pair<Object::iterator, bool> insert(Object::value_type&&      pair) { return emplace(std::move(pair)); }
 
     // Erase the the given key.
     // PRE: is_object()
