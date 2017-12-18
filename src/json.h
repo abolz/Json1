@@ -309,8 +309,8 @@ private:
     Value(Tag_object,  Object&&      v);
 
     // to_json might return a 'Value'
-    template <Type Ty> Value(Type_const<Ty>, Value const& v) { *this = v; }
-    template <Type Ty> Value(Type_const<Ty>, Value&&      v) { *this = std::move(v); }
+    template <Type Ty> Value(Type_const<Ty>, Value const& v) : Value(v) {}
+    template <Type Ty> Value(Type_const<Ty>, Value&&      v) : Value(std::move(v)) {}
 
 public:
     template <typename T, std::enable_if_t< AllowConversion<T>::value && IsConvertible<T>::value, int > = 0>
