@@ -1,3 +1,5 @@
+local build_dir = "build/" .. _ACTION
+
 newoption {
     trigger = "cxxflags",
     description = "Additional build options",
@@ -10,6 +12,9 @@ workspace "Json"
 
     filter {}
 
+    location    (build_dir)
+    objdir      (build_dir .. "/obj")
+
     warnings "Extra"
 
     -- exceptionhandling "Off"
@@ -18,6 +23,12 @@ workspace "Json"
     flags {
         "StaticRuntime",
     }
+
+    configuration { "debug" }
+        targetdir (build_dir .. "/bin/debug")
+
+    configuration { "release" }
+        targetdir (build_dir .. "/bin/release")
 
     configuration { "debug" }
         defines { "_DEBUG" }
