@@ -1,8 +1,14 @@
 /.vscode/
 /.vs/
 /bin/
+/build/
+/ext/
 /obj/
+/scratch/
+/test_data/
 Makefile
 *.make
 *.sln
 *.vcxproj
+*.vcxproj.user
+*.vspx
