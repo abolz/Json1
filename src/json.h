@@ -496,20 +496,11 @@ public:
     // to<T>
 
     template <typename T> decltype(auto) to() const&  noexcept { return Traits_t<T>::from_json(static_cast<Value const& >(*this)); }
-    template <typename T> decltype(auto) to() &       noexcept { return Traits_t<T>::from_json(static_cast<Value &      >(*this)); }
-    template <typename T> decltype(auto) to() const&& noexcept { return Traits_t<T>::from_json(static_cast<Value const&&>(*this)); }
     template <typename T> decltype(auto) to() &&      noexcept { return Traits_t<T>::from_json(static_cast<Value &&     >(*this)); }
 
 #if JSON_VALUE_HAS_EXPLICIT_OPERATOR_T
-#if 0
-    template <typename T> explicit operator T() const&  noexcept { return to<T>(); }
-    template <typename T> explicit operator T() &       noexcept { return to<T>(); }
-    template <typename T> explicit operator T() const&& noexcept { return to<T>(); }
-    template <typename T> explicit operator T() &&      noexcept { return to<T>(); }
-#else
-    // This way gcc at least issues a warning about similar conversion sequences (see the optional test).
-    template <typename T> explicit operator T() const noexcept { return Traits_t<T>::from_json(*this); }
-#endif
+    template <typename T> explicit operator T() const&  noexcept { return this->to<T>(); }
+    template <typename T> explicit operator T() &&      noexcept { return this->to<T>(); }
 #endif
 
     bool&    create_boolean() noexcept;
@@ -654,6 +645,9 @@ private:
     template <typename ...Args> Array&  _assign_array (Args&&... args);
     template <typename ...Args> Object& _assign_object(Args&&... args);
 };
+
+template <typename T> inline decltype(auto) to(Value const&  val) { return val.template to<T>(); }
+template <typename T> inline decltype(auto) to(Value&&       val) { return std::move(val).template to<T>(); }
 
 inline void swap(Value& lhs, Value& rhs) noexcept
 {
