@@ -3,6 +3,7 @@
 #include "catch.hpp"
 
 #include <tuple>
+#include <variant>
 
 //------------------------------------------------------------------------------
 //
@@ -180,7 +181,7 @@ TEST_CASE("Value - construct JSON")
         {"empty_object" , json::Object{}},
         {"FirstName", "John"},
         {"LastName", "Doe"},
-        {"Age", 43},
+        {"Age", 43ll},
         {"Address", json::Object{
             {"Street", "Downing \"Street\" 10"},
             {"City", "London"},

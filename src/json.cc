@@ -510,6 +510,34 @@ Value::Value(Tag_object, Object&& v)
     type_ = Type::object;
 }
 
+Value::Value(Type t)
+{
+    switch (t)
+    {
+    case Type::null:
+        break;
+    case Type::boolean:
+        data_.boolean = {};
+        break;
+    case Type::number:
+        data_.number = {};
+        break;
+    case Type::string:
+        data_.string = new String{};
+        break;
+    case Type::array:
+        data_.array = new Array{};
+        break;
+    case Type::object:
+        data_.object = new Object{};
+        break;
+    default:
+        JSON_UNREACHABLE();
+        break;
+    }
+    type_ = t; // Don't move to constructor initializer list!
+}
+
 void Value::assign_null() noexcept
 {
     switch (type_)

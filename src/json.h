@@ -15,7 +15,8 @@
 // Value
 //==================================================================================================
 
-#define JSON_VALUE_HAS_EXPLICIT_OPERATOR_T 1
+#define JSON_VALUE_HAS_EXPLICIT_OPERATOR_T                      1
+#define JSON_VALUE_HAS_IMPLICIT_INITIALIZER_LIST_CONSTRUCTOR    0
 
 namespace json {
 
@@ -313,6 +314,8 @@ private:
     template <Type Ty> Value(Type_const<Ty>, Value&&      v) : Value(std::move(v)) {}
 
 public:
+    Value(Type t);
+
     template <typename T, std::enable_if_t< AllowConversion<T>::value && IsConvertible<T>::value, int > = 0>
     Value(T&& v)
         : Value(Tag_t<T>{}, Traits_t<T>::to_json(std::forward<T>(v)))
@@ -324,6 +327,13 @@ public:
         : Value(Tag_t<T>{}, static_cast<TargetType_t<T>>( Traits_t<T>::to_json(std::forward<T>(v)) ))
     {
     }
+
+#if JSON_VALUE_HAS_IMPLICIT_INITIALIZER_LIST_CONSTRUCTOR
+    Value(std::initializer_list<std::pair<String, Value>> il)
+        : Value(Tag_object{}, il)
+    {
+    }
+#endif
 
 private:
     void _assign_from(Tag_null,    Null           ) noexcept { assign_null(); }
