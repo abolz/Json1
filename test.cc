@@ -2,6 +2,8 @@
 
 #include "catch.hpp"
 
+#include <tuple>
+
 //------------------------------------------------------------------------------
 //
 //------------------------------------------------------------------------------
@@ -147,6 +149,7 @@ TEST_CASE("Value - implicit constructors")
 //------------------------------------------------------------------------------
 
 #include <forward_list>
+#include <iterator>
 #include <list>
 #include <set>
 
@@ -234,6 +237,87 @@ TEST_CASE("arrays")
         REQUIRE(j[2].as_number() == 3.3);
         REQUIRE(j[3].is_string());
         REQUIRE(j[3].as_string() == "two");
+    }
+}
+
+namespace json
+{
+    template <typename ...Tn>
+    struct Traits<std::tuple<Tn...>>
+    {
+        using tag = Tag_array;
+        template <typename V> static decltype(auto) to_json(V&& in) // V = std::tuple<Tn...> [const][&]
+        {
+            static_cast<void>(in); // unused for empty tuples - fix warning
+            return Array{std::get<Tn>(std::forward<V>(in))...};
+        }
+        template <typename V> static decltype(auto) from_json(V&& in) // V = Value [const&]
+        {
+            assert(in.as_array().size() == sizeof...(Tn));
+            auto I = std::make_move_iterator(in.as_array().begin()); // Does _not_ move for V = Value const&
+            return std::tuple<Tn...>{json::to<Tn>(*I++)...};
+            //                                     ^~~
+            // Very small performance penalty here.
+            // Could provide a specialization for empty/non-empty tuples...
+        }
+    };
+}
+
+TEST_CASE("tuple")
+{
+    SECTION("0-tuple")
+    {
+        using Tup = std::tuple<>;
+
+        Tup tup;
+        json::Value j = tup;
+        REQUIRE(j.is_array());
+        REQUIRE(j.size() == 0);
+        REQUIRE(j.empty());
+
+        //auto t = j.to<Tup>();
+    }
+
+    SECTION("1-tuple")
+    {
+        using Tup = std::tuple<double>;
+
+        Tup tup = {1.2};
+        json::Value j = tup;
+        REQUIRE(j.is_array());
+        REQUIRE(j[0].is_number());
+        REQUIRE(j[0] == 1.2);
+
+        auto t = j.to<Tup>();
+        REQUIRE(std::get<0>(t) == 1.2);
+    }
+
+    SECTION("2-tuple")
+    {
+        using Tup = std::tuple<double, std::string>;
+
+        Tup tup = {2.34, "hello hello hello hello hello hello hello hello "};
+        json::Value j = tup;
+        REQUIRE(j.is_array());
+        REQUIRE(j.size() == 2);
+        REQUIRE(j[0].is_number());
+        REQUIRE(j[0] == 2.34);
+        REQUIRE(j[1].is_string());
+        REQUIRE(j[1] == "hello hello hello hello hello hello hello hello ");
+
+        auto t1 = json::to<Tup>(j);
+        REQUIRE(std::get<0>(t1) == 2.34);
+        REQUIRE(std::get<1>(t1) == "hello hello hello hello hello hello hello hello ");
+        REQUIRE(j[1].is_string());
+        REQUIRE(j[1].as_string() == "hello hello hello hello hello hello hello hello ");
+
+        auto t2 = json::to<Tup>(std::move(j));
+        REQUIRE(std::get<0>(t2) == 2.34);
+        REQUIRE(std::get<1>(t2) == "hello hello hello hello hello hello hello hello ");
+#if 0//_MSC_VER // These tests probably work... XXX: Add a test type which has a distinguished moved-from state...
+        REQUIRE(j[1].is_string());
+        REQUIRE(j[1].as_string().empty());
+#endif
     }
 }
 
@@ -462,6 +546,22 @@ TEST_CASE("JSON_checker")
             json::Value val;
             auto const res = json::parse(val, inp.data(), inp.data() + inp.size());
             CHECK(res.ec == json::ErrorCode::success);
+
+            std::string s;
+            json::StringifyOptions options;
+            //options.indent_width = INT8_MIN;
+            //options.indent_width = INT8_MAX;
+            options.indent_width = 4;
+            auto const str_ok = json::stringify(s, val, options);
+            CHECK(str_ok);
+
+            //printf("%s\n", s.c_str());
+
+            json::Value val2;
+            auto const res2 = json::parse(val2, s.data(), s.data() + s.size());
+            CHECK(res2.ec == json::ErrorCode::success);
+
+            CHECK(val == val2);
         }
     }
 
