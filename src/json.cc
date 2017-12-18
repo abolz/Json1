@@ -1252,7 +1252,7 @@ Value const& Value::operator[](size_t index) const noexcept
     return arr[index];
 }
 
-Value* Value::at(size_t index)
+Value* Value::get_ptr(size_t index)
 {
     if (is_array())
     {
@@ -1264,7 +1264,7 @@ Value* Value::at(size_t index)
     return nullptr;
 }
 
-Value const* Value::at(size_t index) const
+Value const* Value::get_ptr(size_t index) const
 {
     if (is_array())
     {
@@ -1309,7 +1309,7 @@ Value const& Value::operator[](cxx::string_view key) const noexcept
     return it->second;
 }
 
-Value* Value::find(cxx::string_view key)
+Value* Value::get_ptr(cxx::string_view key)
 {
     if (is_object())
     {
@@ -1322,7 +1322,7 @@ Value* Value::find(cxx::string_view key)
     return nullptr;
 }
 
-Value const* Value::find(cxx::string_view key) const
+Value const* Value::get_ptr(cxx::string_view key) const
 {
     if (is_object())
     {

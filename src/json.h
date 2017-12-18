@@ -567,7 +567,7 @@ public:
     // PRE: is_string() or is_array() or is_object()
     bool empty() const noexcept;
 
-    // Traits this value into an array an return a reference to the index-th element.
+    // Convert this value into an array an return a reference to the index-th element.
     // PRE: is_array() or is_null()
     Value& operator[](size_t index);
 
@@ -578,8 +578,8 @@ public:
 
     // Returns a pointer the the value at the given index.
     // Or nullptr if this value is not an array of if the index is out bounds.
-    Value*       at(size_t index);
-    Value const* at(size_t index) const;
+    Value*       get_ptr(size_t index);
+    Value const* get_ptr(size_t index) const;
 
     // Convert this value into an array and append a new element constructed from the given arguments.
     // PRE: is_array() or is_null()
@@ -619,13 +619,13 @@ public:
 
     // Returns a pointer to the value with the given key.
     // Or nullptr if no such key exists, or this value is not an object.
-    Value*       find(cxx::string_view key);
-    Value const* find(cxx::string_view key) const;
+    Value*       get_ptr(cxx::string_view key);
+    Value const* get_ptr(cxx::string_view key) const;
 
     // Returns whether a value with the given key exists.
     bool has_member(cxx::string_view key) const
     {
-        return find(key) != nullptr;
+        return get_ptr(key) != nullptr;
     }
 
     // Convert this value into an object and insert a new element constructed from the given arguments.
