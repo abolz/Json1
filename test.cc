@@ -144,6 +144,58 @@ TEST_CASE("Value - implicit constructors")
     }
 }
 
+TEST_CASE("Value - construct JSON")
+{
+    std::string const input = R"({
+        "empty_array": [],
+        "empty_object" : {},
+        "FirstName": "John",
+        "LastName": "Doe",
+        "Age": 43,
+        "Address": {
+            "Street": "Downing \"Street\" 10",
+            "City": "London",
+            "Country": "Great Britain"
+        },
+        "Phone numbers": [
+            "+44 1234567",
+            "+44 2345678"
+        ]
+    })";
+
+    json::Value val;
+    json::parse(val, input.data(), input.data() + input.size());
+
+    std::string str;
+    json::stringify(str, val);
+
+    json::Value val2;
+    json::parse(val2, str.data(), str.data() + str.size());
+
+    CHECK(val == val2);
+    CHECK(val.hash() == val2.hash());
+
+    json::Value val3 = json::Object{
+        {"empty_array", json::Array{}},
+        {"empty_object" , json::Object{}},
+        {"FirstName", "John"},
+        {"LastName", "Doe"},
+        {"Age", 43},
+        {"Address", json::Object{
+            {"Street", "Downing \"Street\" 10"},
+            {"City", "London"},
+            {"Country", "Great Britain"}
+        }},
+        {"Phone numbers", json::Array{
+            "+44 1234567",
+            "+44 2345678"
+        }},
+    };
+
+    CHECK(val == val3);
+    CHECK(val.hash() == val3.hash());
+}
+
 //------------------------------------------------------------------------------
 //
 //------------------------------------------------------------------------------
