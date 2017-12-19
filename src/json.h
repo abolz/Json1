@@ -567,6 +567,29 @@ public:
     // PRE: is_string() or is_array() or is_object()
     bool empty() const noexcept;
 
+// Arrays:
+
+    using iterator       = Array::iterator;
+    using const_iterator = Array::const_iterator;
+
+    iterator       begin()      & { return as_array().begin(); }
+    iterator       end()        & { return as_array().end();   }
+    const_iterator begin() const& { return as_array().begin(); }
+    const_iterator end()   const& { return as_array().end();   }
+
+#if 0
+    template <typename It>
+    struct Elements {
+        It begin_;
+        It end_;
+        It begin() const { return begin_; }
+        It end() const { return end_; }
+    };
+
+    Elements<iterator>       elements()      &  { return {begin(), end()}; }
+    Elements<const_iterator> elements() const&  { return {begin(), end()}; }
+#endif
+
     // Convert this value into an array an return a reference to the index-th element.
     // PRE: is_array() or is_null()
     Value& operator[](size_t index);
@@ -607,6 +630,29 @@ public:
     // PRE: index < size()
     void erase(size_t index);
 
+// Objects:
+
+    using item_iterator       = Object::iterator;
+    using const_item_iterator = Object::const_iterator;
+
+    item_iterator       items_begin()      & { return as_object().begin(); }
+    item_iterator       items_end()        & { return as_object().end();   }
+    const_item_iterator items_begin() const& { return as_object().begin(); }
+    const_item_iterator items_end()   const& { return as_object().end();   }
+
+#if 0
+    template <typename It>
+    struct Items {
+        It begin_;
+        It end_;
+        It begin() const { return begin_; }
+        It end() const { return end_; }
+    };
+
+    Items<item_iterator>       items()      &  { return {items_begin(), items_end()}; }
+    Items<const_item_iterator> items() const&  { return {items_begin(), items_end()}; }
+#endif
+
     // Convert this value into an object and return a reference to the value with the given key.
     // PRE: is_object() or is_null()
     Value& operator[](Object::key_type const& key);
@@ -631,7 +677,7 @@ public:
     // Convert this value into an object and insert a new element constructed from the given arguments.
     // PRE: is_object() or is_null()
     template <typename ...Args>
-    std::pair<Object::iterator, bool> emplace(Args&&... args)
+    std::pair<item_iterator, bool> emplace(Args&&... args)
     {
         assert(is_null() || is_object());
         return inplace_convert_to_object().emplace(std::forward<Args>(args)...);
@@ -639,8 +685,8 @@ public:
 
     // Convert this value to an object and insert the given {key, value} pair.
     // PRE: is_object() or is_null()
-    std::pair<Object::iterator, bool> insert(Object::value_type const& pair) { return emplace(pair); }
-    std::pair<Object::iterator, bool> insert(Object::value_type&&      pair) { return emplace(std::move(pair)); }
+    std::pair<item_iterator, bool> insert(Object::value_type const& pair) { return emplace(pair); }
+    std::pair<item_iterator, bool> insert(Object::value_type&&      pair) { return emplace(std::move(pair)); }
 
     // Erase the the given key.
     // PRE: is_object()
@@ -648,7 +694,7 @@ public:
 
     // Erase the the given key.
     // PRE: is_object()
-    Object::iterator erase(Object::const_iterator pos);
+    item_iterator erase(const_item_iterator pos);
 
 private:
     template <typename ...Args> String& _assign_string(Args&&... args);
@@ -960,75 +1006,3 @@ struct StringifyOptions
 bool stringify(std::string& str, Value const& value, StringifyOptions const& options = {});
 
 } // namespace json
-
-#if 0
-
-namespace json {
-
-template <typename T, typename Alloc>
-struct Traits<std::vector<T, Alloc>>
-{
-    using tag = Tag_array;
-
-    template <typename V>
-    static decltype(auto) to_json(V&& in)
-    {
-        return Array(in.begin(), in.end());
-    }
-
-    template <typename V>
-    static decltype(auto) from_json(V&& in)
-    {
-        std::vector<T, Alloc> out;
-        out.reserve(in.as_array().size());
-        for (auto&& p : std::forward<V>(in).as_array())
-        {
-//          out.emplace_back(std::forward<decltype(p)>(p).template to<T>());
-            out.emplace_back(static_cast<T>( std::forward<decltype(p)>(p).template convert_to<TargetType_t<T>>() ));
-        }
-        return out;
-    }
-};
-
-template <typename Key, typename T, typename Compare, typename Alloc>
-struct Traits<std::map<Key, T, Compare, Alloc>>
-{
-    using tag = Tag_object;
-
-    template <typename V, typename JsonValue = Value>
-    static decltype(auto) to_json(V&& in)
-    {
-        Object out;
-        for (auto&& p : in)
-        {
-            out[JsonValue(p.first).convert_to_string()] = p.second;
-        }
-        return out;
-    }
-
-    template <typename V, typename JsonValue = Value>
-    static decltype(auto) from_json(V&& in)
-    {
-        std::map<Key, T, Compare, Alloc> out;
-        for (auto&& p : in.as_object())
-        {
-#if 0
-            out[JsonValue(p.first).template to<Key>()] = p.second.template to<T>();
-#else
-#if 0
-            out[JsonValue(p.first).template convert_to<Key>()] = p.second.template to<T>();
-#else
-            // Suppress implicit conversion warnings.
-            // convert_to<TargetType_t<Key>> does not involve an implicit conversion.
-            // Explicitly convert the result to Key.
-            out[static_cast<Key>( JsonValue(p.first).template convert_to<TargetType_t<Key>>() )] = p.second.template to<T>();
-#endif
-#endif
-        }
-        return out;
-    }
-};
-
-} // namespace json
-
-#endif

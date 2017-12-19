@@ -1359,7 +1359,7 @@ size_t Value::erase(cxx::string_view key)
 #endif
 }
 
-Object::iterator Value::erase(Object::const_iterator pos)
+Value::item_iterator Value::erase(const_item_iterator pos)
 {
     auto& obj = as_object();
     return obj.erase(pos);
