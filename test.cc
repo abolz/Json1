@@ -3,7 +3,6 @@
 #include "catch.hpp"
 
 #include <tuple>
-#include <variant>
 
 //------------------------------------------------------------------------------
 //
@@ -83,11 +82,11 @@ TEST_CASE("Value - implicit constructors")
         CHECK(i2 == 1);
 #endif
 
-        int i3 = j10.to<int>(); // warning expected (double -> int)
+        int i3 = j10.cast<int>(); // warning expected (double -> int)
         CHECK(i3 == 1);
-        int i4 = j10.to<float>(); // two warnings expected! (double -> float, float -> int)
+        int i4 = j10.cast<float>(); // two warnings expected! (double -> float, float -> int)
         CHECK(i4 == 1);
-        int i5 = static_cast<int>(j10.to<double>()); // no warning
+        int i5 = static_cast<int>(j10.cast<double>()); // no warning
         CHECK(i5 == 1);
 
         json::Value j11 = 1.234f;
@@ -102,11 +101,11 @@ TEST_CASE("Value - implicit constructors")
         CHECK(j0.as_string() == "hello");
 #if 0
         // Should not compile!
-        auto s0 = std::move(j1).to<char const*>();
+        auto s0 = std::move(j1).cast<char const*>();
 #endif
 #if 0
         // Should not compile!
-        auto s0 = std::move(j1).to<cxx::string_view>();
+        auto s0 = std::move(j1).cast<cxx::string_view>();
 #endif
 
         json::Value j1 = "hello";
@@ -308,8 +307,8 @@ namespace json
         {
             assert(in.as_array().size() == sizeof...(Tn));
             auto I = std::make_move_iterator(in.as_array().begin()); // Does _not_ move for V = Value const&
-            return std::tuple<Tn...>{json::to<Tn>(*I++)...};
-            //                                     ^~~
+            return std::tuple<Tn...>{json::cast<Tn>(*I++)...};
+            //                                       ^~~
             // Very small performance penalty here.
             // Could provide a specialization for empty/non-empty tuples...
         }
@@ -328,7 +327,7 @@ TEST_CASE("tuple")
         REQUIRE(j.size() == 0);
         REQUIRE(j.empty());
 
-        //auto t = j.to<Tup>();
+        //auto t = j.cast<Tup>();
     }
 
     SECTION("1-tuple")
@@ -341,7 +340,7 @@ TEST_CASE("tuple")
         REQUIRE(j[0].is_number());
         REQUIRE(j[0] == 1.2);
 
-        auto t = j.to<Tup>();
+        auto t = j.cast<Tup>();
         REQUIRE(std::get<0>(t) == 1.2);
     }
 
@@ -358,13 +357,13 @@ TEST_CASE("tuple")
         REQUIRE(j[1].is_string());
         REQUIRE(j[1] == "hello hello hello hello hello hello hello hello ");
 
-        auto t1 = json::to<Tup>(j);
+        auto t1 = json::cast<Tup>(j);
         REQUIRE(std::get<0>(t1) == 2.34);
         REQUIRE(std::get<1>(t1) == "hello hello hello hello hello hello hello hello ");
         REQUIRE(j[1].is_string());
         REQUIRE(j[1].as_string() == "hello hello hello hello hello hello hello hello ");
 
-        auto t2 = json::to<Tup>(std::move(j));
+        auto t2 = json::cast<Tup>(std::move(j));
         REQUIRE(std::get<0>(t2) == 2.34);
         REQUIRE(std::get<1>(t2) == "hello hello hello hello hello hello hello hello ");
 #if 0//_MSC_VER // These tests probably work... XXX: Add a test type which has a distinguished moved-from state...
@@ -440,11 +439,11 @@ TEST_CASE("optional")
         CHECK(j0.is_number());
         CHECK(j0.as_number() == 123);
 
-        auto oi0 = j0.to<std::optional<int>>(); // warning expected -- XXX: need a way to silence this warning...
+        auto oi0 = j0.cast<std::optional<int>>(); // warning expected -- XXX: need a way to silence this warning...
         CHECK(oi0.has_value());
         CHECK(oi0.value() == 123);
 
-        auto oi1 = j0.to<std::optional<std::string>>();
+        auto oi1 = j0.cast<std::optional<std::string>>();
         CHECK(!oi1.has_value());
 
 #if JSON_VALUE_HAS_EXPLICIT_OPERATOR_T
