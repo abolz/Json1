@@ -903,10 +903,6 @@ struct ParseOptions
     // Default is true.
     bool skip_bom = true;
 
-    // If true, check for invalid UTF-8 sequences in strings.
-    // Default is true.
-    bool check_invalid_unicode = true;
-
     // If true, replace invalid unicode sequences with a
     // replacement char (U+FFFD).
     // Default is false.
@@ -977,10 +973,6 @@ struct StringifyOptions
     // If >= 0, pretty-print the JSON.
     // Default is < 0, that is the JSON is rendered as the shortest string possible.
     int8_t indent_width = -1;
-
-    // If true, check for invalid UTF-8 sequences in strings.
-    // Default is true.
-    bool check_invalid_unicode = true;
 
     // If true, replaces each invalid UTF-8 sequence in strings with a single
     // replacement character (U+FFFD). Otherwise rendering fails for invalid

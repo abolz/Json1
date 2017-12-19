@@ -2451,8 +2451,15 @@ ErrorCode Parser::GetCleanString(String& out, char const*& first, char const* la
             first = f;
             return ErrorCode::unescaped_control_character_in_string;
         }
-        else if (*f == '\\')
+        else if (uch < 0x80) // ASCII printable or DEL
         {
+            if (*f != '\\')
+            {
+                out += *f;
+                ++f;
+                continue;
+            }
+
             ++f; // skip '\'
             if (f == last)
             {
@@ -2552,23 +2559,11 @@ ErrorCode Parser::GetCleanString(String& out, char const*& first, char const* la
                 return ErrorCode::invalid_escaped_character_in_string;
             }
         }
-        else if (uch <= 0x7F) // ASCII printable or DEL
+        else // (possibly) the start of a UTF-8 sequence.
         {
-            out += *f;
-            ++f;
-        }
-        else if (!options.check_invalid_unicode)
-        {
-            out += *f;
-            ++f;
-        }
-        else
-        {
-            // uch >= 0x80
-            // This is (possibly) the start of a UTF-8 sequence.
-
             auto f0 = f;
             auto const res = unicode::DecodeUTF8Sequence(f, last);
+
             switch (res.ec)
             {
             case unicode::ErrorCode::success:
@@ -2577,7 +2572,7 @@ ErrorCode Parser::GetCleanString(String& out, char const*& first, char const* la
                 case 4: out += *f0++; // fall through
                 case 3: out += *f0++; // fall through
                 case 2: out += *f0++; // fall through
-                case 1: out += *f0++; // fall through
+                        out += *f0++;
                     break;
                 default:
                     assert(false && "internal error");
@@ -2733,29 +2728,7 @@ static bool StringifyString(std::string& str, String const& value, StringifyOpti
         auto const ch = *first;
         auto const uch = static_cast<unsigned char>(ch);
 
-        if (uch >= 0x20 && uch <= 0x7F) // ASCII printable or DEL
-        {
-            switch (ch)
-            {
-            case '"':   // U+0022
-                str += '\\';
-                break;
-            case '/':   // U+002F
-                if (options.escape_slash)
-                {
-                    // TODO:
-                    // This is actually only required if the preceding character is '<'.
-                    str += '\\';
-                }
-                break;
-            case '\\':  // U+005C
-                str += '\\';
-                break;
-            }
-            str += ch;
-            ++first;
-        }
-        else if (uch < 0x20) // (ASCII) control character
+        if (uch < 0x20) // (ASCII) control character
         {
             switch (ch)
             {
@@ -2787,18 +2760,33 @@ static bool StringifyString(std::string& str, String const& value, StringifyOpti
             }
             ++first;
         }
-        else if (!options.check_invalid_unicode)
+        else if (uch < 0x80) // ASCII printable or DEL
         {
+            switch (ch)
+            {
+            case '"':   // U+0022
+                str += '\\';
+                break;
+            case '/':   // U+002F
+                if (options.escape_slash)
+                {
+                    // TODO:
+                    // This is actually only required if the preceding character is '<'.
+                    str += '\\';
+                }
+                break;
+            case '\\':  // U+005C
+                str += '\\';
+                break;
+            }
             str += ch;
             ++first;
         }
-        else
+        else // (possibly) the start of a UTF-8 sequence.
         {
-            // uch >= 0x80
-            // This is (possibly) the start of a UTF-8 sequence.
-
             auto f0 = first;
             auto const res = unicode::DecodeUTF8Sequence(first, last);
+
             switch (res.ec)
             {
             case unicode::ErrorCode::success:
@@ -2824,7 +2812,7 @@ static bool StringifyString(std::string& str, String const& value, StringifyOpti
                     case 4: str += *f0++; // fall through
                     case 3: str += *f0++; // fall through
                     case 2: str += *f0++; // fall through
-                    case 1: str += *f0++; // fall through
+                            str += *f0++;
                         break;
                     default:
                         assert(false && "internal error");
