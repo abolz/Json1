@@ -49,6 +49,10 @@ TEST_CASE("Value - implicit constructors")
         CHECK(j4.is_number());
         CHECK(j4.as_number() == -1.0);
 
+        json::Value j4_1(-1ll); // no warning expected
+        CHECK(j4_1.is_number());
+        CHECK(j4_1.as_number() == -1.0);
+
         json::Value j5 = static_cast<unsigned char>(1);
         CHECK(j5.is_number());
         CHECK(j5.as_number() == 1.0);
@@ -310,7 +314,7 @@ namespace json
             return std::tuple<Tn...>{json::cast<Tn>(*I++)...};
             //                                       ^~~
             // Very small performance penalty here.
-            // Could provide a specialization for empty/non-empty tuples...
+            // Could provide a specialization for empty/non-empty tuples using ++I instead of I++
         }
     };
 }
