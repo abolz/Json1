@@ -640,7 +640,7 @@ public:
     const_item_iterator items_begin() const& { return as_object().begin(); }
     const_item_iterator items_end()   const& { return as_object().end();   }
 
-#if 0
+#if 1
     template <typename It>
     struct Items {
         It begin_;
