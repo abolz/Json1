@@ -59,8 +59,8 @@ namespace
 {
     struct ClassicLocale {
         const ::_locale_t loc;
-        ClassicLocale() : loc(::_create_locale(LC_ALL, "C")) {}
-       ~ClassicLocale() { ::_free_locale(loc); }
+        ClassicLocale() noexcept : loc(::_create_locale(LC_ALL, "C")) {}
+       ~ClassicLocale() noexcept { ::_free_locale(loc); }
     };
 }
 static const ClassicLocale s_clocale;
@@ -78,8 +78,8 @@ namespace
 {
     struct ClassicLocale {
         const ::locale_t loc;
-        ClassicLocale() : loc(::newlocale(LC_ALL, "C", 0)) {}
-       ~ClassicLocale() { ::freelocale(loc); }
+        ClassicLocale() noexcept : loc(::newlocale(LC_ALL, "C", 0)) {}
+       ~ClassicLocale() noexcept { ::freelocale(loc); }
     };
 }
 static const ClassicLocale s_clocale;
