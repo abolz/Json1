@@ -1159,7 +1159,7 @@ size_t Value::hash() const noexcept
     case Type::number:
         return std::hash<double>()(as_number());
     case Type::string:
-        return std::hash<String>()(as_string());
+        return std::hash<cxx::string_view>()(as_string());
     case Type::array:
         {
             size_t h = std::hash<char>()('['); // initial value for empty arrays
@@ -1174,7 +1174,7 @@ size_t Value::hash() const noexcept
             size_t h = std::hash<char>()('{'); // initial value for empty objects
             for (auto const& v : as_object())
             {
-                auto const h1 = std::hash<String>()(v.first);
+                auto const h1 = std::hash<cxx::string_view>()(v.first);
                 auto const h2 = v.second.hash();
                 h ^= HashCombine(h1, h2); // Permutation resistant to support unordered maps.
             }
