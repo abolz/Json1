@@ -1174,8 +1174,9 @@ size_t Value::hash() const noexcept
             size_t h = std::hash<char>()('{'); // initial value for empty objects
             for (auto const& v : as_object())
             {
-                h = HashCombine(h, std::hash<String>()(v.first));
-                h = HashCombine(h, v.second.hash());
+                auto const h1 = std::hash<String>()(v.first);
+                auto const h2 = v.second.hash();
+                h ^= HashCombine(h1, h2); // Permutation resistant to support unordered maps.
             }
             return h;
         }
