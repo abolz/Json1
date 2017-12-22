@@ -1302,69 +1302,13 @@ Value& Value::operator[](Object::key_type&& key)
     return inplace_convert_to_object()[std::move(key)];
 }
 
-Value const& Value::operator[](cxx::string_view key) const noexcept
-{
-    auto& obj = as_object();
-    auto const& it = obj.find(key);
-    assert(it != obj.end());
-    return it->second;
-}
-
-Value* Value::get_ptr(cxx::string_view key)
-{
-    if (is_object())
-    {
-        auto& obj = as_object();
-        auto const& it = obj.find(key);
-        if (it != obj.end()) {
-            return &it->second;
-        }
-    }
-    return nullptr;
-}
-
-Value const* Value::get_ptr(cxx::string_view key) const
-{
-    if (is_object())
-    {
-        auto& obj = as_object();
-        auto const& it = obj.find(key);
-        if (it != obj.end()) {
-            return &it->second;
-        }
-    }
-    return nullptr;
-}
-
-size_t Value::erase(cxx::string_view key)
-{
-#if 1
 #if 0
-    auto& obj = as_object();
-    auto const i = obj.equal_range(key);
-    auto const n = std::distance(i.first, i.second);
-    obj.erase(i.first, i.second);
-    return static_cast<size_t>(n);
-#else
-    auto& obj = as_object();
-    auto const i = obj.find(key);
-    if (i != obj.end())
-    {
-        obj.erase(i);
-        return 1;
-    }
-    return 0;
-#endif
-#else
-    return as_object().erase(key);
-#endif
-}
-
 Value::item_iterator Value::erase(const_item_iterator pos)
 {
     auto& obj = as_object();
     return obj.erase(pos);
 }
+#endif
 
 template <typename ...Args>
 String& Value::_assign_string(Args&&... args)
@@ -1916,9 +1860,10 @@ ErrorCode Parser::ParseObject(Value& value, int depth, ParseOptions const& optio
             if (ec != ErrorCode::success)
                 return ec;
 
+#if 0
             if (options.reject_duplicate_keys)
             {
-#if __cplusplus >= 201703 || (_MSC_VER >= 1911 && _HAS_CXX17)
+#if 0 // __cplusplus >= 201703 || (_MSC_VER >= 1911 && _HAS_CXX17)
                 auto const p = obj.try_emplace(std::move(K), std::move(V));
                 if (!p.second)
                     return ErrorCode::duplicate_key_in_object;
@@ -1931,6 +1876,7 @@ ErrorCode Parser::ParseObject(Value& value, int depth, ParseOptions const& optio
 #endif
             }
             else
+#endif
             {
                 obj[std::move(K)] = std::move(V);
             }

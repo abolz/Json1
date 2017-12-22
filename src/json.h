@@ -632,6 +632,17 @@ public:
 
 // Objects:
 
+private:
+    template <typename T>
+    using EnableIfIsKey = std::enable_if_t<
+        !std::is_integral<T>::value // disallow literal '0': String might be convertible from nullptr...
+#if 1
+        && std::is_convertible<
+            decltype(std::declval<Object const&>().find(std::declval<T>())), typename Object::const_iterator >::value
+#endif
+    >;
+
+public:
     using item_iterator       = Object::iterator;
     using const_item_iterator = Object::const_iterator;
 
@@ -640,7 +651,6 @@ public:
     const_item_iterator items_begin() const& { return as_object().begin(); }
     const_item_iterator items_end()   const& { return as_object().end();   }
 
-#if 1
     template <typename It>
     struct Items {
         It begin_;
@@ -651,7 +661,6 @@ public:
 
     Items<item_iterator>       items()      &  { return {items_begin(), items_end()}; }
     Items<const_item_iterator> items() const&  { return {items_begin(), items_end()}; }
-#endif
 
     // Convert this value into an object and return a reference to the value with the given key.
     // PRE: is_object() or is_null()
@@ -661,17 +670,47 @@ public:
     // Returns a reference to the value with the given key.
     // PRE: is_object()
     // PRE: as_object().find(key) != as_object().end()
-    Value const& operator[](cxx::string_view key) const noexcept;
+    template <typename T, typename = EnableIfIsKey<T>>
+    Value const& operator[](T&& key) const noexcept
+    {
+        auto&& obj = as_object();
+        auto it = obj.find(std::forward<T>(key));
+        assert(it != obj.end());
+        return it->second;
+    }
 
     // Returns a pointer to the value with the given key.
     // Or nullptr if no such key exists, or this value is not an object.
-    Value*       get_ptr(cxx::string_view key);
-    Value const* get_ptr(cxx::string_view key) const;
+    template <typename T, typename = EnableIfIsKey<T>>
+    Value* get_ptr(T&& key)
+    {
+        if (is_object()) {
+            auto&& obj = as_object();
+            auto it = obj.find(std::forward<T>(key));
+            if (it != obj.end()) {
+                return &it->second;
+            }
+        }
+        return nullptr;
+    }
+    template <typename T, typename = EnableIfIsKey<T>>
+    Value const* get_ptr(T&& key) const
+    {
+        if (is_object()) {
+            auto&& obj = as_object();
+            auto it = obj.find(std::forward<T>(key));
+            if (it != obj.end()) {
+                return &it->second;
+            }
+        }
+        return nullptr;
+    }
 
     // Returns whether a value with the given key exists.
-    bool has_member(cxx::string_view key) const
+    template <typename T, typename = EnableIfIsKey<T>>
+    bool has_member(T&& key) const
     {
-        return get_ptr(key) != nullptr;
+        return get_ptr(std::forward<T>(key)) != nullptr;
     }
 
     // Convert this value into an object and insert a new element constructed from the given arguments.
@@ -690,11 +729,17 @@ public:
 
     // Erase the the given key.
     // PRE: is_object()
-    size_t erase(cxx::string_view key);
+    template <typename T, typename = EnableIfIsKey<T>>
+    size_t erase(T&& key)
+    {
+        return as_object().erase(std::forward<T>(key));
+    }
 
+#if 0
     // Erase the the given key.
     // PRE: is_object()
     item_iterator erase(const_item_iterator pos);
+#endif
 
 private:
     template <typename ...Args> String& _assign_string(Args&&... args);
