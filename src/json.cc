@@ -1302,13 +1302,11 @@ Value& Value::operator[](Object::key_type&& key)
     return inplace_convert_to_object()[std::move(key)];
 }
 
-#if 0
 Value::item_iterator Value::erase(const_item_iterator pos)
 {
     auto& obj = as_object();
     return obj.erase(pos);
 }
-#endif
 
 template <typename ...Args>
 String& Value::_assign_string(Args&&... args)
@@ -1860,10 +1858,9 @@ ErrorCode Parser::ParseObject(Value& value, int depth, ParseOptions const& optio
             if (ec != ErrorCode::success)
                 return ec;
 
-#if 0
             if (options.reject_duplicate_keys)
             {
-#if 0 // __cplusplus >= 201703 || (_MSC_VER >= 1911 && _HAS_CXX17)
+#if __cplusplus >= 201703 || (_MSC_VER >= 1911 && _HAS_CXX17)
                 auto const p = obj.try_emplace(std::move(K), std::move(V));
                 if (!p.second)
                     return ErrorCode::duplicate_key_in_object;
@@ -1876,7 +1873,6 @@ ErrorCode Parser::ParseObject(Value& value, int depth, ParseOptions const& optio
 #endif
             }
             else
-#endif
             {
                 obj[std::move(K)] = std::move(V);
             }

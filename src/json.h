@@ -1,6 +1,7 @@
 #pragma once
 
 #include "string_view.h"
+#include "__flat_hash_map.h"
 
 #include <cassert>
 #include <cstdint>
@@ -22,8 +23,6 @@ namespace json {
 
 class Value;
 
-// XXX:
-// Make configurable...?!?!
 using Null    = std::nullptr_t;
 using String  = std::string;
 using Array   = std::vector<Value>;
@@ -569,15 +568,14 @@ public:
 
 // Arrays:
 
-    using iterator       = Array::iterator;
-    using const_iterator = Array::const_iterator;
+    using element_iterator       = Array::iterator;
+    using const_element_iterator = Array::const_iterator;
 
-    iterator       begin()      & { return as_array().begin(); }
-    iterator       end()        & { return as_array().end();   }
-    const_iterator begin() const& { return as_array().begin(); }
-    const_iterator end()   const& { return as_array().end();   }
+    element_iterator       elements_begin()      & { return as_array().begin(); }
+    element_iterator       elements_end()        & { return as_array().end();   }
+    const_element_iterator elements_begin() const& { return as_array().begin(); }
+    const_element_iterator elements_end()   const& { return as_array().end();   }
 
-#if 0
     template <typename It>
     struct Elements {
         It begin_;
@@ -586,9 +584,8 @@ public:
         It end() const { return end_; }
     };
 
-    Elements<iterator>       elements()      &  { return {begin(), end()}; }
-    Elements<const_iterator> elements() const&  { return {begin(), end()}; }
-#endif
+    Elements<element_iterator>       elements()      &  { return {elements_begin(), elements_end()}; }
+    Elements<const_element_iterator> elements() const&  { return {elements_begin(), elements_end()}; }
 
     // Convert this value into an array an return a reference to the index-th element.
     // PRE: is_array() or is_null()
@@ -735,11 +732,9 @@ public:
         return as_object().erase(std::forward<T>(key));
     }
 
-#if 0
     // Erase the the given key.
     // PRE: is_object()
     item_iterator erase(const_item_iterator pos);
-#endif
 
 private:
     template <typename ...Args> String& _assign_string(Args&&... args);
