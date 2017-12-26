@@ -137,7 +137,7 @@ namespace unicode {
 using Codepoint = uint32_t;
 
 static constexpr Codepoint const kInvalidCodepoint = 0xFFFFFFFF;
-static constexpr Codepoint const kReplacementCharacter = 0xFFFD;
+//static constexpr Codepoint const kReplacementCharacter = 0xFFFD;
 
 enum class ErrorCode {
     success,
