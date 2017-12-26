@@ -1360,6 +1360,7 @@ inline char* ToShort(char* first, char* last, FloatType value)
 
 /*
 Copyright (c) 2009 Florian Loitsch
+Copyright (c) 2017 Alexander Bolz
 
 Permission is hereby granted, free of charge, to any person
 obtaining a copy of this software and associated documentation
