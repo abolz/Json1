@@ -296,6 +296,8 @@ TEST_CASE("arrays")
     }
 }
 
+#ifndef __clang__
+
 namespace json
 {
     template <>
@@ -384,6 +386,8 @@ TEST_CASE("tuple")
 #endif
     }
 }
+
+#endif
 
 //------------------------------------------------------------------------------
 //
