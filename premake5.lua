@@ -5,6 +5,11 @@ newoption {
     description = "Additional build options",
 }
 
+newoption {
+    trigger = "linkflags",
+    description = "Additional linker options",
+}
+
 --------------------------------------------------------------------------------
 workspace "Json"
     configurations { "release", "debug" }
@@ -43,7 +48,7 @@ workspace "Json"
 
     configuration { "gmake" }
         buildoptions {
-            "-std=c++14",
+            -- "-std=c++14",
             "-march=native",
             "-Wformat",
             -- "-Wsign-compare",
@@ -88,6 +93,18 @@ workspace "Json"
         configuration {}
             buildoptions {
                 _OPTIONS["cxxflags"],
+            }
+    else
+        configuration { "gmake" }
+            buildoptions {
+                "-std=c++14",
+            }
+    end
+
+    if _OPTIONS["linkflags"] then
+        configuration {}
+            linkoptions {
+                _OPTIONS["linkflags"],
             }
     end
 
