@@ -16,7 +16,7 @@ matrix:
       compiler: gcc
       env:
         - COMPILER=g++-6
-        - CONFIGURATION=debug
+        - CONFIGURATION=debug_x64
         - CXXFLAGS="-std=c++14 -O0 -fprofile-arcs -ftest-coverage --coverage"
         - LINKFLAGS="--coverage"
         - GCOV=true
@@ -36,7 +36,7 @@ matrix:
       compiler: gcc
       env:
         - COMPILER=g++-6
-        - CONFIGURATION=release
+        - CONFIGURATION=release_x64
         - CXXFLAGS="-std=c++14"
     - os: linux
       addons:
@@ -48,7 +48,7 @@ matrix:
       compiler: gcc
       env:
         - COMPILER=g++-6
-        - CONFIGURATION=debug
+        - CONFIGURATION=debug_x64
         - CXXFLAGS="-std=c++14"
     - os: linux
       addons:
@@ -60,7 +60,7 @@ matrix:
       compiler: gcc
       env:
         - COMPILER=g++-7
-        - CONFIGURATION=release
+        - CONFIGURATION=release_x64
         - CXXFLAGS="-std=c++17"
     - os: linux
       addons:
@@ -72,19 +72,19 @@ matrix:
       compiler: gcc
       env:
         - COMPILER=g++-7
-        - CONFIGURATION=debug
+        - CONFIGURATION=debug_x64
         - CXXFLAGS="-std=c++17"
     - os: osx
       compiler: clang
       env:
         - COMPILER=clang++
-        - CONFIGURATION=release
+        - CONFIGURATION=release_x64
         - CXXFLAGS="-std=c++14 -stdlib=libc++"
     - os: osx
       compiler: clang
       env:
         - COMPILER=clang++
-        - CONFIGURATION=debug
+        - CONFIGURATION=debug_x64
         - CXXFLAGS="-std=c++14 -stdlib=libc++"
 
 before_install:
@@ -97,5 +97,5 @@ install:
 
 script:
   - export CXX=$COMPILER
-  - make -C build/gmake/ config=$CONFIGURATION Test
-  - ./build/gmake/bin/$CONFIGURATION/Test
+  - make -C build/gmake/ config=$CONFIGURATION test
+  - ./build/gmake/bin/$CONFIGURATION/test
