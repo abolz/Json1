@@ -1,8 +1,8 @@
 #include "json.h"
 #include "__conv.h"
 
+#include <climits>
 #include <cmath>
-#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <memory>
