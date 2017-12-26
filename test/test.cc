@@ -298,23 +298,31 @@ TEST_CASE("arrays")
 
 namespace json
 {
-    template <typename ...Tn>
-    struct Traits<std::tuple<Tn...>>
+    template <>
+    struct Traits<std::tuple<>>
+    {
+        using tag = Tag_array;
+        template <typename V> static decltype(auto) to_json(V&&) { return Array(); }
+        template <typename V> static decltype(auto) from_json(V&& in) {
+            assert(in.as_array().empty());
+            static_cast<void>(in); // may be unused
+            return std::tuple<>{};
+        }
+    };
+    template <typename T1, typename ...Tn>
+    struct Traits<std::tuple<T1, Tn...>>
     {
         using tag = Tag_array;
         template <typename V> static decltype(auto) to_json(V&& in) // V = std::tuple<Tn...> [const][&]
         {
-            static_cast<void>(in); // unused for empty tuples - fix warning
-            return Array{std::get<Tn>(std::forward<V>(in))...};
+//          return Array{std::get<T1>(std::forward<V>(in)), std::get<Tn>(std::forward<V>(in))...};
+            return Array{std::get<T1>(in), std::get<Tn>(in)...};
         }
         template <typename V> static decltype(auto) from_json(V&& in) // V = Value [const&]
         {
-            assert(in.as_array().size() == sizeof...(Tn));
+            assert(in.as_array().size() == 1 + sizeof...(Tn));
             auto I = std::make_move_iterator(in.as_array().begin()); // Does _not_ move for V = Value const&
-            return std::tuple<Tn...>{json::cast<Tn>(*I++)...};
-            //                                       ^~~
-            // Very small performance penalty here.
-            // Could provide a specialization for empty/non-empty tuples using ++I instead of I++
+            return std::tuple<T1, Tn...>{json::cast<T1>(*I), json::cast<Tn>(*++I)...};
         }
     };
 }
