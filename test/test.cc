@@ -1,4 +1,4 @@
-#include "src/json.h"
+#include "../src/json.h"
 
 #include "catch.hpp"
 

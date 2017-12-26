@@ -118,9 +118,9 @@ project "test"
     language "C++"
     kind "ConsoleApp"
     files {
-        "catch.hpp",
-        "catch_main.cc",
-        "test.cc",
+        "test/catch.hpp",
+        "test/catch_main.cc",
+        "test/test.cc",
     }
     links {
         "json",
