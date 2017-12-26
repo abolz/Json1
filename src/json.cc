@@ -2,6 +2,7 @@
 #include "__conv.h"
 
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <memory>
