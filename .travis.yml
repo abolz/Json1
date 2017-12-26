@@ -16,7 +16,7 @@ matrix:
       compiler: gcc
       env:
         - COMPILER=g++-6
-        - CONFIGURATION=debug_x64
+        - CONFIGURATION=debug
         - CXXFLAGS="-std=c++14 -O0 -fprofile-arcs -ftest-coverage --coverage"
         - LINKFLAGS="--coverage"
         - GCOV=true
@@ -36,7 +36,7 @@ matrix:
       compiler: gcc
       env:
         - COMPILER=g++-6
-        - CONFIGURATION=release_x64
+        - CONFIGURATION=release
         - CXXFLAGS="-std=c++14"
     - os: linux
       addons:
@@ -48,7 +48,7 @@ matrix:
       compiler: gcc
       env:
         - COMPILER=g++-6
-        - CONFIGURATION=debug_x64
+        - CONFIGURATION=debug
         - CXXFLAGS="-std=c++14"
     - os: linux
       addons:
@@ -60,7 +60,7 @@ matrix:
       compiler: gcc
       env:
         - COMPILER=g++-7
-        - CONFIGURATION=release_x64
+        - CONFIGURATION=release
         - CXXFLAGS="-std=c++17"
     - os: linux
       addons:
@@ -72,19 +72,19 @@ matrix:
       compiler: gcc
       env:
         - COMPILER=g++-7
-        - CONFIGURATION=debug_x64
+        - CONFIGURATION=debug
         - CXXFLAGS="-std=c++17"
     - os: osx
       compiler: clang
       env:
         - COMPILER=clang++
-        - CONFIGURATION=release_x64
+        - CONFIGURATION=release
         - CXXFLAGS="-std=c++14 -stdlib=libc++"
     - os: osx
       compiler: clang
       env:
         - COMPILER=clang++
-        - CONFIGURATION=debug_x64
+        - CONFIGURATION=debug
         - CXXFLAGS="-std=c++14 -stdlib=libc++"
 
 before_install:

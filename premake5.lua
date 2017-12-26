@@ -13,7 +13,7 @@ newoption {
 --------------------------------------------------------------------------------
 workspace "Json"
     configurations { "release", "debug" }
-    platforms { "x64" }
+    architecture "x64"
 
     filter {}
 
