@@ -129,9 +129,9 @@ TEST_CASE("Value - implicit constructors")
         CHECK(j3.is_string());
         CHECK(j3.as_string() == "hello");
 
-        json::Value j4 = cxx::string_view("hello");
-        CHECK(j4.is_string());
-        CHECK(j4.as_string() == "hello");
+        //json::Value j4 = cxx::string_view("hello");
+        //CHECK(j4.is_string());
+        //CHECK(j4.as_string() == "hello");
 
         //auto s3 = j4.to<char*>();
         //CHECK(s3 == std::string("hello"));

@@ -1034,7 +1034,7 @@ Object& Value::embed_in_object(String key)
 
 bool Value::convert_to_boolean() const noexcept
 {
-     return ToBoolean(*this);
+    return ToBoolean(*this);
 }
 
 double Value::convert_to_number() const noexcept
@@ -1049,7 +1049,7 @@ String Value::convert_to_string() const
 
 Array Value::convert_to_array() const
 {
-     switch (type())
+    switch (type())
     {
     case Type::null:
         return Array();
@@ -1161,7 +1161,7 @@ size_t Value::hash() const noexcept
     case Type::number:
         return std::hash<double>()(as_number());
     case Type::string:
-        return std::hash<cxx::string_view>()(as_string());
+        return std::hash<String>()(as_string());
     case Type::array:
         {
             size_t h = std::hash<char>()('['); // initial value for empty arrays
@@ -1176,7 +1176,7 @@ size_t Value::hash() const noexcept
             size_t h = std::hash<char>()('{'); // initial value for empty objects
             for (auto const& v : as_object())
             {
-                auto const h1 = std::hash<cxx::string_view>()(v.first);
+                auto const h1 = std::hash<String>()(v.first);
                 auto const h2 = v.second.hash();
                 h ^= HashCombine(h1, h2); // Permutation resistant to support unordered maps.
             }
@@ -2580,7 +2580,7 @@ ParseResult json::parse(Value& value, char const* next, char const* last, ParseO
     return {ec, parser.token.ptr, parser.token.end};
 }
 
-ErrorCode json::parse(Value& value, cxx::string_view str, ParseOptions const& options)
+ErrorCode json::parse(Value& value, std::string const& str, ParseOptions const& options)
 {
     char const* next = str.data();
     char const* last = str.data() + str.size();

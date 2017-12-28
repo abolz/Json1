@@ -1,7 +1,5 @@
 #pragma once
 
-#include "string_view.h"
-
 #include <cassert>
 #include <cstdint>
 #include <functional>
@@ -185,6 +183,7 @@ struct DefaultTraits<char*>
 #endif
 };
 
+#if 0
 template <>
 struct DefaultTraits<cxx::string_view>
 {
@@ -196,6 +195,7 @@ struct DefaultTraits<cxx::string_view>
         return cxx::string_view(in.as_string());
     }
 };
+#endif
 
 } // namespace impl
 
@@ -997,7 +997,7 @@ struct ParseOptions
 ParseResult parse(Value& value, char const* next, char const* last, ParseOptions const& options = {});
 
 // Parse the JSON value stored in STR.
-ErrorCode parse(Value& value, cxx::string_view str, ParseOptions const& options = {});
+ErrorCode parse(Value& value, std::string const& str, ParseOptions const& options = {});
 
 } // namespace json
 
