@@ -200,6 +200,92 @@ TEST_CASE("Value - construct JSON")
     CHECK(val.hash() == val3.hash());
 }
 
+TEST_CASE("Parse")
+{
+    std::string const input = R"({
+    "FirstName": "John",
+    "LastName": "Doe",
+    "Age": 43,
+    "Address": {
+        "Street": "Downing \"Street\" 10",
+        "City": "London",
+        "Country": "Great Britain"
+    },
+    "Phone numbers": [
+        "+44 1234567",
+        "+44 2345678"
+    ]
+})";
+
+    json::Value val;
+    json::parse(val, input.data(), input.data() + input.size());
+
+    CHECK(val.is_object());
+    CHECK(val.as_object().size() == 5);
+    CHECK(val.size() == 5);
+    CHECK(val.has_member("FirstName"));
+    CHECK(val["FirstName"].is_string());
+    CHECK(val["FirstName"].as_string().size() == 4);
+    CHECK(val["FirstName"].as_string() == "John");
+    CHECK(val["FirstName"].size() == 4);
+    CHECK(val["FirstName"] == "John");
+    CHECK(val.has_member("LastName"));
+    CHECK(val["LastName"].is_string());
+    CHECK(val["LastName"].as_string().size() == 3);
+    CHECK(val["LastName"].as_string() == "Doe");
+    CHECK(val["LastName"].size() == 3);
+    CHECK(val["LastName"] == "Doe");
+    CHECK(val.has_member("Age"));
+    CHECK(val["Age"].is_number());
+    CHECK(val["Age"].as_number() == 43);
+    CHECK(val["Age"] == 43);
+    CHECK(43 == val["Age"]);
+    CHECK(val["Age"] < 44);
+    CHECK(42 < val["Age"]);
+    CHECK(val.has_member("Address"));
+    CHECK(val["Address"].is_object());
+    CHECK(val["Address"].as_object().size() == 3);
+    CHECK(val["Address"].size() == 3);
+    CHECK(val["Address"].has_member("Street"));
+    CHECK(val["Address"]["Street"].is_string());
+    CHECK(val["Address"]["Street"].as_string().size() == 19);
+    CHECK(val["Address"]["Street"].as_string() == "Downing \"Street\" 10");
+    CHECK(val["Address"]["Street"].size() == 19);
+    CHECK(val["Address"]["Street"] == "Downing \"Street\" 10");
+    CHECK(val.has_member("Phone numbers"));
+    CHECK(val["Phone numbers"].is_array());
+    CHECK(val["Phone numbers"].as_array().size() == 2);
+    CHECK(val["Phone numbers"][0].is_string());
+    CHECK(val["Phone numbers"][0] == "+44 1234567");
+    CHECK(val["Phone numbers"][1].is_string());
+    CHECK(val["Phone numbers"][1] == "+44 2345678");
+
+    std::string const input2 = R"({
+    "LastName": "Doe",
+    "Phone numbers": [
+        "+44 1234567",
+        "+44 2345678"
+    ]
+    "Age": 43,
+    "Address": {
+        "Country": "Great Britain"
+        "City": "London",
+        "Street": "Downing \"Street\" 10",
+    },
+    "FirstName": "John",
+})";
+
+    json::Value val2;
+    json::parse(val2, input.data(), input.data() + input.size());
+
+    CHECK(val == val2);
+    CHECK(!(val != val2));
+    CHECK(val.hash() == val2.hash());
+
+    *(val.get_ptr("Address")->get_ptr("Street")) = "Hello World";
+    CHECK(val["Address"]["Street"] == "Hello World");
+}
+
 //------------------------------------------------------------------------------
 //
 //------------------------------------------------------------------------------
