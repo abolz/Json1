@@ -2668,9 +2668,14 @@ static bool StringifyString(std::string& str, String const& value, StringifyOpti
 
     str += '"';
 
+    char ch_prev = '\0';
+    char ch = '\0';
+
     while (first != last)
     {
-        auto const ch = *first;
+        ch_prev = ch;
+        ch = *first;
+
         auto const uch = static_cast<unsigned char>(ch);
 
         if (uch < 0x20) // (ASCII) control character
@@ -2713,10 +2718,7 @@ static bool StringifyString(std::string& str, String const& value, StringifyOpti
                 str += '\\';
                 break;
             case '/':   // U+002F
-                if (options.escape_slash)
-                {
-                    // TODO:
-                    // This is actually only required if the preceding character is '<'.
+                if (options.escape_slash && ch_prev == '<') {
                     str += '\\';
                 }
                 break;

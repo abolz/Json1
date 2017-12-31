@@ -1026,8 +1026,8 @@ struct StringifyOptions
 
     // If true, escapes '/' in strings. This allows the JSON string to be
     // embedded in HTML.
-    // Default is false.
-    bool escape_slash = false;
+    // Default is true.
+    bool escape_slash = true;
 };
 
 // Write a stringified version of the given value to str.
