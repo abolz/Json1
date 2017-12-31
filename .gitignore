@@ -1,5 +1,6 @@
 /.vscode/
 /.vs/
+/backups/
 /bin/
 /build/
 /ext/
