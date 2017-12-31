@@ -282,6 +282,14 @@ TEST_CASE("Parse")
     CHECK(!(val != val2));
     CHECK(val.hash() == val2.hash());
 
+    json::Value val3;
+    val3 = val2;
+    CHECK(val3 == val2);
+
+    val3 = std::move(val2);
+    CHECK(val3 == val);
+    CHECK(val2.is_null()); // 
+
     *(val.get_ptr("Address")->get_ptr("Street")) = "Hello World";
     CHECK(val["Address"]["Street"] == "Hello World");
 }
@@ -474,6 +482,128 @@ TEST_CASE("tuple")
 }
 
 #endif
+
+struct Point {
+    double x;
+    double y;
+};
+inline bool operator==(Point const& lhs, Point const& rhs) {
+    return lhs.x == rhs.x && lhs.y == rhs.y;
+}
+inline bool operator<(Point const& lhs, Point const& rhs) {
+    return lhs.x < rhs.x || (lhs.x == rhs.x && lhs.y < rhs.y);
+}
+namespace json
+{
+    template <>
+    struct Traits<Point>
+    {
+        using tag = Tag_object;
+        static decltype(auto) to_json(Point const& in) {
+            Object out;
+            out["x"] = in.x;
+            out["y"] = in.y;
+            return out;
+        }
+        static decltype(auto) from_json(Value const& in) {
+            Point out;
+            out.x = in["x"].as_number();
+            out.y = in["y"].as_number();
+            return out;
+        }
+    };
+}
+TEST_CASE("Value - custom")
+{
+    SECTION("val")
+    {
+        json::Value j = Point{1.0, 2.0};
+        CHECK(j.is_object());
+        CHECK(j.size() == 2);
+        CHECK(j.has_member("x"));
+        CHECK(j["x"].is_number());
+        CHECK(j["x"] == 1.0);
+        CHECK(j.has_member("y"));
+        CHECK(j["y"].is_number());
+        CHECK(j["y"] == 2.0);
+    }
+
+    SECTION("array")
+    {
+        std::vector<Point> points = {
+            {1.0, 2.0},
+            {3.0, 4.0},
+        };
+        json::Value j = json::Value::from_array(points);
+        CHECK(j.is_array());
+        CHECK(j.isa<std::vector<Point>>());
+        CHECK(j.size() == 2);
+        CHECK(j[0].is_object());
+        CHECK(j[0].isa<Point>());
+        CHECK(j[0].size() == 2);
+        CHECK(j[0].has_member("x"));
+        CHECK(j[0]["x"] == 1.0);
+        CHECK(j[0].has_member("y"));
+        CHECK(j[0]["y"] == 2.0);
+        CHECK(j[1].is_object());
+        CHECK(j[1].isa<Point>());
+        CHECK(j[1].size() == 2);
+        CHECK(j[1].has_member("x"));
+        CHECK(j[1]["x"] == 3.0);
+        CHECK(j[1].has_member("y"));
+        CHECK(j[1]["y"] == 4.0);
+        auto p0 = j[0].cast<Point>();
+        CHECK(p0.x == 1.0);
+        CHECK(p0.y == 2.0);
+        auto p1 = j[1].cast<Point>();
+        CHECK(p1.x == 3.0);
+        CHECK(p1.y == 4.0);
+        auto pts = j.cast<std::vector<Point>>();
+        CHECK(pts.size() == 2);
+        CHECK(pts[0].x == 1.0);
+        CHECK(pts[0].y == 2.0);
+        CHECK(pts[1].x == 3.0);
+        CHECK(pts[1].y == 4.0);
+    }
+
+    // Needs Traits<std::map<...>>
+    //SECTION("object")
+    //{
+    //    std::map<int, Point> points{
+    //        {1, {1.0, 2.0}},
+    //        {2, {3.0, 4.0}},
+    //    };
+    //    json::Value j = points;
+    //    CHECK(j.is_object());
+    //    CHECK(j.size() == 2);
+    //    CHECK(j.has_member("1"));
+    //    CHECK(j["1"].is_object());
+    //    CHECK(j["1"].has_member("x"));
+    //    CHECK(j["1"]["x"] == 1.0);
+    //    CHECK(j["1"]["y"] == 2.0);
+    //    CHECK(j.has_member("2"));
+    //    CHECK(j["2"].is_object());
+    //    CHECK(j["2"].has_member("x"));
+    //    CHECK(j["2"]["x"] == 3.0);
+    //    CHECK(j["2"]["y"] == 4.0);
+    //    //auto pts = j.cast<std::map<json::Value, json::Value>>();
+    //    //CHECK(pts.size() == 2);
+    //    //CHECK(pts["1"].is_object());
+    //    //CHECK(pts["1"].has_member("x"));
+    //    //CHECK(pts["1"]["x"] == 1.0);
+    //    //CHECK(pts["1"]["y"] == 2.0);
+    //    //CHECK(pts["2"].is_object());
+    //    //CHECK(pts["2"].has_member("x"));
+    //    //CHECK(pts["2"]["x"] == 3.0);
+    //    //CHECK(pts["2"]["y"] == 4.0);
+    //    auto pt2 = j.cast<std::map<int, Point>>();
+    //    CHECK(pt2.size() == 2);
+    //    CHECK(pt2[1].x == 1.0);
+    //    CHECK(pt2[1].y == 2.0);
+    //    CHECK(pt2[2].x == 3.0);
+    //    CHECK(pt2[2].y == 4.0);
+    //}
+}
 
 //------------------------------------------------------------------------------
 //
