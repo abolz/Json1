@@ -3,6 +3,8 @@
 #include "catch.hpp"
 
 #include <tuple>
+#include <limits>
+#include <cmath>
 
 //------------------------------------------------------------------------------
 //
@@ -1324,4 +1326,166 @@ here */
     CHECK(val.has_member("/*empty object*/"));
     CHECK(val["/*empty object*/"].is_object());
     CHECK(val["/*empty object*/"].empty());
+}
+
+TEST_CASE("Conversion")
+{
+    SECTION("ToBoolean")
+    {
+        json::Value j1(json::Type::null);
+        CHECK(false == j1.convert_to_boolean());
+        CHECK(false == j1.inplace_convert_to_boolean());
+
+        json::Value j2(json::Type::boolean);
+        CHECK(false == j2.convert_to_boolean());
+        j2 = true;
+        CHECK(true == j2.convert_to_boolean());
+        CHECK(true == j2.inplace_convert_to_boolean());
+
+        json::Value j3(json::Type::number); // !nan(x) && x != 0
+        CHECK(false == j3.convert_to_boolean());
+        j3 = 1.0;
+        CHECK(true == j3.convert_to_boolean());
+        j3 = -std::numeric_limits<double>::quiet_NaN();
+        CHECK(false == j3.convert_to_boolean());
+        j3 = std::numeric_limits<double>::infinity();
+        CHECK(true == j3.convert_to_boolean());
+        CHECK(true == j3.inplace_convert_to_boolean());
+
+        json::Value j4(json::Type::string); // !empty(x)
+        CHECK(false == j4.convert_to_boolean());
+        j4 = "hello";
+        CHECK(true == j4.convert_to_boolean());
+        CHECK(true == j4.inplace_convert_to_boolean());
+
+        json::Value j5(json::Type::array); // => true
+        CHECK(true == j5.convert_to_boolean());
+        CHECK(true == j5.inplace_convert_to_boolean());
+
+        json::Value j6(json::Type::object); // => true
+        CHECK(true == j6.convert_to_boolean());
+        CHECK(true == j6.inplace_convert_to_boolean());
+    }
+
+    SECTION("ToNumber")
+    {
+        json::Value j1(json::Type::null);
+        CHECK(0.0 == j1.convert_to_number());
+        CHECK(0.0 == j1.inplace_convert_to_number());
+
+        json::Value j2(json::Type::boolean);
+        CHECK(0.0 == j2.convert_to_number());
+        j2 = true;
+        CHECK(1.0 == j2.convert_to_number());
+        CHECK(1.0 == j2.inplace_convert_to_number());
+
+        json::Value j3(json::Type::number);
+        CHECK(0.0 == j3.convert_to_number());
+        j3 = 1.0;
+        CHECK(1.0 == j3.convert_to_number());
+        j3 = -std::numeric_limits<double>::quiet_NaN();
+        CHECK(std::isnan(j3.convert_to_number()));
+        j3 = +std::numeric_limits<double>::quiet_NaN();
+        CHECK(std::isnan(j3.convert_to_number()));
+        j3 = std::numeric_limits<double>::infinity();
+        CHECK(std::numeric_limits<double>::infinity() == j3.convert_to_number());
+        CHECK(std::numeric_limits<double>::infinity() == j3.inplace_convert_to_number());
+
+        json::Value j4(json::Type::string); // !empty(x)
+        CHECK(0.0 == j4.convert_to_number());
+        j4 = "1.0";
+        CHECK(1.0 == j4.convert_to_number());
+        CHECK(1.0 == j4.inplace_convert_to_number());
+
+        json::Value j5(json::Type::array); // => true
+        CHECK(0.0 == j5.convert_to_number());
+        j5[0] = 1.0;
+        CHECK(1.0 == j5.convert_to_number());
+        CHECK(1.0 == j5.inplace_convert_to_number());
+        j5 = json::Array{"1.0"};
+        CHECK(1.0 == j5.convert_to_number());
+        CHECK(1.0 == j5.inplace_convert_to_number());
+
+        json::Value j6(json::Type::object); // => true
+        CHECK(std::isnan(j6.convert_to_number()));
+        CHECK(std::isnan(j6.inplace_convert_to_number()));
+    }
+  
+    SECTION("ToString")
+    {
+        json::Value j1(json::Type::null);
+        CHECK("null" == j1.convert_to_string());
+        CHECK("null" == j1.inplace_convert_to_string());
+
+        json::Value j2(json::Type::boolean);
+        CHECK("false" == j2.convert_to_string());
+        j2 = true;
+        CHECK("true" == j2.convert_to_string());
+        CHECK("true" == j2.inplace_convert_to_string());
+
+        json::Value j3(json::Type::number);
+        CHECK("0.0" == j3.convert_to_string());
+        j3 = 1.0;
+        CHECK("1.0" == j3.convert_to_string());
+        CHECK("1.0" == j3.inplace_convert_to_string());
+
+        json::Value j4(json::Type::string); 
+        CHECK("" == j4.convert_to_string());
+        j4 = "hello";
+        CHECK("hello" == j4.convert_to_string());
+        CHECK("hello" == j4.inplace_convert_to_string());
+
+        json::Value j5(json::Type::array);
+        CHECK("" == j5.convert_to_string());
+        j5.push_back(1.0);
+        CHECK("1.0" == j5.convert_to_string());
+        j5.push_back("hello world");
+        CHECK("1.0,hello world" == j5.convert_to_string());
+        CHECK("1.0,hello world" == j5.inplace_convert_to_string());
+
+        json::Value j6(json::Type::object);
+        CHECK("[object Object]" == j6.convert_to_string());
+        CHECK("[object Object]" == j6.inplace_convert_to_string());
+    }
+
+    SECTION("ToArray")
+    {
+        json::Value j1(json::Type::null);
+        CHECK(json::Array{} == j1.convert_to_array());
+        CHECK(json::Array{} == j1.inplace_convert_to_array());
+
+        json::Value j2(json::Type::boolean);
+        CHECK(json::Array{false} == j2.convert_to_array());
+        j2 = true;
+        CHECK(json::Array{true} == j2.convert_to_array());
+        CHECK(json::Array{true} == j2.inplace_convert_to_array());
+
+        json::Value j3(json::Type::number);
+        CHECK(json::Array{0.0} == j3.convert_to_array());
+        j3 = 1.0;
+        CHECK(json::Array{1.0} == j3.convert_to_array());
+        CHECK(json::Array{1.0} == j3.inplace_convert_to_array());
+
+        json::Value j4(json::Type::string); 
+        CHECK(json::Array{""} == j4.convert_to_array());
+        j4 = "hello";
+        CHECK(json::Array{"hello"} == j4.convert_to_array());
+        CHECK(json::Array{"hello"} == j4.inplace_convert_to_array());
+        
+        json::Value j5(json::Type::array);
+        CHECK(json::Array{} == j5.convert_to_array());
+        j5.push_back(1.0);
+        CHECK(json::Array{1.0} == j5.convert_to_array());
+        CHECK(json::Array{1.0} == j5.inplace_convert_to_array());
+
+        json::Value j6(json::Type::object);
+        CHECK(json::Array{json::Object{}} == j6.convert_to_array());
+        j6["eins"] = 1.0;
+        CHECK(json::Array{json::Object{{"eins", 1.0}}} == j6.convert_to_array());
+        CHECK(json::Array{json::Object{{"eins", 1.0}}} == j6.inplace_convert_to_array());
+    }
+
+    SECTION("ToObject")
+    {
+    }
 }
