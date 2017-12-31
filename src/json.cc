@@ -2552,6 +2552,8 @@ ErrorCode Parser::GetCleanString(String& out, char const*& first, char const* la
 
 ParseResult json::parse(Value& value, char const* next, char const* last, ParseOptions const& options)
 {
+    value.assign_null(); // clear!
+
     if (options.skip_bom && last - next >= 3)
     {
         if (static_cast<unsigned char>(next[0]) == 0xEF &&
