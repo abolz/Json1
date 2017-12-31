@@ -413,6 +413,28 @@ inline DiyFp DiyFp::mul(DiyFp x, DiyFp y)
     //  f = round((x.f * y.f) / 2^q)
     //  e = x.e + y.e + q
 
+#if defined(_MSC_VER) && defined(_M_X64)
+
+    uint64_t h = 0;
+    uint64_t l = _umul128(x.f, y.f, &h);
+    h += l >> 63; // round, ties up: [h, l] += 2^q / 2
+
+    return DiyFp(h, x.e + y.e + 64);
+
+#elif defined(__GNUC__) && defined(__SIZEOF_INT128__)
+
+    __extension__ using Uint128 = unsigned __int128;
+
+    Uint128 const p = Uint128{x.f} * Uint128{y.f};
+
+    uint64_t h = static_cast<uint64_t>(p >> 64);
+    uint64_t l = static_cast<uint64_t>(p);
+    h += l >> 63; // round, ties up: [h, l] += 2^q / 2
+
+    return DiyFp(h, x.e + y.e + 64);
+
+#else
+
     // Emulate the 64-bit * 64-bit multiplication:
     //
     // p = u * v
@@ -464,11 +486,25 @@ inline DiyFp DiyFp::mul(DiyFp x, DiyFp y)
     const uint64_t h = p3 + p2_hi + p1_hi + (Q >> 32);
 
     return DiyFp(h, x.e + y.e + 64);
+
+#endif
 }
 
 inline DiyFp DiyFp::normalize(DiyFp x)
 {
     assert(x.f != 0);
+
+#if defined(_MSC_VER) && defined(_M_X64)
+
+    const int leading_zeros = static_cast<int>(__lzcnt64(x.f));
+    return DiyFp(x.f << leading_zeros, x.e - leading_zeros);
+
+#elif defined(__GNUC__)
+
+    const int leading_zeros = __builtin_clzll(x.f);
+    return DiyFp(x.f << leading_zeros, x.e - leading_zeros);
+
+#else
 
     while ((x.f >> 63) == 0)
     {
@@ -476,6 +512,8 @@ inline DiyFp DiyFp::normalize(DiyFp x)
         x.e--;
     }
     return x;
+
+#endif
 }
 
 inline DiyFp DiyFp::normalize_to(DiyFp x, int target_exponent)
@@ -796,23 +834,6 @@ static CachedPower GetCachedPowerForBinaryExponent(int e)
     return cached;
 }
 
-// For n != 0, returns k, such that pow10 := 10^(k-1) <= n < 10^k.
-// For n == 0, returns 1 and sets pow10 := 1.
-static int FindLargestPow10(uint32_t n, uint32_t& pow10)
-{
-    if (n >= 1000000000) { pow10 = 1000000000; return 10; }
-    if (n >=  100000000) { pow10 =  100000000; return  9; }
-    if (n >=   10000000) { pow10 =   10000000; return  8; }
-    if (n >=    1000000) { pow10 =    1000000; return  7; }
-    if (n >=     100000) { pow10 =     100000; return  6; }
-    if (n >=      10000) { pow10 =      10000; return  5; }
-    if (n >=       1000) { pow10 =       1000; return  4; }
-    if (n >=        100) { pow10 =        100; return  3; }
-    if (n >=         10) { pow10 =         10; return  2; }
-
-    pow10 = 1; return 1;
-}
-
 static void Grisu2Round(char* buf, int len, uint64_t dist, uint64_t delta, uint64_t rest, uint64_t ten_k)
 {
     assert(len >= 1);
@@ -893,9 +914,6 @@ static void Grisu2DigitGen(char* buffer, int& length, int& decimal_exponent, Diy
 
     assert(p1 > 0);
 
-    uint32_t pow10;
-    const int k = FindLargestPow10(p1, pow10);
-
     //      10^(k-1) <= p1 < 10^k, pow10 = 10^(k-1)
     //
     //      p1 = (p1 div 10^(k-1)) * 10^(k-1) + (p1 mod 10^(k-1))
@@ -914,65 +932,79 @@ static void Grisu2DigitGen(char* buffer, int& length, int& decimal_exponent, Diy
     //
     //      rest * 2^e = (d[n-1]...d[0] * 2^-e + p2) * 2^e <= delta * 2^e
 
-    int n = k;
-    while (n > 0)
+    // The common case is that all the digits of p1 are needed.
+    // Optimize for this case and correct later if required.
+    char const* last = iconv::U32toa(buffer, p1);
+    length = static_cast<int>(last - buffer);
+
+    if (p2 <= delta)
     {
-        // Invariants:
-        //      M+ = buffer * 10^n + (p1 + p2 * 2^e)    (buffer = 0 for n = k)
-        //      pow10 = 10^(n-1) <= p1 < 10^n
+        // In this case: Too many digits of p1 might have been generated.
         //
-        const uint32_t d = p1 / pow10;  // d = p1 div 10^(n-1)
-        const uint32_t r = p1 % pow10;  // r = p1 mod 10^(n-1)
+        // Find the largest 0 <= n < k, such that
         //
-        //      M+ = buffer * 10^n + (d * 10^(n-1) + r) + p2 * 2^e
-        //         = (buffer * 10 + d) * 10^(n-1) + (r + p2 * 2^e)
+        //      w+ = (p1 div 10^n) * 10^n + ((p1 mod 10^n) * 2^-e + p2) * 2^e
+        //         = (p1 div 10^n) * 10^n + (                     rest) * 2^e
         //
-        assert(d <= 9);
-        buffer[length++] = static_cast<char>('0' + d); // buffer := buffer * 10 + d
+        // and rest <= delta.
         //
-        //      M+ = buffer * 10^(n-1) + (r + p2 * 2^e)
+        // Compute rest * 2^e = w+ mod 10^n = p1 + p2 * 2^e = (p1 * 2^-e + p2) * 2^e
+        // and check if enough digits have been generated:
         //
-        p1 = r;
-        n--;
+        //      rest * 2^e <= delta * 2^e
         //
-        //      M+ = buffer * 10^n + (p1 + p2 * 2^e)
-        //      pow10 = 10^n
+        // This test can be slightly simplified, since
+        //
+        //      rest = (p1 mod 10^n) * 2^-e + p2 <= delta
+        //      <==>    r * 2^-e + p2 <= delta
+        //      <==>    r * 2^-e      <= delta - p2 = D = D1 * 2^-e + D2
+        //      <==>    r < D1 or (r == D1 and 0 <= D2)
+        //      <==>    r <= D1
         //
 
-        // Now check if enough digits have been generated.
-        // Compute
-        //
-        //      p1 + p2 * 2^e = (p1 * 2^-e + p2) * 2^e = rest * 2^e
-        //
-        // Note:
-        // Since rest and delta share the same exponent e, it suffices to
-        // compare the significands.
-        const uint64_t rest = (uint64_t{p1} << -one.e) + p2;
-        if (rest <= delta)
+        const uint32_t D1 = static_cast<uint32_t>((delta - p2) >> -one.e);
+
+        int k = length;
+        int n = 0;
+
+        uint32_t r = 0;
+        uint32_t pow10 = 1; // 10^n
+        for (;;)
         {
-            // V = buffer * 10^n, with M- <= V <= M+.
+            assert(k >= n + 1);
+            assert(r <= D1);
+            assert(n <= 9);
+            assert(static_cast<uint32_t>(buffer[k - (n + 1)] - '0') <= UINT32_MAX / pow10);
 
-            decimal_exponent += n;
-
-            // We may now just stop. But instead look if the buffer could be
-            // decremented to bring V closer to w.
-            //
-            // pow10 = 10^n is now 1 ulp in the decimal representation V.
-            // The rounding procedure works with DiyFp's with an implicit
-            // exponent of e.
-            //
-            //      10^n = (10^n * 2^-e) * 2^e = ulp * 2^e
-            //
-            const uint64_t ten_n = uint64_t{pow10} << -one.e;
-            Grisu2Round(buffer, length, dist, delta, rest, ten_n);
-
-            return;
+            const uint32_t r_next = pow10 * static_cast<uint32_t>(buffer[k - (n + 1)] - '0') + r;
+            if (r_next > D1)
+                break;
+            r = r_next;
+            n++;
+            pow10 *= 10;
         }
+        length = k - n;
 
-        pow10 /= 10;
+        // V = buffer * 10^n, with M- <= V <= M+.
+
+        decimal_exponent += n;
+
+        const uint64_t rest = (uint64_t{r} << -one.e) + p2;
+        assert(rest <= delta);
+
+        // We may now just stop. But instead look if the buffer could be
+        // decremented to bring V closer to w.
         //
-        //      pow10 = 10^(n-1) <= p1 < 10^n
-        // Invariants restored.
+        // pow10 = 10^n is now 1 ulp in the decimal representation V.
+        // The rounding procedure works with DiyFp's with an implicit
+        // exponent of e.
+        //
+        //      10^n = (10^n * 2^-e) * 2^e = ulp * 2^e
+        //
+        const uint64_t ten_n = uint64_t{pow10} << -one.e;
+        Grisu2Round(buffer, length, dist, delta, rest, ten_n);
+
+        return;
     }
 
     // 2)
