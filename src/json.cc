@@ -2618,15 +2618,13 @@ static bool StringifyNumber(std::string& str, double value, StringifyOptions con
             return true;
         }
 
-        if (std::isnan(value))
-        {
-            str += kNaNString;
-            return true;
-        }
-
         if (value < 0)
             str += '-';
-        str += kInfString;
+
+        if (std::isnan(value))
+            str += kNaNString;
+        else
+            str += kInfString;
         return true;
     }
 
