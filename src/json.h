@@ -197,6 +197,36 @@ struct DefaultTraits<cxx::string_view>
 };
 #endif
 
+#if 1
+template <typename T>
+struct DefaultTraits_any_array
+{
+    using tag = Tag_array;
+
+    template <typename V>
+    static decltype(auto) to_json(V&& in) { return Array(in.begin(), in.end()); }
+
+    template <typename V>
+    static decltype(auto) from_json(V&& in)
+    {
+        T out;
+
+        out.reserve(in.as_array().size());
+
+        for (auto&& p : in.as_array()) {
+            out.emplace_back(p.template cast<typename T::value_type>());
+        }
+
+        return out;
+    }
+};
+
+template <typename T, typename Alloc> struct DefaultTraits<std::vector<T, Alloc>>       : DefaultTraits_any_array<std::vector<T, Alloc>> {};
+//template <typename T, typename Alloc> struct DefaultTraits<std::deque<T, Alloc>>        : DefaultTraits_any_array<std::deque<T, Alloc>> {};
+//template <typename T, typename Alloc> struct DefaultTraits<std::forward_list<T, Alloc>> : DefaultTraits_any_array<std::forward_list<T, Alloc>> {};
+//template <typename T, typename Alloc> struct DefaultTraits<std::list<T, Alloc>>         : DefaultTraits_any_array<std::list<T, Alloc>> {};
+#endif
+
 } // namespace impl
 
 template <typename T, typename /*Enable*/ = void>
