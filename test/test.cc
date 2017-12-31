@@ -1079,3 +1079,33 @@ TEST_CASE("Stringify")
     CHECK(val == val2);
 }
 
+TEST_CASE("Comments")
+{
+    std::string const inp = R"(// comment
+    /* nested /* multi line */
+    { /* object
+// starts
+here */
+        "empty_array" /* comment */: [ // comment
+        ],
+        "/*empty object*/" : { /**/ },
+    })";
+
+    json::ParseOptions options;
+    options.allow_comments = true;
+    options.allow_trailing_comma = true;
+
+    json::Value val;
+    auto const res = json::parse(val, inp.data(), inp.data() + inp.size(), options);
+    //printf("|%.*s|\n", static_cast<int>(res.end - res.ptr), res.ptr);
+    REQUIRE(res.ec == json::ErrorCode::success);
+
+    CHECK(val.is_object());
+    CHECK(val.size() == 2);
+    CHECK(val.has_member("empty_array"));
+    CHECK(val["empty_array"].is_array());
+    CHECK(val["empty_array"].size() == 0);
+    CHECK(val.has_member("/*empty object*/"));
+    CHECK(val["/*empty object*/"].is_object());
+    CHECK(val["/*empty object*/"].empty());
+}
