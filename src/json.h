@@ -663,6 +663,23 @@ public:
     Value& operator[](Object::key_type const& key);
     Value& operator[](Object::key_type&& key);
 
+    template <typename T, typename = EnableIfIsKey<T>>
+    Value& operator[](T&& key)
+    {
+        assert(is_null() || is_object());
+        auto&& obj = inplace_convert_to_object();
+#if 1
+        auto const it = obj.find(key);
+        if (it != obj.end()) {
+            return it->second;
+        }
+//      return obj[key];
+        return obj.emplace_hint(it, Object::value_type(key, {}))->second;
+#else
+        return obj[key];
+#endif
+    }
+
     // Returns a reference to the value with the given key.
     // PRE: is_object()
     // PRE: as_object().find(key) != as_object().end()
