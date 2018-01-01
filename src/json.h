@@ -541,12 +541,6 @@ public:
     template <typename T> explicit operator T() &&      noexcept { return this->cast<T>(); }
 #endif
 
-    bool&    create_boolean() noexcept;
-    double&  create_number() noexcept;
-    String&  create_string();
-    Array&   create_array();
-    Object&  create_object();
-
     // inplace_convert_to_X converts the value stored in this JSON object into a value of type X.
     //
     // If the value stored in this JSON object is already of type X, calling

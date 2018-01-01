@@ -1863,41 +1863,6 @@ Object& Value::assign_object(Object&& v)
     return _assign_object(std::move(v));
 }
 
-bool& Value::create_boolean() noexcept
-{
-    assign_null(); // release resources
-
-    data_.boolean = bool{};
-    type_ = Type::boolean;
-
-    return as_boolean();
-}
-
-double& Value::create_number() noexcept
-{
-    assign_null(); // release resources
-
-    data_.number = double{};
-    type_ = Type::number;
-
-    return as_number();
-}
-
-String& Value::create_string()
-{
-    return _assign_string();
-}
-
-Array& Value::create_array()
-{
-    return _assign_array();
-}
-
-Object& Value::create_object()
-{
-    return _assign_object();
-}
-
 //
 // https://www.ecma-international.org/publications/files/ECMA-ST/Ecma-262.pdf
 // Section 7.1.2
