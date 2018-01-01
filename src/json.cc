@@ -2218,34 +2218,6 @@ Object& Value::inplace_convert_to_object()
     return as_object();
 }
 
-Array& Value::embed_in_array()
-{
-    auto p = std::make_unique<Array>();
-    p->emplace_back();
-
-    // nothrow ->
-    p->back().data_ = data_;
-    p->back().type_ = type_;
-    data_.array = p.release();
-    type_ = Type::array;
-
-    return as_array();
-}
-
-Object& Value::embed_in_object(String key)
-{
-    auto p = std::make_unique<Object>();
-    (*p)[std::move(key)] = {};
-
-    // nothrow ->
-    p->begin()->second.data_ = data_;
-    p->begin()->second.type_ = type_;
-    data_.object = p.release();
-    type_ = Type::object;
-
-    return as_object();
-}
-
 bool Value::convert_to_boolean() const noexcept
 {
     return ToBoolean(*this);

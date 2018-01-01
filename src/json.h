@@ -553,12 +553,6 @@ public:
     Array&   inplace_convert_to_array();
     Object&  inplace_convert_to_object();
 
-    // Embed the current JSON value into an array.
-    Array& embed_in_array();
-
-    // Embed the current JSON value into an object.
-    Object& embed_in_object(String key);
-
     // convert_to_X returns a copy of the value stored in this JSON object converted to X.
     //
     // The conversion is similiar to JavaScript's ToBoolean, ToNumber, etc.
