@@ -1647,17 +1647,34 @@ TEST_CASE("Invalid UTF-8")
         json::Value j;
         auto const ec = json::parse(j, "\"" + s + "\"");
         CHECK(ec != json::ErrorCode::success);
+
+        j = "\"" + s + "\"";
+        CHECK(j.is_string());
+
+        std::string out;
+        auto const ok = json::stringify(out, j);
+        CHECK(ok == false);
     }
 
     // When using 'allow_invalid_unicode' all the strings should be decoded into a
     // sequence of U+FFFD replacement characters.
     for (auto const& s : inputs)
     {
-        json::ParseOptions options;
-        options.allow_invalid_unicode = true;
+        json::ParseOptions popts;
+        popts.allow_invalid_unicode = true;
 
         json::Value j;
-        auto const ec = json::parse(j, "\"" + s + "\"", options);
+        auto const ec = json::parse(j, "\"" + s + "\"", popts);
         CHECK(ec == json::ErrorCode::success);
+
+        j = "\"" + s + "\"";
+        CHECK(j.is_string());
+
+        json::StringifyOptions sopts;
+        sopts.allow_invalid_unicode = true;
+
+        std::string out;
+        auto const ok = json::stringify(out, j, sopts);
+        CHECK(ok == true);
     }
 }
