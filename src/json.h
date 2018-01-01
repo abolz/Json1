@@ -1063,13 +1063,13 @@ struct StringifyOptions
     // If true, replaces each invalid UTF-8 sequence in strings with a single
     // replacement character (U+FFFD). Otherwise rendering fails for invalid
     // UTF-8 strings.
-    // Default is true.
-    bool allow_invalid_unicode = true;
+    // Default is false.
+    bool allow_invalid_unicode = false;
 
     // If true, converts the special numbers NaN and infinity to nan_string and
     // inf_string, resp. Otherwise they are converted to "null".
-    // Default is true.
-    bool allow_nan_inf = true;
+    // Default is false.
+    bool allow_nan_inf = false;
 
     // If true, escapes '/' in strings. This allows the JSON string to be
     // embedded in HTML.
