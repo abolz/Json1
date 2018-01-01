@@ -28,6 +28,8 @@
 #endif
 #endif
 
+#define JSON_SKIP_INVALID_UNICODE 0
+
 using namespace json;
 
 //==================================================================================================
@@ -1425,18 +1427,6 @@ static bool IsUTF8OverlongSequence(Codepoint U, int slen)
     return slen != GetUTF8SequenceLengthFromCodepoint(U);
 }
 
-static int GetUTF8SequenceLengthFromLeadByte(char ch)
-{
-    uint8_t const b = static_cast<uint8_t>(ch);
-
-    if (b < 0x80) return 1;
-    if (b < 0xC0) return 0; // 10xxxxxx, i.e. continuation byte
-    if (b < 0xE0) return 2;
-    if (b < 0xF0) return 3;
-    if (b < 0xF8) return 4;
-    return 0; // invalid
-}
-
 static int GetUTF8SequenceLengthFromLeadByte(char ch, Codepoint& U)
 {
     uint8_t const b = static_cast<uint8_t>(ch);
@@ -1447,6 +1437,19 @@ static int GetUTF8SequenceLengthFromLeadByte(char ch, Codepoint& U)
     if (b < 0xF0) { U = b & 0x0F; return 3; }
     if (b < 0xF8) { U = b & 0x07; return 4; }
     return 0;
+}
+
+#if JSON_SKIP_INVALID_UNICODE
+static int GetUTF8SequenceLengthFromLeadByte(char ch)
+{
+    uint8_t const b = static_cast<uint8_t>(ch);
+
+    if (b < 0x80) return 1;
+    if (b < 0xC0) return 0; // 10xxxxxx, i.e. continuation byte
+    if (b < 0xE0) return 2;
+    if (b < 0xF0) return 3;
+    if (b < 0xF8) return 4;
+    return 0; // invalid
 }
 
 static bool IsUTF8LeadByte(char ch)
@@ -1462,6 +1465,7 @@ static char const* FindNextUTF8LeadByte(char const* first, char const* last)
 
     return first;
 }
+#endif
 
 static bool IsUTF8ContinuationByte(char ch)
 {
@@ -1501,18 +1505,15 @@ static DecodedCodepoint DecodeUTF8Sequence(char const*& next, char const* last)
 
     Codepoint U = 0;
     const int slen = GetUTF8SequenceLengthFromLeadByte(*next, U);
+    ++next;
 
-    if (slen == 0) {
-        next += 1;
+    if (slen == 0)
         return { kInvalidCodepoint, ErrorCode::invalid_lead_byte };
-    }
-    if (last - next < slen) {
-        next = last;
+    if (last - next < slen - 1)
         return { kInvalidCodepoint, ErrorCode::insufficient_data };
-    }
 
-    const auto end = next + slen;
-    for (++next; next != end; ++next)
+    const auto end = next + (slen - 1);
+    for ( ; next != end; ++next)
     {
         if (!IsUTF8ContinuationByte(*next))
             return { U, ErrorCode::invalid_continuation_byte };
@@ -3711,12 +3712,6 @@ ErrorCode Parser::GetCleanString(String& out, char const*& first, char const* la
                 }
                 break;
 
-            case unicode::ErrorCode::insufficient_data:
-#if 0
-                first = f;
-                return ErrorCode::invalid_unicode_sequence_in_string;
-#endif
-
             default:
                 if (!options.allow_invalid_unicode)
                 {
@@ -3727,8 +3722,10 @@ ErrorCode Parser::GetCleanString(String& out, char const*& first, char const* la
 //              unicode::EncodeUTF8(unicode::kReplacementCharacter, [&](char ch) { out += ch; return true; });
                 out += "\xEF\xBF\xBD";
 
+#if JSON_SKIP_INVALID_UNICODE
                 // Skip to the start of the next sequence (if not already done yet)
                 f = unicode::FindNextUTF8LeadByte(f, last);
+#endif
                 break;
             }
         }
@@ -3966,9 +3963,11 @@ static bool StringifyString(std::string& str, String const& value, StringifyOpti
 
                 str += "\\uFFFD";
 
+#if JSON_SKIP_INVALID_UNICODE
                 // Scan to the start of the next UTF-8 sequence.
                 // This includes ASCII characters.
                 first = unicode::FindNextUTF8LeadByte(first, last);
+#endif
                 break;
             }
         }
