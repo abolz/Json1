@@ -1502,10 +1502,14 @@ static DecodedCodepoint DecodeUTF8Sequence(char const*& next, char const* last)
     Codepoint U = 0;
     const int slen = GetUTF8SequenceLengthFromLeadByte(*next, U);
 
-    if (slen == 0)
+    if (slen == 0) {
+        next += 1;
         return { kInvalidCodepoint, ErrorCode::invalid_lead_byte };
-    if (last - next < slen)
+    }
+    if (last - next < slen) {
+        next = last;
         return { kInvalidCodepoint, ErrorCode::insufficient_data };
+    }
 
     const auto end = next + slen;
     for (++next; next != end; ++next)
@@ -3771,8 +3775,10 @@ ErrorCode Parser::GetCleanString(String& out, char const*& first, char const* la
                 break;
 
             case unicode::ErrorCode::insufficient_data:
+#if 0
                 first = f;
                 return ErrorCode::invalid_unicode_sequence_in_string;
+#endif
 
             default:
                 if (!options.allow_invalid_unicode)

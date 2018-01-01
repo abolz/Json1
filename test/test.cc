@@ -290,7 +290,7 @@ TEST_CASE("Parse")
 
     val3 = std::move(val2);
     CHECK(val3 == val);
-    CHECK(val2.is_null()); // 
+    CHECK(val2.is_null()); //
 
     *(val.get_ptr("Address")->get_ptr("Street")) = "Hello World";
     CHECK(val["Address"]["Street"] == "Hello World");
@@ -1410,7 +1410,7 @@ TEST_CASE("Conversion")
         CHECK(std::isnan(j6.convert_to_number()));
         CHECK(std::isnan(j6.inplace_convert_to_number()));
     }
-  
+
     SECTION("ToString")
     {
         json::Value j1(json::Type::null);
@@ -1429,7 +1429,7 @@ TEST_CASE("Conversion")
         CHECK("1.0" == j3.convert_to_string());
         CHECK("1.0" == j3.inplace_convert_to_string());
 
-        json::Value j4(json::Type::string); 
+        json::Value j4(json::Type::string);
         CHECK("" == j4.convert_to_string());
         j4 = "hello";
         CHECK("hello" == j4.convert_to_string());
@@ -1466,12 +1466,12 @@ TEST_CASE("Conversion")
         CHECK(json::Array{1.0} == j3.convert_to_array());
         CHECK(json::Array{1.0} == j3.inplace_convert_to_array());
 
-        json::Value j4(json::Type::string); 
+        json::Value j4(json::Type::string);
         CHECK(json::Array{""} == j4.convert_to_array());
         j4 = "hello";
         CHECK(json::Array{"hello"} == j4.convert_to_array());
         CHECK(json::Array{"hello"} == j4.inplace_convert_to_array());
-        
+
         json::Value j5(json::Type::array);
         CHECK(json::Array{} == j5.convert_to_array());
         j5.push_back(1.0);
@@ -1487,5 +1487,177 @@ TEST_CASE("Conversion")
 
     SECTION("ToObject")
     {
+    }
+}
+
+TEST_CASE("Invalid UTF-8")
+{
+    // Test cases from:
+    // https://www.cl.cam.ac.uk/~mgk25/ucs/examples/UTF-8-test.txt
+
+    static const std::string inputs[] = {
+// 3.1  Unexpected continuation bytes
+        "\x80",                          // 3.1.1  First continuation byte 0x80
+        "\xBF",                          // 3.1.2  Last continuation byte 0xbf
+        "\x80\xBF",                      // 3.1.3  2 continuation bytes
+        "\x80\xBF\x80",                  // 3.1.4  3 continuation bytes
+        "\x80\xBF\x80\xBF",              // 3.1.5  4 continuation bytes
+        "\x80\xBF\x80\xBF\x80",          // 3.1.6  5 continuation bytes
+        "\x80\xBF\x80\xBF\x80\xBF",      // 3.1.7  6 continuation bytes
+        "\x80\xBF\x80\xBF\x80\xBF\x80",  // 3.1.8  7 continuation bytes
+        // 3.1.9  Sequence of all 64 possible continuation bytes (0x80-0xbf)
+        "\x80\x81\x82\x83\x84\x85\x86\x87\x88\x89\x8A\x8B\x8C\x8D\x8E\x8F"
+        "\x90\x91\x92\x93\x94\x95\x96\x97\x98\x99\x9A\x9B\x9C\x9D\x9E\x9F"
+        "\xA0\xA1\xA2\xA3\xA4\xA5\xA6\xA7\xA8\xA9\xAA\xAB\xAC\xAD\xAE\xAF"
+        "\xB0\xB1\xB2\xB3\xB4\xB5\xB6\xB7\xB8\xB9\xBA\xBB\xBC\xBD\xBE\xBF",
+
+// 3.2  Lonely start characters
+        // 3.2.1  All 32 first bytes of 2-byte sequences (0xc0-0xdf)
+        "\xC0",
+        "\xC1",
+        "\xC2",
+        "\xC3",
+        "\xC4",
+        "\xC5",
+        "\xC6",
+        "\xC7",
+        "\xC8",
+        "\xC9",
+        "\xCA",
+        "\xCB",
+        "\xCC",
+        "\xCD",
+        "\xCE",
+        "\xCF",
+        "\xD0",
+        "\xD1",
+        "\xD2",
+        "\xD3",
+        "\xD4",
+        "\xD5",
+        "\xD6",
+        "\xD7",
+        "\xD8",
+        "\xD9",
+        "\xDA",
+        "\xDB",
+        "\xDC",
+        "\xDD",
+        "\xDE",
+        "\xDF",
+        // 3.2.2  All 16 first bytes of 3-byte sequences (0xe0-0xef)
+        "\xE0",
+        "\xE1",
+        "\xE2",
+        "\xE3",
+        "\xE4",
+        "\xE5",
+        "\xE6",
+        "\xE7",
+        "\xE8",
+        "\xE9",
+        "\xEA",
+        "\xEB",
+        "\xEC",
+        "\xED",
+        "\xEE",
+        "\xEF",
+        // 3.2.3  All 8 first bytes of 4-byte sequences (0xf0-0xf7)
+        "\xF0",
+        "\xF1",
+        "\xF2",
+        "\xF3",
+        "\xF4",
+        "\xF5",
+        "\xF6",
+        "\xF7",
+        // 3.2.4  All 4 first bytes of 5-byte sequences (0xf8-0xfb)
+        "\xF8",
+        "\xF9",
+        "\xFA",
+        "\xFB",
+        // 3.2.5  All 2 first bytes of 6-byte sequences (0xfc-0xfd)
+        "\xFC",
+        "\xFD",
+
+// 3.3  Sequences with last continuation byte missing
+        "\xC0",                  // 2-byte sequence with last byte missing (U+0000)
+        "\xE0\x80",              // 3-byte sequence with last byte missing (U+0000)
+        "\xF0\x80\x80",          // 4-byte sequence with last byte missing (U+0000)
+        "\xF8\x80\x80\x80",      // 5-byte sequence with last byte missing (U+0000)
+        "\xFC\x80\x80\x80\x80",  // 6-byte sequence with last byte missing (U+0000)
+        "\xDF",                  // 2-byte sequence with last byte missing (U-000007FF)
+        "\xEF\xBF",              // 3-byte sequence with last byte missing (U-0000FFFF)
+        "\xF7\xBF\xBF",          // 4-byte sequence with last byte missing (U-001FFFFF)
+        "\xFB\xBF\xBF\xBF",      // 5-byte sequence with last byte missing (U-03FFFFFF)
+        "\xFD\xBF\xBF\xBF\xBF",  // 6-byte sequence with last byte missing (U-7FFFFFFF)
+
+// 3.4  Concatenation of incomplete sequences
+        "\xC0\xE0\x80\xF0\x80\x80\xDF\xEF\xBF\xF7\xBF\xBF",
+        "\xC0\xE0\x80\xF0\x80\x80\xFC\x80\x80\x80\x80\xDF\xEF\xBF\xF7\xBF\xBF\xFB\xBF\xBF\xBF\xFD\xBF\xBF\xBF\xBF",
+
+// 3.5  Impossible bytes
+        "\xFE",
+        "\xFF",
+        "\xFE\xFE\xFF\xFF",
+
+// 4.1  Examples of an overlong ASCII character
+        "\xC0\xAF",                  // U+002F
+        "\xE0\x80\xAF",              // U+002F
+        "\xF0\x80\x80\xAF",          // U+002F
+        "\xF8\x80\x80\x80\xAF",      // U+002F
+        "\xFC\x80\x80\x80\x80\xAF",  // U+002F
+
+// 4.2  Maximum overlong sequences
+        "\xC1\xBF",                  // U-0000007F
+        "\xE0\x9F\xBF",              // U-000007FF
+        "\xF0\x8F\xBF\xBF",          // U-0000FFFF
+        "\xF8\x87\xBF\xBF\xBF",      // U-001FFFFF
+        "\xFC\x83\xBF\xBF\xBF\xBF",  // U-03FFFFFF
+
+// 4.3  Overlong representation of the NUL character
+        "\xC0\x80",                  // U+0000
+        "\xE0\x80\x80",              // U+0000
+        "\xF0\x80\x80\x80",          // U+0000
+        "\xF8\x80\x80\x80\x80",      // U+0000
+        "\xFC\x80\x80\x80\x80\x80",  // U+0000
+
+// 5.1 Single UTF-16 surrogates
+        "\xED\xA0\x80",  // U+D800
+        "\xED\xAD\xBF",  // U+DB7F
+        "\xED\xAE\x80",  // U+DB80
+        "\xED\xAF\xBF",  // U+DBFF
+        "\xED\xB0\x80",  // U+DC00
+        "\xED\xBE\x80",  // U+DF80
+        "\xED\xBF\xBF",  // U+DFFF
+
+// 5.2 Paired UTF-16 surrogates
+        "\xED\xA0\x80\xED\xB0\x80",  // U+D800 U+DC00
+        "\xED\xA0\x80\xED\xBF\xBF",  // U+D800 U+DFFF
+        "\xED\xAD\xBF\xED\xB0\x80",  // U+DB7F U+DC00
+        "\xED\xAD\xBF\xED\xBF\xBF",  // U+DB7F U+DFFF
+        "\xED\xAE\x80\xED\xB0\x80",  // U+DB80 U+DC00
+        "\xED\xAE\x80\xED\xBF\xBF",  // U+DB80 U+DFFF
+        "\xED\xAF\xBF\xED\xB0\x80",  // U+DBFF U+DC00
+        "\xED\xAF\xBF\xED\xBF\xBF",  // U+DBFF U+DFFF
+    };
+
+    for (auto const& s : inputs)
+    {
+        json::Value j;
+        auto const ec = json::parse(j, "\"" + s + "\"");
+        CHECK(ec != json::ErrorCode::success);
+    }
+
+    // When using 'allow_invalid_unicode' all the strings should be decoded into a
+    // sequence of U+FFFD replacement characters.
+    for (auto const& s : inputs)
+    {
+        json::ParseOptions options;
+        options.allow_invalid_unicode = true;
+
+        json::Value j;
+        auto const ec = json::parse(j, "\"" + s + "\"", options);
+        CHECK(ec == json::ErrorCode::success);
     }
 }
