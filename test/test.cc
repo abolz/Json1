@@ -1195,6 +1195,21 @@ TEST_CASE("JSONTestSuite")
             json::Value val;
             auto const res = json::parse(val, test.input.data(), test.input.data() + test.input.size());
             CHECK(res.ec == json::ErrorCode::success);
+
+            std::string str;
+            auto const ok = json::stringify(str, val);
+            CHECK(ok == true);
+
+            json::Value val2;
+            auto const res2 = json::parse(val2, str.data(), str.data() + str.size());
+            CHECK(res2.ec == json::ErrorCode::success);
+
+            CHECK(val == val2);
+            CHECK(!(val != val2));
+            CHECK(!(val < val2));
+            CHECK(val <= val2);
+            CHECK(!(val > val2));
+            CHECK(val >= val2);
         }
     }
 
@@ -1332,15 +1347,31 @@ TEST_CASE("Conversion")
 {
     SECTION("ToBoolean")
     {
+        json::Value copy;
+
         json::Value j1(json::Type::null);
         CHECK(false == j1.convert_to_boolean());
         CHECK(false == j1.inplace_convert_to_boolean());
+        copy = j1;
+        CHECK(copy == j1);
+        CHECK(!(copy != j1));
+        CHECK(!(copy < j1));
+        CHECK(copy <= j1);
+        CHECK(!(copy > j1));
+        CHECK(copy >= j1);
 
         json::Value j2(json::Type::boolean);
         CHECK(false == j2.convert_to_boolean());
         j2 = true;
         CHECK(true == j2.convert_to_boolean());
         CHECK(true == j2.inplace_convert_to_boolean());
+        copy = j2;
+        CHECK(copy == j2);
+        CHECK(!(copy != j2));
+        CHECK(!(copy < j2));
+        CHECK(copy <= j2);
+        CHECK(!(copy > j2));
+        CHECK(copy >= j2);
 
         json::Value j3(json::Type::number); // !nan(x) && x != 0
         CHECK(false == j3.convert_to_boolean());
@@ -1351,33 +1382,77 @@ TEST_CASE("Conversion")
         j3 = std::numeric_limits<double>::infinity();
         CHECK(true == j3.convert_to_boolean());
         CHECK(true == j3.inplace_convert_to_boolean());
+        copy = j3;
+        CHECK(copy == j3);
+        CHECK(!(copy != j3));
+        CHECK(!(copy < j3));
+        CHECK(copy <= j3);
+        CHECK(!(copy > j3));
+        CHECK(copy >= j3);
 
         json::Value j4(json::Type::string); // !empty(x)
         CHECK(false == j4.convert_to_boolean());
         j4 = "hello";
         CHECK(true == j4.convert_to_boolean());
         CHECK(true == j4.inplace_convert_to_boolean());
+        copy = j4;
+        CHECK(copy == j4);
+        CHECK(!(copy != j4));
+        CHECK(!(copy < j4));
+        CHECK(copy <= j4);
+        CHECK(!(copy > j4));
+        CHECK(copy >= j4);
 
         json::Value j5(json::Type::array); // => true
         CHECK(true == j5.convert_to_boolean());
         CHECK(true == j5.inplace_convert_to_boolean());
+        copy = j5;
+        CHECK(copy == j5);
+        CHECK(!(copy != j5));
+        CHECK(!(copy < j5));
+        CHECK(copy <= j5);
+        CHECK(!(copy > j5));
+        CHECK(copy >= j5);
 
         json::Value j6(json::Type::object); // => true
         CHECK(true == j6.convert_to_boolean());
         CHECK(true == j6.inplace_convert_to_boolean());
+        copy = j6;
+        CHECK(copy == j6);
+        CHECK(!(copy != j6));
+        CHECK(!(copy < j6));
+        CHECK(copy <= j6);
+        CHECK(!(copy > j6));
+        CHECK(copy >= j6);
     }
 
     SECTION("ToNumber")
     {
+        json::Value copy;
+
         json::Value j1(json::Type::null);
         CHECK(0.0 == j1.convert_to_number());
         CHECK(0.0 == j1.inplace_convert_to_number());
+        copy = j1;
+        CHECK(copy == j1);
+        CHECK(!(copy != j1));
+        CHECK(!(copy < j1));
+        CHECK(copy <= j1);
+        CHECK(!(copy > j1));
+        CHECK(copy >= j1);
 
         json::Value j2(json::Type::boolean);
         CHECK(0.0 == j2.convert_to_number());
         j2 = true;
         CHECK(1.0 == j2.convert_to_number());
         CHECK(1.0 == j2.inplace_convert_to_number());
+        copy = j2;
+        CHECK(copy == j2);
+        CHECK(!(copy != j2));
+        CHECK(!(copy < j2));
+        CHECK(copy <= j2);
+        CHECK(!(copy > j2));
+        CHECK(copy >= j2);
 
         json::Value j3(json::Type::number);
         CHECK(0.0 == j3.convert_to_number());
@@ -1390,12 +1465,26 @@ TEST_CASE("Conversion")
         j3 = std::numeric_limits<double>::infinity();
         CHECK(std::numeric_limits<double>::infinity() == j3.convert_to_number());
         CHECK(std::numeric_limits<double>::infinity() == j3.inplace_convert_to_number());
+        copy = j3;
+        CHECK(copy == j3);
+        CHECK(!(copy != j3));
+        CHECK(!(copy < j3));
+        CHECK(copy <= j3);
+        CHECK(!(copy > j3));
+        CHECK(copy >= j3);
 
         json::Value j4(json::Type::string); // !empty(x)
         CHECK(0.0 == j4.convert_to_number());
         j4 = "1.0";
         CHECK(1.0 == j4.convert_to_number());
         CHECK(1.0 == j4.inplace_convert_to_number());
+        copy = j4;
+        CHECK(copy == j4);
+        CHECK(!(copy != j4));
+        CHECK(!(copy < j4));
+        CHECK(copy <= j4);
+        CHECK(!(copy > j4));
+        CHECK(copy >= j4);
 
         json::Value j5(json::Type::array); // => true
         CHECK(0.0 == j5.convert_to_number());
@@ -1405,35 +1494,79 @@ TEST_CASE("Conversion")
         j5 = json::Array{"1.0"};
         CHECK(1.0 == j5.convert_to_number());
         CHECK(1.0 == j5.inplace_convert_to_number());
+        copy = j5;
+        CHECK(copy == j5);
+        CHECK(!(copy != j5));
+        CHECK(!(copy < j5));
+        CHECK(copy <= j5);
+        CHECK(!(copy > j5));
+        CHECK(copy >= j5);
 
         json::Value j6(json::Type::object); // => true
         CHECK(std::isnan(j6.convert_to_number()));
         CHECK(std::isnan(j6.inplace_convert_to_number()));
+        copy = j6;
+        //CHECK(copy == j6);
+        //CHECK(!(copy != j6));
+        //CHECK(!(copy < j6));
+        //CHECK(copy <= j6);
+        //CHECK(!(copy > j6));
+        //CHECK(copy >= j6);
     }
 
     SECTION("ToString")
     {
+        json::Value copy;
+
         json::Value j1(json::Type::null);
         CHECK("null" == j1.convert_to_string());
         CHECK("null" == j1.inplace_convert_to_string());
+        copy = j1;
+        CHECK(copy == j1);
+        CHECK(!(copy != j1));
+        CHECK(!(copy < j1));
+        CHECK(copy <= j1);
+        CHECK(!(copy > j1));
+        CHECK(copy >= j1);
 
         json::Value j2(json::Type::boolean);
         CHECK("false" == j2.convert_to_string());
         j2 = true;
         CHECK("true" == j2.convert_to_string());
         CHECK("true" == j2.inplace_convert_to_string());
+        copy = j2;
+        CHECK(copy == j2);
+        CHECK(!(copy != j2));
+        CHECK(!(copy < j2));
+        CHECK(copy <= j2);
+        CHECK(!(copy > j2));
+        CHECK(copy >= j2);
 
         json::Value j3(json::Type::number);
         CHECK("0.0" == j3.convert_to_string());
         j3 = 1.0;
         CHECK("1.0" == j3.convert_to_string());
         CHECK("1.0" == j3.inplace_convert_to_string());
+        copy = j3;
+        CHECK(copy == j3);
+        CHECK(!(copy != j3));
+        CHECK(!(copy < j3));
+        CHECK(copy <= j3);
+        CHECK(!(copy > j3));
+        CHECK(copy >= j3);
 
         json::Value j4(json::Type::string);
         CHECK("" == j4.convert_to_string());
         j4 = "hello";
         CHECK("hello" == j4.convert_to_string());
         CHECK("hello" == j4.inplace_convert_to_string());
+        copy = j4;
+        CHECK(copy == j4);
+        CHECK(!(copy != j4));
+        CHECK(!(copy < j4));
+        CHECK(copy <= j4);
+        CHECK(!(copy > j4));
+        CHECK(copy >= j4);
 
         json::Value j5(json::Type::array);
         CHECK("" == j5.convert_to_string());
@@ -1442,47 +1575,105 @@ TEST_CASE("Conversion")
         j5.push_back("hello world");
         CHECK("1.0,hello world" == j5.convert_to_string());
         CHECK("1.0,hello world" == j5.inplace_convert_to_string());
+        copy = j5;
+        CHECK(copy == j5);
+        CHECK(!(copy != j5));
+        CHECK(!(copy < j5));
+        CHECK(copy <= j5);
+        CHECK(!(copy > j5));
+        CHECK(copy >= j5);
 
         json::Value j6(json::Type::object);
         CHECK("[object Object]" == j6.convert_to_string());
         CHECK("[object Object]" == j6.inplace_convert_to_string());
+        copy = j6;
+        CHECK(copy == j6);
+        CHECK(!(copy != j6));
+        CHECK(!(copy < j6));
+        CHECK(copy <= j6);
+        CHECK(!(copy > j6));
+        CHECK(copy >= j6);
     }
 
     SECTION("ToArray")
     {
+        json::Value copy;
+
         json::Value j1(json::Type::null);
         CHECK(json::Array{} == j1.convert_to_array());
         CHECK(json::Array{} == j1.inplace_convert_to_array());
+        copy = j1;
+        CHECK(copy == j1);
+        CHECK(!(copy != j1));
+        CHECK(!(copy < j1));
+        CHECK(copy <= j1);
+        CHECK(!(copy > j1));
+        CHECK(copy >= j1);
 
         json::Value j2(json::Type::boolean);
         CHECK(json::Array{false} == j2.convert_to_array());
         j2 = true;
         CHECK(json::Array{true} == j2.convert_to_array());
         CHECK(json::Array{true} == j2.inplace_convert_to_array());
+        copy = j2;
+        CHECK(copy == j2);
+        CHECK(!(copy != j2));
+        CHECK(!(copy < j2));
+        CHECK(copy <= j2);
+        CHECK(!(copy > j2));
+        CHECK(copy >= j2);
 
         json::Value j3(json::Type::number);
         CHECK(json::Array{0.0} == j3.convert_to_array());
         j3 = 1.0;
         CHECK(json::Array{1.0} == j3.convert_to_array());
         CHECK(json::Array{1.0} == j3.inplace_convert_to_array());
+        copy = j3;
+        CHECK(copy == j3);
+        CHECK(!(copy != j3));
+        CHECK(!(copy < j3));
+        CHECK(copy <= j3);
+        CHECK(!(copy > j3));
+        CHECK(copy >= j3);
 
         json::Value j4(json::Type::string);
         CHECK(json::Array{""} == j4.convert_to_array());
         j4 = "hello";
         CHECK(json::Array{"hello"} == j4.convert_to_array());
         CHECK(json::Array{"hello"} == j4.inplace_convert_to_array());
+        copy = j4;
+        CHECK(copy == j4);
+        CHECK(!(copy != j4));
+        CHECK(!(copy < j4));
+        CHECK(copy <= j4);
+        CHECK(!(copy > j4));
+        CHECK(copy >= j4);
 
         json::Value j5(json::Type::array);
         CHECK(json::Array{} == j5.convert_to_array());
         j5.push_back(1.0);
         CHECK(json::Array{1.0} == j5.convert_to_array());
         CHECK(json::Array{1.0} == j5.inplace_convert_to_array());
+        copy = j5;
+        CHECK(copy == j5);
+        CHECK(!(copy != j5));
+        CHECK(!(copy < j5));
+        CHECK(copy <= j5);
+        CHECK(!(copy > j5));
+        CHECK(copy >= j5);
 
         json::Value j6(json::Type::object);
         CHECK(json::Array{json::Object{}} == j6.convert_to_array());
         j6["eins"] = 1.0;
         CHECK(json::Array{json::Object{{"eins", 1.0}}} == j6.convert_to_array());
         CHECK(json::Array{json::Object{{"eins", 1.0}}} == j6.inplace_convert_to_array());
+        copy = j6;
+        CHECK(copy == j6);
+        CHECK(!(copy != j6));
+        CHECK(!(copy < j6));
+        CHECK(copy <= j6);
+        CHECK(!(copy > j6));
+        CHECK(copy >= j6);
     }
 
     SECTION("ToObject")
