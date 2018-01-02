@@ -1958,6 +1958,18 @@ TEST_CASE("Value - array op")
     CHECK(j[2] == "Hello");
 
     const json::Value j2 = j;
+
+    j.erase(0);
+    CHECK(j.is_array());
+    CHECK(j.size() == 2);
+    CHECK(j[0].is_number());
+    CHECK(j[0].as_number() == 2);
+    CHECK(j[0] == 2);
+    CHECK(j[1].is_string());
+    CHECK(j[1].size() == 5);
+    CHECK(j[1].as_string() == "Hello");
+    CHECK(j[1] == "Hello");
+
     CHECK(j2.is_array());
     CHECK(j2.as_array().size() == 3);
     CHECK(j2.size() == 3);
@@ -1967,16 +1979,16 @@ TEST_CASE("Value - array op")
     CHECK(j2[1] == 2);
     CHECK(j2[2].is_string());
     CHECK(j2[2] == "Hello");
-    CHECK(j.get_ptr(0) != nullptr);
-    CHECK(j.get_ptr(1) != nullptr);
-    CHECK(j.get_ptr(2) != nullptr);
-    CHECK(j.get_ptr(3) == nullptr);
-    CHECK(j.get_ptr(0)->is_number());
-    CHECK(j.get_ptr(1)->is_number());
-    CHECK(j.get_ptr(2)->is_string());
-    CHECK(*j.get_ptr(0) == 1);
-    CHECK(*j.get_ptr(1) == 2);
-    CHECK((*j.get_ptr(2)).as_string() == "Hello");
+    CHECK(j2.get_ptr(0) != nullptr);
+    CHECK(j2.get_ptr(1) != nullptr);
+    CHECK(j2.get_ptr(2) != nullptr);
+    CHECK(j2.get_ptr(3) == nullptr);
+    CHECK(j2.get_ptr(0)->is_number());
+    CHECK(j2.get_ptr(1)->is_number());
+    CHECK(j2.get_ptr(2)->is_string());
+    CHECK(*j2.get_ptr(0) == 1);
+    CHECK(*j2.get_ptr(1) == 2);
+    CHECK((*j2.get_ptr(2)).as_string() == "Hello");
 }
 
 TEST_CASE("Value - object op")
