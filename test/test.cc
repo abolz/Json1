@@ -1,3 +1,13 @@
+#if 1
+#ifdef _MSC_VER
+#pragma warning(disable: 4244)
+#endif
+#ifdef __GNUC__
+#pragma GCC diagnostic ignored "-Wconversion"
+#pragma GCC diagnostic ignored "-Wfloat-conversion"
+#endif
+#endif
+
 #include "../src/json.h"
 
 #include "catch.hpp"
@@ -2067,4 +2077,104 @@ TEST_CASE("Value - object op")
     CHECK(j3.get_ptr("drei")->as_number() == 333);
     CHECK(*j3.get_ptr("drei") == 333);
     CHECK(j3.get_ptr("Zwei") == nullptr);
+}
+
+TEST_CASE("Iterators")
+{
+    SECTION("array")
+    {
+    }
+
+    SECTION("object items")
+    {
+        json::Value j = json::Object{{"a", 1}, {"b", 2}, {"c", 3}};
+        CHECK(j.is_object());
+        CHECK(j.size() == 3);
+
+        auto I = j.items_begin();
+        auto E = j.items_end();
+        CHECK(I != E);
+        CHECK(I->first == "a");
+        CHECK(I->second == 1);
+        ++I;
+        CHECK(I != E);
+        CHECK(I->first == "b");
+        CHECK(I->second == 2);
+        ++I;
+        CHECK(I != E);
+        CHECK(I->first == "c");
+        CHECK(I->second == 3);
+        ++I;
+        CHECK(I == E);
+    }
+
+    SECTION("object keys")
+    {
+        json::Value j = json::Object{{"a", 1}, {"b", 2}, {"c", 3}};
+        CHECK(j.is_object());
+        CHECK(j.size() == 3);
+
+        auto I = j.keys_begin();
+        auto E = j.keys_end();
+        CHECK(I != E);
+        CHECK(*I == "a");
+        ++I;
+        CHECK(I != E);
+        CHECK(*I == "b");
+        ++I;
+        CHECK(I != E);
+        CHECK(*I == "c");
+        ++I;
+        CHECK(I == E);
+
+        json::Value j2 = json::Array(j.keys_begin(), j.keys_end());
+        CHECK(j2.is_array());
+        CHECK(j2.size() == 3);
+        CHECK(j2[0] == "a");
+        CHECK(j2[1] == "b");
+        CHECK(j2[2] == "c");
+    }
+
+    SECTION("object values")
+    {
+        json::Value j = json::Object{{"a", 1}, {"b", 2}, {"c", 3}};
+        CHECK(j.is_object());
+        CHECK(j.size() == 3);
+
+        auto I = j.values_begin();
+        auto E = j.values_end();
+        CHECK(I != E);
+        CHECK(*I == 1);
+        ++I;
+        CHECK(I != E);
+        CHECK(*I == 2);
+        ++I;
+        CHECK(I != E);
+        CHECK(*I == 3);
+        ++I;
+        CHECK(I == E);
+
+        json::Value j2 = json::Array(j.values_begin(), j.values_end());
+        CHECK(j2.is_array());
+        CHECK(j2.size() == 3);
+        CHECK(j2[0] == 1);
+        CHECK(j2[1] == 2);
+        CHECK(j2[2] == 3);
+
+        json::Value const j3 = j;
+        auto I3 = j3.values_begin();
+        auto E3 = j3.values_end();
+        I3 = I;
+        E3 = E;
+        //I = I3;
+        //E = E3;
+        CHECK(I3 == E);
+        CHECK(I3 == E3);
+        CHECK(I == E);
+        CHECK(I == E3);
+        CHECK(E == I3);
+        CHECK(E3 == I3);
+        CHECK(E == I);
+        CHECK(E3 == I);
+    }
 }

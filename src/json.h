@@ -583,7 +583,9 @@ public:
     // PRE: is_string() or is_array() or is_object()
     bool empty() const noexcept;
 
-// Arrays:
+    //--------------------------------------------------------------------------
+    // Array helper:
+    //
 
     using element_iterator       = Array::iterator;
     using const_element_iterator = Array::const_iterator;
@@ -594,15 +596,15 @@ public:
     const_element_iterator elements_end()   const& { return as_array().end();   }
 
     template <typename It>
-    struct Elements {
+    struct ItRange {
         It begin_;
         It end_;
         It begin() const { return begin_; }
         It end() const { return end_; }
     };
 
-    Elements<element_iterator>       elements()      &  { return {elements_begin(), elements_end()}; }
-    Elements<const_element_iterator> elements() const&  { return {elements_begin(), elements_end()}; }
+    ItRange<element_iterator>       elements()      &  { return {elements_begin(), elements_end()}; }
+    ItRange<const_element_iterator> elements() const&  { return {elements_begin(), elements_end()}; }
 
     // Convert this value into an array an return a reference to the index-th element.
     // PRE: is_array() or is_null()
@@ -644,7 +646,9 @@ public:
     // PRE: index < size()
     element_iterator erase(size_t index);
 
-// Objects:
+    //--------------------------------------------------------------------------
+    // Object helper:
+    //
 
 private:
     template <typename T>
@@ -655,6 +659,8 @@ private:
     >;
 
 public:
+// items:
+
     using item_iterator       = Object::iterator;
     using const_item_iterator = Object::const_iterator;
 
@@ -663,16 +669,111 @@ public:
     const_item_iterator items_begin() const& { return as_object().begin(); }
     const_item_iterator items_end()   const& { return as_object().end();   }
 
-    template <typename It>
-    struct Items {
-        It begin_;
-        It end_;
-        It begin() const { return begin_; }
-        It end() const { return end_; }
+    ItRange<item_iterator>       items()      &  { return {items_begin(), items_end()}; }
+    ItRange<const_item_iterator> items() const&  { return {items_begin(), items_end()}; }
+
+// keys:
+
+    class const_key_iterator
+    {
+        Object::const_iterator it;
+
+    public:
+        using iterator_category = std::bidirectional_iterator_tag;
+        using value_type        = Object::key_type;
+        using reference         = const value_type&;
+        using pointer           = const value_type*;
+        using difference_type   = Object::const_iterator::difference_type;
+
+        const_key_iterator() = default;
+        explicit const_key_iterator(Object::const_iterator it_) : it(it_) {}
+
+        reference operator*() const { return it->first; }
+        pointer operator->() const { return &it->first; }
+
+        const_key_iterator& operator++() { ++it; return *this; }
+        const_key_iterator& operator--() { --it; return *this; }
+        const_key_iterator operator++(int) { auto I = *this; ++it; return I; }
+        const_key_iterator operator--(int) { auto I = *this; --it; return I; }
+
+        friend bool operator==(const_key_iterator lhs, const_key_iterator rhs) { return lhs.it == rhs.it; }
+        friend bool operator!=(const_key_iterator lhs, const_key_iterator rhs) { return lhs.it != rhs.it; }
     };
 
-    Items<item_iterator>       items()      &  { return {items_begin(), items_end()}; }
-    Items<const_item_iterator> items() const&  { return {items_begin(), items_end()}; }
+    const_key_iterator keys_begin() const& { return const_key_iterator(items_begin()); }
+    const_key_iterator keys_end()   const& { return const_key_iterator(items_end());   }
+
+    ItRange<const_key_iterator> keys() const& { return {keys_begin(), keys_end()}; }
+
+// values:
+
+    class const_value_iterator;
+
+    class value_iterator
+    {
+        friend class const_value_iterator;
+
+        Object::iterator it;
+
+    public:
+        using iterator_category = std::bidirectional_iterator_tag;
+        using value_type        = Object::mapped_type;
+        using reference         = value_type&;
+        using pointer           = value_type*;
+        using difference_type   = Object::iterator::difference_type;
+
+        value_iterator() = default;
+        explicit value_iterator(Object::iterator it_) : it(it_) {}
+
+        reference operator*() const { return it->second; }
+        pointer operator->() const { return &it->second; }
+
+        value_iterator& operator++() { ++it; return *this; }
+        value_iterator& operator--() { --it; return *this; }
+        value_iterator operator++(int) { auto I = *this; ++it; return I; }
+        value_iterator operator--(int) { auto I = *this; --it; return I; }
+
+        friend bool operator==(value_iterator lhs, value_iterator rhs) { return lhs.it == rhs.it; }
+        friend bool operator!=(value_iterator lhs, value_iterator rhs) { return lhs.it != rhs.it; }
+    };
+
+    class const_value_iterator
+    {
+        Object::const_iterator it;
+
+    public:
+        using iterator_category = std::bidirectional_iterator_tag;
+        using value_type        = Object::mapped_type;
+        using reference         = const value_type&;
+        using pointer           = const value_type*;
+        using difference_type   = Object::const_iterator::difference_type;
+
+        const_value_iterator() = default;
+        explicit const_value_iterator(Object::const_iterator it_) : it(it_) {}
+
+        // mutable -> const
+        // implicit.
+        const_value_iterator(value_iterator rhs) : it(rhs.it) {}
+
+        reference operator*() const { return it->second; }
+        pointer operator->() const { return &it->second; }
+
+        const_value_iterator& operator++() { ++it; return *this; }
+        const_value_iterator& operator--() { --it; return *this; }
+        const_value_iterator operator++(int) { auto I = *this; ++it; return I; }
+        const_value_iterator operator--(int) { auto I = *this; --it; return I; }
+
+        friend bool operator==(const_value_iterator lhs, const_value_iterator rhs) { return lhs.it == rhs.it; }
+        friend bool operator!=(const_value_iterator lhs, const_value_iterator rhs) { return lhs.it != rhs.it; }
+    };
+
+    value_iterator       values_begin()      & { return value_iterator(items_begin());       }
+    value_iterator       values_end()        & { return value_iterator(items_end());         }
+    const_value_iterator values_begin() const& { return const_value_iterator(items_begin()); }
+    const_value_iterator values_end()   const& { return const_value_iterator(items_end());   }
+
+    ItRange<value_iterator>       values()      & { return {values_begin(), values_end()}; }
+    ItRange<const_value_iterator> values() const& { return {values_begin(), values_end()}; }
 
     // Convert this value into an object and return a reference to the value with the given key.
     // PRE: is_object() or is_null()
