@@ -642,7 +642,7 @@ public:
     // Erase the element at the given index.
     // PRE: is_array()
     // PRE: index < size()
-    void erase(size_t index);
+    element_iterator erase(size_t index);
 
 // Objects:
 
@@ -724,6 +724,9 @@ public:
         }
         return nullptr;
     }
+
+    // Returns a pointer to the value with the given key.
+    // Or nullptr if no such key exists, or this value is not an object.
     template <typename T, typename = EnableIfIsKey<T>>
     Value const* get_ptr(T&& key) const
     {

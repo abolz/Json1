@@ -2471,12 +2471,11 @@ void Value::pop_back()
     as_array().pop_back();
 }
 
-void Value::erase(size_t index)
+Value::element_iterator Value::erase(size_t index)
 {
     auto& arr = as_array();
-    if (index >= arr.size())
-        return;
-    arr.erase(arr.begin() + static_cast<intptr_t>(index));
+    assert(index < arr.size());
+    return arr.erase(arr.begin() + static_cast<intptr_t>(index));
 }
 
 Value& Value::operator[](Object::key_type const& key)
