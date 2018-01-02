@@ -2497,6 +2497,12 @@ Value::item_iterator Value::erase(const_item_iterator pos)
     return obj.erase(pos);
 }
 
+Value::item_iterator Value::erase(const_item_iterator first, const_item_iterator last)
+{
+    auto& obj = as_object();
+    return obj.erase(first, last);
+}
+
 template <typename ...Args>
 String& Value::_assign_string(Args&&... args)
 {

@@ -770,6 +770,10 @@ public:
     // PRE: is_object()
     item_iterator erase(const_item_iterator pos);
 
+    // Erase all items in [first, last).
+    // PRE: is_object()
+    item_iterator erase(const_item_iterator first, const_item_iterator last);
+
 private:
     template <typename ...Args> String& _assign_string(Args&&... args);
     template <typename ...Args> Array&  _assign_array (Args&&... args);
