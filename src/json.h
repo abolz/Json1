@@ -650,10 +650,8 @@ private:
     template <typename T>
     using EnableIfIsKey = std::enable_if_t<
         !std::is_integral<T>::value // disallow literal '0': String might be convertible from nullptr...
-#if 1
-        && std::is_convertible<
-            decltype(std::declval<Object const&>().find(std::declval<T>())), typename Object::const_iterator >::value
-#endif
+        && !std::is_convertible< T, Object::const_iterator >::value
+        && std::is_convertible< decltype(std::declval<Object const&>().find(std::declval<T>())), typename Object::const_iterator >::value
     >;
 
 public:

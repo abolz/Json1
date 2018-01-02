@@ -1913,3 +1913,146 @@ TEST_CASE("Invalid UTF-8")
         }
     }
 }
+
+TEST_CASE("Value - array op")
+{
+    json::Value j;
+    CHECK(j.is_null());
+
+    j.push_back(1);
+    CHECK(j.is_array());
+    CHECK(j.as_array().size() == 1);
+    CHECK(j[0].is_number());
+    CHECK(j[0] == 1);
+
+    j.push_back(2);
+    j.push_back(3);
+    CHECK(j.is_array());
+    CHECK(j.as_array().size() == 3);
+    CHECK(j[0].is_number());
+    CHECK(j[0] == 1);
+    CHECK(j[1].is_number());
+    CHECK(j[1] == 2);
+    CHECK(j[2].is_number());
+    CHECK(j[2] == 3);
+
+    j.pop_back();
+    CHECK(j.is_array());
+    CHECK(j.as_array().size() == 2);
+    CHECK(j[0].is_number());
+    CHECK(j[0] == 1);
+    CHECK(j[1].is_number());
+    CHECK(j[1] == 2);
+    CHECK(j.get_ptr(0) != nullptr);
+    CHECK(j.get_ptr(1) != nullptr);
+    CHECK(j.get_ptr(2) == nullptr);
+    CHECK(j.get_ptr(0)->is_number());
+    CHECK(j.get_ptr(1)->is_number());
+    CHECK(*j.get_ptr(0) == 1);
+    CHECK(*j.get_ptr(1) == 2);
+
+    j.emplace_back("Hello");
+    CHECK(j.is_array());
+    CHECK(j.size() == 3);
+    CHECK(j[2].is_string());
+    CHECK(j[2] == "Hello");
+
+    const json::Value j2 = j;
+    CHECK(j2.is_array());
+    CHECK(j2.as_array().size() == 3);
+    CHECK(j2.size() == 3);
+    CHECK(j2[0].is_number());
+    CHECK(j2[0] == 1);
+    CHECK(j2[1].is_number());
+    CHECK(j2[1] == 2);
+    CHECK(j2[2].is_string());
+    CHECK(j2[2] == "Hello");
+    CHECK(j.get_ptr(0) != nullptr);
+    CHECK(j.get_ptr(1) != nullptr);
+    CHECK(j.get_ptr(2) != nullptr);
+    CHECK(j.get_ptr(3) == nullptr);
+    CHECK(j.get_ptr(0)->is_number());
+    CHECK(j.get_ptr(1)->is_number());
+    CHECK(j.get_ptr(2)->is_string());
+    CHECK(*j.get_ptr(0) == 1);
+    CHECK(*j.get_ptr(1) == 2);
+    CHECK((*j.get_ptr(2)).as_string() == "Hello");
+}
+
+TEST_CASE("Value - object op")
+{
+    json::Value j;
+    CHECK(j.is_null());
+
+    j["eins"] = 1;
+    CHECK(j.is_object());
+    CHECK(j.size() == 1);
+    CHECK(j.has_member("eins"));
+    CHECK(j["eins"].is_number());
+    CHECK(j["eins"].as_number() == 1);
+    CHECK(j["eins"] == 1);
+
+    j["zwei"] = "zwei";
+    CHECK(j.is_object());
+    CHECK(j.size() == 2);
+    CHECK(j.has_member("zwei"));
+    CHECK(j.get_ptr("zwei") != nullptr);
+    CHECK(j.get_ptr("zwei")->is_string());
+    CHECK(j.get_ptr("zwei")->as_string() == "zwei");
+    CHECK(*j.get_ptr("zwei") == "zwei");
+
+    j.emplace("drei", 333);
+    CHECK(j.is_object());
+    CHECK(j.size() == 3);
+    CHECK(j.has_member("drei"));
+    CHECK(j["drei"].is_number());
+    CHECK(j.get_ptr("drei") != nullptr);
+    CHECK(j.get_ptr("drei")->as_number() == 333);
+    CHECK(*j.get_ptr("drei") == 333);
+
+    const auto j3 = j;
+
+    const auto n1 = j.erase("zwei");
+    CHECK(j.is_object());
+    CHECK(j.size() == 2);
+    CHECK(n1 == 1);
+    CHECK(j.has_member("eins"));
+    CHECK(!j.has_member("zwei"));
+    CHECK(j.has_member("drei"));
+
+    auto j2 = j;
+
+    const auto n2 = j.erase("zwei");
+    CHECK(n2 == 0);
+    CHECK(j == j2);
+
+    j2.erase(std::next(j2.items_begin()));
+    CHECK(j2.is_object());
+    CHECK(j2.size() == 1);
+    CHECK(j2.has_member("drei"));
+    CHECK(!j2.has_member("eins"));
+    CHECK(j2["drei"] == 333);
+
+    j.erase(j.items_begin(), j.items_end());
+    CHECK(j.is_object());
+    CHECK(j.empty());
+    CHECK(j.size() == 0);
+
+    CHECK(j3.is_object());
+    CHECK(j3.size() == 3);
+    CHECK(j3.has_member("eins"));
+    CHECK(j3.has_member("zwei"));
+    CHECK(j3.has_member("drei"));
+    CHECK(j3["eins"].is_number());
+    CHECK(j3["eins"].as_number() == 1);
+    CHECK(j3["eins"] == 1);
+    CHECK(j3.get_ptr("zwei") != nullptr);
+    CHECK(j3.get_ptr("zwei")->is_string());
+    CHECK(j3.get_ptr("zwei")->as_string() == "zwei");
+    CHECK(*j3.get_ptr("zwei") == "zwei");
+    CHECK(j3["drei"].is_number());
+    CHECK(j3.get_ptr("drei") != nullptr);
+    CHECK(j3.get_ptr("drei")->as_number() == 333);
+    CHECK(*j3.get_ptr("drei") == 333);
+    CHECK(j3.get_ptr("Zwei") == nullptr);
+}
