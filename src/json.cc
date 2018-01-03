@@ -3991,7 +3991,7 @@ static bool StringifyArray(std::string& str, Array const& value, StringifyOption
     auto const E = value.end();
     if (I != E)
     {
-        if (options.indent_width >= 0)
+        if (options.indent_width > 0)
         {
             assert(curr_indent <= INT_MAX - options.indent_width);
             curr_indent += options.indent_width;
@@ -4026,6 +4026,8 @@ static bool StringifyArray(std::string& str, Array const& value, StringifyOption
                     break;
 
                 str += ',';
+                if (options.indent_width == 0)
+                    str += ' ';
             }
         }
     }
@@ -4043,7 +4045,7 @@ static bool StringifyObject(std::string& str, Object const& value, StringifyOpti
     auto const E = value.end();
     if (I != E)
     {
-        if (options.indent_width >= 0)
+        if (options.indent_width > 0)
         {
             assert(curr_indent <= INT_MAX - options.indent_width);
             curr_indent += options.indent_width;
@@ -4078,6 +4080,8 @@ static bool StringifyObject(std::string& str, Object const& value, StringifyOpti
                 if (!StringifyString(str, I->first, options))
                     return false;
                 str += ':';
+                if (options.indent_width == 0)
+                    str += ' ';
                 if (!StringifyValue(str, I->second, options, curr_indent))
                     return false;
 
@@ -4085,6 +4089,8 @@ static bool StringifyObject(std::string& str, Object const& value, StringifyOpti
                     break;
 
                 str += ',';
+                if (options.indent_width == 0)
+                    str += ' ';
             }
         }
     }
