@@ -659,7 +659,7 @@ private:
     >;
 
 public:
-// items:
+    // items:
 
     using item_iterator       = Object::iterator;
     using const_item_iterator = Object::const_iterator;
@@ -672,7 +672,7 @@ public:
     ItRange<item_iterator>       items()      &  { return {items_begin(), items_end()}; }
     ItRange<const_item_iterator> items() const&  { return {items_begin(), items_end()}; }
 
-// keys:
+    // keys:
 
     class const_key_iterator
     {
@@ -705,7 +705,7 @@ public:
 
     ItRange<const_key_iterator> keys() const& { return {keys_begin(), keys_end()}; }
 
-// values:
+    // values:
 
     class const_value_iterator;
 
