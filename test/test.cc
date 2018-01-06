@@ -1,4 +1,4 @@
-#if 1
+#if 0
 #ifdef _MSC_VER
 #pragma warning(disable: 4244)
 #endif
@@ -104,11 +104,11 @@ TEST_CASE("Value - implicit constructors")
         CHECK(i2 == 1);
 #endif
 
-        int i3 = j10.cast<int>(); // warning expected (double -> int)
+        int i3 = j10.as<int>(); // warning expected (double -> int)
         CHECK(i3 == 1);
-        int i4 = j10.cast<float>(); // two warnings expected! (double -> float, float -> int)
+        int i4 = j10.as<float>(); // two warnings expected! (double -> float, float -> int)
         CHECK(i4 == 1);
-        int i5 = static_cast<int>(j10.cast<double>()); // no warning
+        int i5 = static_cast<int>(j10.as<double>()); // no warning
         CHECK(i5 == 1);
 
         json::Value j11 = 1.234f;
@@ -466,7 +466,7 @@ TEST_CASE("tuple")
         REQUIRE(j[0].is_number());
         REQUIRE(j[0] == 1.2);
 
-        auto t = j.cast<Tup>();
+        auto t = j.as<Tup>();
         REQUIRE(std::get<0>(t) == 1.2);
     }
 
@@ -570,13 +570,13 @@ TEST_CASE("Value - custom")
         CHECK(j[1]["x"] == 3.0);
         CHECK(j[1].has_member("y"));
         CHECK(j[1]["y"] == 4.0);
-        auto p0 = j[0].cast<Point>();
+        auto p0 = j[0].as<Point>();
         CHECK(p0.x == 1.0);
         CHECK(p0.y == 2.0);
-        auto p1 = j[1].cast<Point>();
+        auto p1 = j[1].as<Point>();
         CHECK(p1.x == 3.0);
         CHECK(p1.y == 4.0);
-        auto pts = j.cast<std::vector<Point>>();
+        auto pts = j.as<std::vector<Point>>();
         CHECK(pts.size() == 2);
         CHECK(pts[0].x == 1.0);
         CHECK(pts[0].y == 2.0);
@@ -689,11 +689,11 @@ TEST_CASE("optional")
         CHECK(j0.is_number());
         CHECK(j0.as_number() == 123);
 
-        auto oi0 = j0.cast<std::optional<int>>(); // warning expected -- XXX: need a way to silence this warning...
+        auto oi0 = j0.as<std::optional<int>>(); // warning expected -- XXX: need a way to silence this warning...
         CHECK(oi0.has_value());
         CHECK(oi0.value() == 123);
 
-        auto oi1 = j0.cast<std::optional<std::string>>();
+        auto oi1 = j0.as<std::optional<std::string>>();
         CHECK(!oi1.has_value());
 
 #if JSON_VALUE_HAS_EXPLICIT_OPERATOR_T
@@ -2177,4 +2177,18 @@ TEST_CASE("Iterators")
         CHECK(E == I);
         CHECK(E3 == I);
     }
+}
+
+TEST_CASE("as")
+{
+    json::Value j;
+
+    j = 1.23;
+    CHECK(j.as<double>() == 1.23);
+    j.as<double&>() = 2.34;
+    CHECK(j.as<double const&>() == 2.34);
+    //j.as<json::String&>() = "hello";
+    //j.as<int&>() = 3.45;
+    //j.as<int>() = 3;
+    auto x = j.as<int>();
 }

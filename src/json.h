@@ -214,7 +214,7 @@ struct DefaultTraits_any_array
         out.reserve(in.as_array().size());
 
         for (auto&& p : in.as_array()) {
-            out.emplace_back(p.template cast<typename T::value_type>());
+            out.emplace_back(p.template as<typename T::value_type>());
         }
 
         return out;
@@ -531,14 +531,22 @@ public:
     template <typename T>
     bool isa() const noexcept { return type() == Tag_t<T>::value; }
 
-    // to<T>
+    // as<T> uses Traits::from_json to convert this JSON value into an object
+    // of type T.
 
-    template <typename T> decltype(auto) cast() const&  noexcept { return Traits_t<T>::from_json(static_cast<Value const& >(*this)); }
-    template <typename T> decltype(auto) cast() &&      noexcept { return Traits_t<T>::from_json(static_cast<Value &&     >(*this)); }
+    template <typename T> T as() const&  noexcept { return Traits_t<T>::from_json(*this); }
+    template <typename T> T as() &       noexcept { return Traits_t<T>::from_json(*this); }
+    template <typename T> T as() const&& noexcept { return Traits_t<T>::from_json(static_cast<Value const&&>(*this)); }
+    template <typename T> T as() &&      noexcept { return Traits_t<T>::from_json(static_cast<Value&&      >(*this)); }
 
 #if JSON_VALUE_HAS_EXPLICIT_OPERATOR_T
-    template <typename T> explicit operator T() const&  noexcept { return this->cast<T>(); }
-    template <typename T> explicit operator T() &&      noexcept { return this->cast<T>(); }
+    template <typename T> explicit operator T() const&  noexcept { return this->as<T>(); }
+#if 0
+    // These are disabled to let g++ generate "conversion sequence is better" warnings...
+    template <typename T> explicit operator T() &       noexcept { return this->as<T>(); }
+    template <typename T> explicit operator T() const&& noexcept { return static_cast<Value const&&>(*this).as<T>(); }
+#endif
+    template <typename T> explicit operator T() &&      noexcept { return static_cast<Value&&      >(*this).as<T>(); }
 #endif
 
     // inplace_convert_to_X converts the value stored in this JSON object into a value of type X.
@@ -882,8 +890,8 @@ private:
     template <typename ...Args> Object& _assign_object(Args&&... args);
 };
 
-template <typename T> inline decltype(auto) cast(Value const&  val) { return val.template cast<T>(); }
-template <typename T> inline decltype(auto) cast(Value&&       val) { return std::move(val).template cast<T>(); }
+template <typename T> inline T cast(Value const& val) { return val.template as<T>(); }
+template <typename T> inline T cast(Value&&      val) { return std::move(val).template as<T>(); }
 
 inline void swap(Value& lhs, Value& rhs) noexcept
 {
