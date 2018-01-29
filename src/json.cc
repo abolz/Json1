@@ -353,6 +353,7 @@ static double Strtod(char const* str, int len)
 // This implementation is a slightly modified version of the reference
 // implementation by Florian Loitsch which can be obtained from
 // http://florian.loitsch.com/publications (bench.tar.gz)
+//
 // The original license can be found at the end of this file.
 //
 // References:
@@ -1354,15 +1355,12 @@ static char* DtoaShort(char* first, char* last, FloatType value)
 
     assert(len <= std::numeric_limits<FloatType>::max_digits10);
 
-    // Format the buffer like printf("%.*g", prec, value)
-    constexpr int kMinExp = -4;
-    constexpr int kMaxExp = std::numeric_limits<FloatType>::digits10; // max_digits10;
+    constexpr int kMinExp = -6;
+    constexpr int kMaxExp = 21;
 
-    assert(last - first >=
-        std::max({
-            kMaxExp,
-            2 + (-kMinExp - 1) + std::numeric_limits<FloatType>::max_digits10,
-            std::numeric_limits<FloatType>::max_digits10 + 6}));
+    assert(last - first >= kMaxExp);
+    assert(last - first >= 2 + (-kMinExp - 1) + std::numeric_limits<FloatType>::max_digits10);
+    assert(last - first >= std::numeric_limits<FloatType>::max_digits10 + 6);
 
     return FormatBuffer(first, len, decimal_exponent, kMinExp, kMaxExp);
 }
@@ -1834,6 +1832,11 @@ double& Value::assign_number(double v) noexcept
     return as_number();
 }
 
+String& Value::assign_string()
+{
+    return _assign_string();
+}
+
 String& Value::assign_string(String const& v)
 {
     return _assign_string(v);
@@ -1842,6 +1845,11 @@ String& Value::assign_string(String const& v)
 String& Value::assign_string(String&& v)
 {
     return _assign_string(std::move(v));
+}
+
+Array& Value::assign_array()
+{
+    return _assign_array();
 }
 
 Array& Value::assign_array(Array const& v)
@@ -1854,6 +1862,11 @@ Array& Value::assign_array(Array&& v)
     return _assign_array(std::move(v));
 }
 
+Object& Value::assign_object()
+{
+    return _assign_object();
+}
+
 Object& Value::assign_object(Object const& v)
 {
     return _assign_object(v);
@@ -1862,414 +1875,6 @@ Object& Value::assign_object(Object const& v)
 Object& Value::assign_object(Object&& v)
 {
     return _assign_object(std::move(v));
-}
-
-//
-// https://www.ecma-international.org/publications/files/ECMA-ST/Ecma-262.pdf
-// Section 7.1.2
-//
-//  The abstract operation ToBoolean converts argument to a value of type
-//  Boolean according to Table 9:
-//
-//  Table 9: ToBoolean Conversions
-//
-//  Argument Type   Result
-//--------------------------------------------------------------------------
-//  Undefined       Return false.
-//  Null            Return false.
-//  Boolean         Return argument.
-//  Number          If argument is +0, -0, or NaN, return false; otherwise
-//                  return true.
-//  String          If argument is the empty String (its length is zero), return
-//                  false; otherwise return true.
-//  Symbol          Return true.
-//  Object          Return true.
-//
-
-static bool BooleanFromNumber(double value) noexcept
-{
-    return !std::isnan(value) && value != 0.0;
-}
-
-static bool BooleanFromString(String const& value) noexcept
-{
-    return !value.empty();
-}
-
-static bool ToBoolean(Value const& value) noexcept
-{
-    switch (value.type())
-    {
-    case Type::null:
-        return false;
-    case Type::boolean:
-        return value.as_boolean();
-    case Type::number:
-        return BooleanFromNumber(value.as_number());
-    case Type::string:
-        return BooleanFromString(value.as_string());
-    case Type::array:
-        return true;
-    case Type::object:
-        return true;
-    default:
-        JSON_UNREACHABLE();
-        break;
-    }
-}
-
-bool& Value::inplace_convert_to_boolean() noexcept
-{
-    if (!is_boolean())
-    {
-        auto new_val = ToBoolean(*this);
-        assign_boolean(new_val);
-    }
-
-    return as_boolean();
-}
-
-//
-// https://www.ecma-international.org/publications/files/ECMA-ST/Ecma-262.pdf
-// Section 7.1.3
-//
-//  The abstract operation ToNumber converts argument to a value of type Number
-//  according to Table 10:
-//
-//  Table 10: ToNumber Conversions
-//
-//  Argument Type   Result
-//--------------------------------------------------------------------------
-//  Undefined       Return NaN.
-//  Null            Return +0.
-//  Boolean         If argument is true, return 1.
-//                  If argument is false, return +0.
-//  Number          Return argument (no conversion).
-//  String          See grammar and conversion algorithm below.
-//  Symbol          Throw a TypeError exception.
-//  Object          Apply the following steps:
-//                      1. Let primValue be ToPrimitive(argument, hint Number).
-//                      2. Return ? ToNumber(primValue).
-//
-
-static double NumberFromBoolean(bool value) noexcept
-{
-    return value ? 1.0 : +0.0;
-}
-
-static double NumberFromString(String const& value) noexcept
-{
-    // TODO:
-    // To be compatible with parse() this should handle all different NaN and Infinity forms...
-
-#if JSON_HAS_DOUBLE_CONVERSION
-    assert(value.size() <= INT_MAX);
-    int const len = static_cast<int>(value.size());
-
-    return Strtod(value.c_str(), len);
-#else
-    return Strtod(value.c_str(), nullptr);
-#endif
-}
-
-static double NumberFromArray(Array const& value) noexcept
-{
-    if (value.empty())
-        return 0;
-
-    if (value.size() == 1)
-    {
-        // Note:
-        // NOT recursive!
-
-        auto const& v = value[0];
-        switch (v.type())
-        {
-        case Type::number:
-            return v.as_number();
-        case Type::string:
-            return NumberFromString(v.as_string());
-        default:
-            break;
-        }
-    }
-
-    return std::numeric_limits<double>::quiet_NaN();
-}
-
-static double ToNumber(Value const& value) noexcept
-{
-    switch (value.type())
-    {
-    case Type::null:
-        return +0.0;
-    case Type::boolean:
-        return NumberFromBoolean(value.as_boolean());
-    case Type::number:
-        return value.as_number();
-    case Type::string:
-        return NumberFromString(value.as_string());
-    case Type::array:
-        return NumberFromArray(value.as_array());
-    case Type::object:
-        return std::numeric_limits<double>::quiet_NaN();
-    default:
-        JSON_UNREACHABLE();
-        break;
-    }
-}
-
-double& Value::inplace_convert_to_number() noexcept
-{
-    if (!is_number())
-    {
-        auto new_val = ToNumber(*this);
-        assign_number(new_val);
-    }
-
-    return as_number();
-}
-
-//
-// https://www.ecma-international.org/publications/files/ECMA-ST/Ecma-262.pdf
-// Section 7.1.12
-//
-//  The abstract operation ToString converts argument to a value of type String
-//  according to Table 11:
-//
-//  Table 11: ToString Conversions
-//
-//  Argument Type   Result
-//--------------------------------------------------------------------------
-//  Undefined       Return "undefined".
-//  Null            Return "null".
-//  Boolean         If argument is true, return "true".
-//                  If argument is false, return "false".
-//  Number          See 7.1.12.1
-//  String          Return argument.
-//  Symbol          Throw a TypeError exception.
-//  Object          Apply the following steps:
-//                      1. Let primValue be ToPrimitive(argument, hint String).
-//                      2. Return ? ToString(primValue).
-//
-
-static String ToString(Value const& value);
-
-static String StringFromBoolean(bool value)
-{
-    return value ? "true" : "false";
-}
-
-static String StringFromNumber(double value)
-{
-    char buf[32];
-    char* end = Dtoa(buf, buf + 32, value);
-
-    return String(buf, end);
-}
-
-static String StringFromArray(Array const& value)
-{
-    String str;
-
-    auto       I = value.begin();
-    auto const E = value.end();
-    if (I != E)
-    {
-        for (;;)
-        {
-            str += ToString(*I);
-            if (++I == E)
-                break;
-            str += ',';
-        }
-    }
-
-    return str;
-}
-
-static String ToString(Value const& value)
-{
-    switch (value.type())
-    {
-    case Type::null:
-        return "null";
-    case Type::boolean:
-        return StringFromBoolean(value.as_boolean());
-    case Type::number:
-        return StringFromNumber(value.as_number());
-    case Type::string:
-        return value.as_string();
-    case Type::array:
-        return StringFromArray(value.as_array());
-    case Type::object:
-        // XXX:
-        // Yes, doesn't make much sense...
-        return "[object Object]";
-    default:
-        JSON_UNREACHABLE();
-        break;
-    }
-}
-
-String& Value::inplace_convert_to_string()
-{
-    if (!is_string())
-    {
-        auto new_val = ToString(*this);
-        assign_string(std::move(new_val));
-    }
-
-    return as_string();
-}
-
-Array& Value::inplace_convert_to_array()
-{
-    switch (type())
-    {
-    case Type::null:
-        data_.array = new Array();
-        type_ = Type::array;
-        break;
-    case Type::boolean:
-        {
-            auto p = std::make_unique<Array>();
-            p->emplace_back(data_.boolean);
-            // nothrow ->
-            data_.array = p.release();
-            type_ = Type::array;
-        }
-        break;
-    case Type::number:
-        {
-            auto p = std::make_unique<Array>();
-            p->emplace_back(data_.number);
-            // nothrow ->
-            data_.array = p.release();
-            type_ = Type::array;
-        }
-        break;
-    case Type::string:
-        {
-            auto p = std::make_unique<Array>();
-            p->emplace_back();
-            // nothrow ->
-            p->back().data_ = data_;
-            p->back().type_ = type_;
-            data_.array = p.release();
-            type_ = Type::array;
-        }
-        break;
-    case Type::array:
-        break;
-    case Type::object:
-        {
-            auto p = std::make_unique<Array>();
-            p->emplace_back();
-            // nothrow ->
-            p->back().data_ = data_;
-            p->back().type_ = type_;
-            data_.array = p.release();
-            type_ = Type::array;
-        }
-        break;
-    default:
-        JSON_UNREACHABLE();
-        break;
-    }
-
-    return as_array();
-}
-
-Object& Value::inplace_convert_to_object()
-{
-    switch (type())
-    {
-    case Type::null:
-    case Type::boolean:
-    case Type::number:
-        data_.object = new Object();
-        type_ = Type::object;
-        break;
-    case Type::string:
-        {
-            auto p = std::make_unique<Object>();
-            // nothrow ->
-            delete data_.string;
-            data_.object = p.release();
-            type_ = Type::object;
-        }
-        break;
-    case Type::array:
-        {
-            auto p = std::make_unique<Object>();
-            // nothrow ->
-            delete data_.array;
-            data_.object = p.release();
-            type_ = Type::object;
-        }
-        break;
-    case Type::object:
-        break;
-    default:
-        JSON_UNREACHABLE();
-        break;
-    }
-
-    return as_object();
-}
-
-bool Value::convert_to_boolean() const noexcept
-{
-    return ToBoolean(*this);
-}
-
-double Value::convert_to_number() const noexcept
-{
-    return ToNumber(*this);
-}
-
-String Value::convert_to_string() const
-{
-    return ToString(*this);
-}
-
-Array Value::convert_to_array() const
-{
-    switch (type())
-    {
-    case Type::null:
-        return Array();
-    case Type::boolean:
-    case Type::number:
-    case Type::string:
-        return Array(1, *this); // ... an array filled with the current value
-    case Type::array:
-        return as_array();
-    case Type::object:
-        return Array(1, *this); // ... an array filled with the current value
-    default:
-        JSON_UNREACHABLE();
-        break;
-    }
-}
-
-Object Value::convert_to_object() const
-{
-    switch (type())
-    {
-    case Type::null:
-    case Type::boolean:
-    case Type::number:
-    case Type::string:
-    case Type::array:
-        return Object();
-    case Type::object:
-        return as_object();
-    default:
-        JSON_UNREACHABLE();
-        break;
-    }
 }
 
 bool Value::equal_to(Value const& rhs) const noexcept
@@ -2423,10 +2028,19 @@ bool Value::empty() const noexcept
     }
 }
 
+Array& Value::_get_or_assign_array()
+{
+    assert(is_null() || is_array());
+    if (!is_array()) {
+        assign_array();
+    }
+    return as_array();
+}
+
 Value& Value::operator[](size_t index)
 {
     assert(is_null() || is_array());
-    auto& arr = inplace_convert_to_array();
+    auto& arr = _get_or_assign_array();
     if (arr.size() <= index)
     {
         assert(index < SIZE_MAX);
@@ -2478,16 +2092,25 @@ Value::element_iterator Value::erase(size_t index)
     return arr.erase(arr.begin() + static_cast<intptr_t>(index));
 }
 
+Object& Value::_get_or_assign_object()
+{
+    assert(is_null() || is_object());
+    if (!is_object()) {
+        assign_object();
+    }
+    return as_object();
+}
+
 Value& Value::operator[](Object::key_type const& key)
 {
     assert(is_null() || is_object());
-    return inplace_convert_to_object()[key];
+    return _get_or_assign_object()[key];
 }
 
 Value& Value::operator[](Object::key_type&& key)
 {
     assert(is_null() || is_object());
-    return inplace_convert_to_object()[std::move(key)];
+    return _get_or_assign_object()[std::move(key)];
 }
 
 Value::item_iterator Value::erase(const_item_iterator pos)
@@ -3039,7 +2662,7 @@ ErrorCode Parser::ParseObject(Value& value, int depth, ParseOptions const& optio
 
     token = lexer.Lex(options); // skip '{'
 
-    auto& obj = value.inplace_convert_to_object();
+    auto& obj = value.assign_object();
 
     if (token.kind != Token::r_brace)
     {
@@ -3142,7 +2765,7 @@ ErrorCode Parser::ParseArray(Value& value, int depth, ParseOptions const& option
 
     token = lexer.Lex(options); // skip '['
 
-    auto& arr = value.inplace_convert_to_array();
+    auto& arr = value.assign_array();
 
     if (token.kind != Token::r_square)
     {
@@ -4152,24 +3775,24 @@ SOFTWARE.
 /*
 Copyright (c) 2009 Florian Loitsch
 
-  Permission is hereby granted, free of charge, to any person
-  obtaining a copy of this software and associated documentation
-  files (the "Software"), to deal in the Software without
-  restriction, including without limitation the rights to use,
-  copy, modify, merge, publish, distribute, sublicense, and/or sell
-  copies of the Software, and to permit persons to whom the
-  Software is furnished to do so, subject to the following
-  conditions:
+Permission is hereby granted, free of charge, to any person
+obtaining a copy of this software and associated documentation
+files (the "Software"), to deal in the Software without
+restriction, including without limitation the rights to use,
+copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the
+Software is furnished to do so, subject to the following
+conditions:
 
-  The above copyright notice and this permission notice shall be
-  included in all copies or substantial portions of the Software.
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
 
-  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-  EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
-  OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-  NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
-  HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
-  WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-  FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
-  OTHER DEALINGS IN THE SOFTWARE.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
 */

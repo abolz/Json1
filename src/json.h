@@ -18,6 +18,10 @@
 
 namespace json {
 
+//------------------------------------------------------------------------------
+//
+//------------------------------------------------------------------------------
+
 class Value;
 
 using Null    = std::nullptr_t;
@@ -37,10 +41,6 @@ enum class Type : int {
 inline constexpr bool operator<(Type lhs, Type rhs) {
     return static_cast<std::underlying_type_t<Type>>(lhs) < static_cast<std::underlying_type_t<Type>>(rhs);
 }
-
-//------------------------------------------------------------------------------
-//
-//------------------------------------------------------------------------------
 
 template <Type K>
 using Type_const = std::integral_constant<Type, K>;
@@ -519,10 +519,13 @@ public:
     void    assign_null   () noexcept;
     bool&   assign_boolean(bool          v) noexcept;
     double& assign_number (double        v) noexcept;
+    String& assign_string ();
     String& assign_string (String const& v);
     String& assign_string (String&&      v);
+    Array&  assign_array  ();
     Array&  assign_array  (Array const&  v);
     Array&  assign_array  (Array&&       v);
+    Object& assign_object ();
     Object& assign_object (Object const& v);
     Object& assign_object (Object&&      v);
 
@@ -549,28 +552,6 @@ public:
     template <typename T> explicit operator T() &&      noexcept { return static_cast<Value&&      >(*this).as<T>(); }
 #endif
 
-    // inplace_convert_to_X converts the value stored in this JSON object into a value of type X.
-    //
-    // If the value stored in this JSON object is already of type X, calling
-    // this function has no effect.
-    // The conversion is similiar to JavaScript's ToBoolean, ToNumber, etc.
-
-    bool&    inplace_convert_to_boolean() noexcept;
-    double&  inplace_convert_to_number() noexcept;
-    String&  inplace_convert_to_string();
-    Array&   inplace_convert_to_array();
-    Object&  inplace_convert_to_object();
-
-    // convert_to_X returns a copy of the value stored in this JSON object converted to X.
-    //
-    // The conversion is similiar to JavaScript's ToBoolean, ToNumber, etc.
-
-    bool   convert_to_boolean() const noexcept;
-    double convert_to_number() const noexcept;
-    String convert_to_string() const;
-    Array  convert_to_array() const;
-    Object convert_to_object() const;
-
     // Compare this value to another. Strict equality (i.e. types must match).
     bool equal_to(Value const& rhs) const noexcept;
 
@@ -595,6 +576,10 @@ public:
     // Array helper:
     //
 
+private:
+    Array& _get_or_assign_array();
+
+public:
     using element_iterator       = Array::iterator;
     using const_element_iterator = Array::const_iterator;
 
@@ -634,7 +619,7 @@ public:
     Value& emplace_back(Args&&... args)
     {
         assert(is_null() || is_array());
-        auto& arr = inplace_convert_to_array();
+        auto& arr = _get_or_assign_array();
         arr.emplace_back(std::forward<Args>(args)...);
         return arr.back();
     }
@@ -665,6 +650,8 @@ private:
         && !std::is_convertible< T, Object::const_iterator >::value
         && std::is_convertible< decltype(std::declval<Object const&>().find(std::declval<T>())), typename Object::const_iterator >::value
     >;
+
+    Object& _get_or_assign_object();
 
 public:
     // items:
@@ -792,7 +779,7 @@ public:
     Value& operator[](T&& key)
     {
         assert(is_null() || is_object());
-        auto&& obj = inplace_convert_to_object();
+        auto&& obj = _get_or_assign_object();
 #if 1
         auto const it = obj.find(key);
         if (it != obj.end()) {
@@ -860,7 +847,7 @@ public:
     std::pair<item_iterator, bool> emplace(Args&&... args)
     {
         assert(is_null() || is_object());
-        return inplace_convert_to_object().emplace(std::forward<Args>(args)...);
+        return _get_or_assign_object().emplace(std::forward<Args>(args)...);
     }
 
     // Convert this value to an object and insert the given {key, value} pair.

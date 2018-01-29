@@ -1359,6 +1359,7 @@ here */
     CHECK(val["/*empty object*/"].empty());
 }
 
+#if 0
 TEST_CASE("Conversion")
 {
     SECTION("ToBoolean")
@@ -1696,6 +1697,7 @@ TEST_CASE("Conversion")
     {
     }
 }
+#endif
 
 static std::string TimesString(std::string const& s, int count)
 {
