@@ -427,12 +427,13 @@ public:
     }
 
     // is_X returns whether the actual value stored in this JSON object is of type X.
-    bool is_null()    const noexcept { return type() == Type::null;    }
-    bool is_boolean() const noexcept { return type() == Type::boolean; }
-    bool is_number()  const noexcept { return type() == Type::number;  }
-    bool is_string()  const noexcept { return type() == Type::string;  }
-    bool is_array()   const noexcept { return type() == Type::array;   }
-    bool is_object()  const noexcept { return type() == Type::object;  }
+    bool is_null()      const noexcept { return type() == Type::null;    }
+    bool is_boolean()   const noexcept { return type() == Type::boolean; }
+    bool is_number()    const noexcept { return type() == Type::number;  }
+    bool is_string()    const noexcept { return type() == Type::string;  }
+    bool is_array()     const noexcept { return type() == Type::array;   }
+    bool is_object()    const noexcept { return type() == Type::object;  }
+    bool is_primitive() const noexcept { return type() != Type::array && type() != Type::object; }
 
     bool is(Type t) const noexcept { return type() == t; }
 
@@ -895,6 +896,29 @@ private:
     template <typename ...Args> String& _assign_string(Args&&... args);
     template <typename ...Args> Array&  _assign_array (Args&&... args);
     template <typename ...Args> Object& _assign_object(Args&&... args);
+
+public:
+    // Type conversions
+    //
+    // See: https://tc39.github.io/ecma262/#sec-type-conversion
+    //
+    // PRE: value.is_primitive()
+    // For arrays and objects: use stringify()
+
+    bool     to_boolean() const noexcept;
+    double   to_number() const noexcept;
+    double   to_integer() const noexcept;
+    int32_t  to_int32() const noexcept;
+    uint32_t to_uint32() const noexcept;
+#if 0
+    int16_t  to_int16() const noexcept;
+    uint16_t to_uint16() const noexcept;
+    int8_t   to_int8() const noexcept;
+    uint8_t  to_uint8() const noexcept;
+    uint8_t  to_uint8_clamped() const noexcept;
+#endif
+    int64_t  to_length() const noexcept;
+    String   to_string() const;
 };
 
 template <typename T> inline T cast(Value const& val) { return val.template as<T>(); }

@@ -2259,6 +2259,270 @@ Object& Value::_assign_object(Args&&... args)
     return as_object();
 }
 
+bool Value::to_boolean() const noexcept
+{
+    assert(is_primitive());
+
+    switch (type())
+    {
+    case Type::null:
+        return false;
+    case Type::boolean:
+        return as_boolean();
+    case Type::number:
+        {
+            auto v = as_number();
+            return !std::isnan(v) && v != 0.0;
+        }
+    case Type::string:
+        return !as_string().empty();
+    case Type::array:
+    case Type::object:
+        break;
+    }
+
+    assert(false && "unreachable");
+    return {};
+}
+
+double Value::to_number() const noexcept
+{
+    assert(is_primitive());
+
+    switch (type())
+    {
+    case Type::null:
+        return 0.0;
+    case Type::boolean:
+        return as_boolean() ? 1.0 : 0.0;
+    case Type::number:
+        return as_number();
+    case Type::string:
+        {
+            auto const& v = as_string();
+#if JSON_HAS_DOUBLE_CONVERSION
+            return Strtod(v.c_str(), static_cast<int>(v.size()));
+#else
+            return Strtod(v.c_str(), nullptr);
+#endif
+        }
+    case Type::array:
+    case Type::object:
+        break;
+    }
+
+    assert(false && "unreachable");
+    return {};
+}
+
+double Value::to_integer() const noexcept
+{
+    auto v = to_number();
+    if (std::isnan(v)) {
+        return 0.0;
+    }
+    if (std::isinf(v) || v == 0.0) { // NB: -0 => +0
+        return v;
+    }
+
+    return std::trunc(v);
+}
+
+// The notation "x modulo y" (y must be finite and nonzero) computes
+// a value k of the same sign as y (or zero)
+// such that abs(k) < abs(y) and x-k = q * y for some integer q.
+static double Modulo(double x, double y)
+{
+    // XXX:
+    // fmod might return NaN...
+
+    double m = std::fmod(x, y);
+    if (m < 0.0) {
+        m += y;
+    }
+
+    return m; // m in [-0.0, y)
+}
+
+int32_t Value::to_int32() const noexcept
+{
+    constexpr double kTwo32 = 4294967296.0;
+    constexpr double kTwo31 = 2147483648.0;
+
+    auto v = to_number();
+    if (!std::isfinite(v) || v == 0.0) { // NB: -0 => +0
+        return 0;
+    }
+
+    auto i = std::trunc(v);
+    auto k = Modulo(i, kTwo32);
+
+    if (k >= kTwo31) {
+        k -= kTwo31;
+    }
+
+    return static_cast<int32_t>(k);
+}
+
+uint32_t Value::to_uint32() const noexcept
+{
+    constexpr double kTwo32 = 4294967296.0;
+
+    auto v = to_number();
+    if (!std::isfinite(v) || v == 0.0) { // NB: -0 => +0
+        return 0;
+    }
+
+    auto i = std::trunc(v);
+    auto k = Modulo(i, kTwo32);
+
+    return static_cast<uint32_t>(k);
+}
+
+#if 0
+
+int16_t Value::to_int16() const noexcept
+{
+    constexpr double kTwo16 = 65536.0;
+    constexpr double kTwo15 = 32768.0;
+
+    auto v = to_number();
+    if (!std::isfinite(v) || v == 0.0) { // NB: -0 => +0
+        return 0;
+    }
+
+    auto i = std::trunc(v);
+    auto k = Modulo(i, kTwo16);
+
+    if (k >= kTwo15) {
+        k -= kTwo15;
+    }
+
+    return static_cast<int16_t>(k);
+}
+
+uint16_t Value::to_uint16() const noexcept
+{
+    constexpr double kTwo16 = 65536.0;
+
+    auto v = to_number();
+    if (!std::isfinite(v) || v == 0.0) { // NB: -0 => +0
+        return 0;
+    }
+
+    auto i = std::trunc(v);
+    auto k = Modulo(i, kTwo16);
+
+    return static_cast<uint16_t>(k);
+}
+
+int8_t Value::to_int8() const noexcept
+{
+    constexpr double kTwo8 = 256.0;
+    constexpr double kTwo7 = 128.0;
+
+    auto v = to_number();
+    if (!std::isfinite(v) || v == 0.0) { // NB: -0 => +0
+        return 0;
+    }
+
+    auto i = std::trunc(v);
+    auto k = Modulo(i, kTwo8);
+
+    if (k >= kTwo7) {
+        k -= kTwo7;
+    }
+
+    return static_cast<int8_t>(k);
+}
+
+uint8_t Value::to_uint8() const noexcept
+{
+    constexpr double kTwo8 = 256.0;
+
+    auto v = to_number();
+    if (!std::isfinite(v) || v == 0.0) { // NB: -0 => +0
+        return 0;
+    }
+
+    auto i = std::trunc(v);
+    auto k = Modulo(i, kTwo8);
+
+    return static_cast<uint8_t>(k);
+}
+
+uint8_t Value::to_uint8_clamped() const noexcept
+{
+    auto v = to_number();
+    if (std::isnan(v)) {
+        return 0;
+    }
+
+    if (v <= 0.0) { // NB: -0 => +0
+        v = 0.0;
+    }
+    if (v >= 255.0) {
+        v = 255.0;
+    }
+
+    auto f = std::floor(v);
+    if (f + 0.5 < v) {
+        // round up
+        f += 1.0;
+    }
+    else if (v < f + 0.5) {
+        // round down
+    }
+    else if ((static_cast<int>(f) & 1) != 0) {
+        // round to even
+        f += 1.0;
+    }
+
+    return static_cast<uint8_t>(f);
+}
+
+#endif
+
+int64_t Value::to_length() const noexcept
+{
+    constexpr double kTwo53m1 = 9007199254740991.0;
+
+    auto v = to_integer();
+    if (v <= 0.0) { // NB: -0 => +0
+        return 0;
+    }
+
+    return static_cast<int64_t>(std::min(v, kTwo53m1)); // NB: inf => 2^53-1
+}
+
+String Value::to_string() const
+{
+    assert(is_primitive());
+
+    switch (type())
+    {
+    case Type::null:
+        return "null";
+    case Type::boolean:
+        return as_boolean() ? "true" : "false";
+    case Type::number:
+        {
+            char buf[32];
+            char* first = &buf[0];
+            char* last = Dtoa(first, first + 32, as_number());
+            return String(first, last);
+        }
+    case Type::string:
+        return as_string();
+    case Type::array:
+    case Type::object:
+        break;
+    }
+
+    assert(false && "unreachable");
+    return {};
+}
+
 //==================================================================================================
 // parse
 //==================================================================================================
@@ -3387,7 +3651,7 @@ ParseResult json::parse(Value& value, char const* next, char const* last, ParseO
 {
     assert(next != nullptr);
     assert(last != nullptr);
-    assert(static_cast<uintptr_t>(next) <= static_cast<uintptr_t>(last));
+//  assert(reinterpret_cast<uintptr_t>(next) <= reinterpret_cast<uintptr_t>(last));
 
     value.assign_null(); // clear!
 
