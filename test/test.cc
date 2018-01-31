@@ -1,4 +1,4 @@
-#if 0
+#if 1
 #ifdef _MSC_VER
 #pragma warning(disable: 4244)
 #endif
@@ -306,7 +306,7 @@ TEST_CASE("Parse")
 
     val3 = std::move(val2);
     CHECK(val3 == val);
-    CHECK(val2.is_null()); //
+    CHECK(val2.is_undefined()); //
 
     *(val.get_ptr("Address")->get_ptr("Street")) = "Hello World";
     CHECK(val["Address"]["Street"] == "Hello World");
@@ -672,7 +672,7 @@ TEST_CASE("optional")
         CHECK(!oi0.has_value());
 
         json::Value j0 = oi0;
-        CHECK(j0.is_null());
+        CHECK(j0.is_undefined());
 
         std::optional<int> oi1 = 123;
         CHECK(oi1.has_value());
@@ -1929,7 +1929,7 @@ TEST_CASE("Invalid UTF-8")
 TEST_CASE("Value - array op")
 {
     json::Value j;
-    CHECK(j.is_null());
+    CHECK(j.is_undefined());
 
     j.push_back(1);
     CHECK(j.is_array());
@@ -2006,7 +2006,7 @@ TEST_CASE("Value - array op")
 TEST_CASE("Value - object op")
 {
     json::Value j;
-    CHECK(j.is_null());
+    CHECK(j.is_undefined());
 
     j["eins"] = 1;
     CHECK(j.is_object());

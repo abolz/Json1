@@ -50,6 +50,7 @@ using Array   = std::vector<Value>;
 using Object  = std::map<String, Value, std::less</*transparent*/>>;
 
 enum class Type : int {
+    undefined,
     null,
     boolean,
     number,
@@ -305,19 +306,21 @@ class Value final
     };
 
     Data data_;
-    Type type_ = Type::null;
+    Type type_ = Type::undefined;
+
+    static Value const kUndefined;
 
 public:
-    Value() noexcept = default;
+    /*constexpr*/ Value() noexcept = default;
    ~Value() noexcept
     {
-        assign_null();
+        assign_undefined();
     }
 
     Value(Value const& rhs);
     Value(Value&& rhs) noexcept
         : data_(rhs.data_)
-        , type_(std::exchange(rhs.type_, Type::null))
+        , type_(std::exchange(rhs.type_, Type::undefined))
     {
     }
 
@@ -325,7 +328,7 @@ public:
     Value& operator=(Value&& rhs) noexcept
     {
         data_ = rhs.data_;
-        type_ = std::exchange(rhs.type_, Type::null);
+        type_ = std::exchange(rhs.type_, Type::undefined);
         return *this;
     }
 
@@ -427,12 +430,13 @@ public:
     }
 
     // is_X returns whether the actual value stored in this JSON object is of type X.
-    bool is_null()      const noexcept { return type() == Type::null;    }
-    bool is_boolean()   const noexcept { return type() == Type::boolean; }
-    bool is_number()    const noexcept { return type() == Type::number;  }
-    bool is_string()    const noexcept { return type() == Type::string;  }
-    bool is_array()     const noexcept { return type() == Type::array;   }
-    bool is_object()    const noexcept { return type() == Type::object;  }
+    bool is_undefined() const noexcept { return type() == Type::undefined; }
+    bool is_null()      const noexcept { return type() == Type::null;      }
+    bool is_boolean()   const noexcept { return type() == Type::boolean;   }
+    bool is_number()    const noexcept { return type() == Type::number;    }
+    bool is_string()    const noexcept { return type() == Type::string;    }
+    bool is_array()     const noexcept { return type() == Type::array;     }
+    bool is_object()    const noexcept { return type() == Type::object;    }
     bool is_primitive() const noexcept { return type() != Type::array && type() != Type::object; }
 
     bool is(Type t) const noexcept { return type() == t; }
@@ -537,18 +541,19 @@ public:
     // assignment operator is used. Otherwise the copy/move constructor will be
     // used to construct a new X.
 
-    void    assign_null   () noexcept;
-    bool&   assign_boolean(bool          v) noexcept;
-    double& assign_number (double        v) noexcept;
-    String& assign_string ();
-    String& assign_string (String const& v);
-    String& assign_string (String&&      v);
-    Array&  assign_array  ();
-    Array&  assign_array  (Array const&  v);
-    Array&  assign_array  (Array&&       v);
-    Object& assign_object ();
-    Object& assign_object (Object const& v);
-    Object& assign_object (Object&&      v);
+    void    assign_undefined() noexcept;
+    void    assign_null     () noexcept;
+    bool&   assign_boolean  (bool          v) noexcept;
+    double& assign_number   (double        v) noexcept;
+    String& assign_string   ();
+    String& assign_string   (String const& v);
+    String& assign_string   (String&&      v);
+    Array&  assign_array    ();
+    Array&  assign_array    (Array const&  v);
+    Array&  assign_array    (Array&&       v);
+    Object& assign_object   ();
+    Object& assign_object   (Object const& v);
+    Object& assign_object   (Object&&      v);
 
     // isa<T>
 
@@ -639,7 +644,6 @@ public:
     template <typename ...Args>
     Value& emplace_back(Args&&... args)
     {
-        assert(is_null() || is_array());
         auto& arr = _get_or_assign_array();
         arr.emplace_back(std::forward<Args>(args)...);
         return arr.back();
@@ -799,7 +803,6 @@ public:
     template <typename T, typename = EnableIfIsKey<T>>
     Value& operator[](T&& key)
     {
-        assert(is_null() || is_object());
         auto&& obj = _get_or_assign_object();
 #if 1
         auto const it = obj.find(key);
@@ -821,8 +824,10 @@ public:
     {
         auto&& obj = as_object();
         auto it = obj.find(std::forward<T>(key));
-        assert(it != obj.end());
-        return it->second;
+        if (it != obj.end()) {
+            return it->second;
+        }
+        return kUndefined;
     }
 
     // Returns a pointer to the value with the given key.
@@ -867,7 +872,6 @@ public:
     template <typename ...Args>
     std::pair<item_iterator, bool> emplace(Args&&... args)
     {
-        assert(is_null() || is_object());
         return _get_or_assign_object().emplace(std::forward<Args>(args)...);
     }
 

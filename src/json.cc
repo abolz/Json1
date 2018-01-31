@@ -38,16 +38,6 @@
 #define JSON_HAS_STRTOD_L 0
 #endif
 
-#ifndef JSON_UNREACHABLE
-#if defined(_MSC_VER)
-#define JSON_UNREACHABLE() __assume(false)
-#elif defined(__GNUC__)
-#define JSON_UNREACHABLE() __builtin_unreachable()
-#else
-#define JSON_UNREACHABLE() abort()
-#endif
-#endif
-
 #define JSON_SKIP_INVALID_UNICODE 0
 
 using namespace json;
@@ -1682,10 +1672,13 @@ static DecodedCodepoint DecodeUTF16Sequence(Get16 get)
 // Value
 //==================================================================================================
 
+Value const Value::kUndefined = {};
+
 Value::Value(Value const& rhs)
 {
     switch (rhs.type_)
     {
+    case Type::undefined:
     case Type::null:
     case Type::boolean:
     case Type::number:
@@ -1704,9 +1697,6 @@ Value::Value(Value const& rhs)
         data_.object = new Object(*rhs.data_.object);
         type_ = Type::object;
         break;
-    default:
-        JSON_UNREACHABLE();
-        break;
     }
 }
 
@@ -1716,6 +1706,9 @@ Value& Value::operator=(Value const& rhs)
     {
         switch (rhs.type())
         {
+        case Type::undefined:
+            assign_undefined();
+            break;
         case Type::null:
             assign_null();
             break;
@@ -1733,9 +1726,6 @@ Value& Value::operator=(Value const& rhs)
             break;
         case Type::object:
             _assign_object(rhs.as_object());
-            break;
-        default:
-            JSON_UNREACHABLE();
             break;
         }
     }
@@ -1783,6 +1773,7 @@ Value::Value(Type t)
 {
     switch (t)
     {
+    case Type::undefined:
     case Type::null:
         break;
     case Type::boolean:
@@ -1801,16 +1792,18 @@ Value::Value(Type t)
         data_.object = new Object{};
         break;
     default:
-        JSON_UNREACHABLE();
+        assert(false && "invalid type");
+        t = Type::undefined;
         break;
     }
     type_ = t; // Don't move to constructor initializer list!
 }
 
-void Value::assign_null() noexcept
+void Value::assign_undefined() noexcept
 {
     switch (type_)
     {
+    case Type::undefined:
     case Type::null:
     case Type::boolean:
     case Type::number:
@@ -1825,7 +1818,33 @@ void Value::assign_null() noexcept
         delete data_.object;
         break;
     default:
-        JSON_UNREACHABLE();
+        assert(false && "invalid type");
+        break;
+    }
+
+    type_ = Type::undefined;
+}
+
+void Value::assign_null() noexcept
+{
+    switch (type_)
+    {
+    case Type::undefined:
+    case Type::null:
+    case Type::boolean:
+    case Type::number:
+        break;
+    case Type::string:
+        delete data_.string;
+        break;
+    case Type::array:
+        delete data_.array;
+        break;
+    case Type::object:
+        delete data_.object;
+        break;
+    default:
+        assert(false && "invalid type");
         break;
     }
 
@@ -1834,7 +1853,7 @@ void Value::assign_null() noexcept
 
 bool& Value::assign_boolean(bool v) noexcept
 {
-    assign_null(); // release resources
+    assign_undefined(); // release resources
 
     data_.boolean = v;
     type_ = Type::boolean;
@@ -1844,7 +1863,7 @@ bool& Value::assign_boolean(bool v) noexcept
 
 double& Value::assign_number(double v) noexcept
 {
-    assign_null(); // release resources
+    assign_undefined(); // release resources
 
     data_.number = v;
     type_ = Type::number;
@@ -1907,6 +1926,8 @@ bool Value::equal_to(Value const& rhs) const noexcept
 
     switch (type())
     {
+    case Type::undefined:
+        return true;
     case Type::null:
         return true;
     case Type::boolean:
@@ -1920,8 +1941,8 @@ bool Value::equal_to(Value const& rhs) const noexcept
     case Type::object:
         return as_object() == rhs.as_object();
     default:
-        JSON_UNREACHABLE();
-        break;
+        assert(false && "invalid type");
+        return {};
     }
 }
 
@@ -1937,6 +1958,8 @@ bool Value::less_than(Value const& rhs) const noexcept
 
     switch (type())
     {
+    case Type::undefined:
+        return false;
     case Type::null:
         return false;
     case Type::boolean:
@@ -1950,8 +1973,8 @@ bool Value::less_than(Value const& rhs) const noexcept
     case Type::object:
         return as_object() < rhs.as_object();
     default:
-        JSON_UNREACHABLE();
-        break;
+        assert(false && "invalid type");
+        return {};
     }
 }
 
@@ -1966,6 +1989,8 @@ size_t Value::hash() const noexcept
 {
     switch (type())
     {
+    case Type::undefined:
+        return std::numeric_limits<size_t>::max(); // -1
     case Type::null:
         return 0;
     case Type::boolean:
@@ -1995,8 +2020,8 @@ size_t Value::hash() const noexcept
             return h;
         }
     default:
-        JSON_UNREACHABLE();
-        break;
+        assert(false && "invalid type");
+        return {};
     }
 }
 
@@ -2010,6 +2035,7 @@ size_t Value::size() const noexcept
 {
     switch (type())
     {
+    case Type::undefined:
     case Type::null:
     case Type::boolean:
     case Type::number:
@@ -2022,8 +2048,8 @@ size_t Value::size() const noexcept
     case Type::object:
         return as_object().size();
     default:
-        JSON_UNREACHABLE();
-        break;
+        assert(false && "invalid type");
+        return {};
     }
 }
 
@@ -2031,6 +2057,7 @@ bool Value::empty() const noexcept
 {
     switch (type())
     {
+    case Type::undefined:
     case Type::null:
     case Type::boolean:
     case Type::number:
@@ -2043,14 +2070,14 @@ bool Value::empty() const noexcept
     case Type::object:
         return as_object().empty();
     default:
-        JSON_UNREACHABLE();
-        break;
+        assert(false && "invalid type");
+        return {};
     }
 }
 
 Array& Value::_get_or_assign_array()
 {
-    assert(is_null() || is_array());
+    assert(is_undefined() || is_null() || is_array());
     if (!is_array()) {
         assign_array();
     }
@@ -2059,7 +2086,6 @@ Array& Value::_get_or_assign_array()
 
 Value& Value::operator[](size_t index)
 {
-    assert(is_null() || is_array());
     auto& arr = _get_or_assign_array();
     if (arr.size() <= index)
     {
@@ -2072,8 +2098,10 @@ Value& Value::operator[](size_t index)
 Value const& Value::operator[](size_t index) const noexcept
 {
     auto& arr = as_array();
-    assert(index < arr.size());
-    return arr[index];
+    if (index < arr.size()) {
+        return arr[index];
+    }
+    return kUndefined;
 }
 
 Value* Value::get_ptr(size_t index)
@@ -2114,7 +2142,7 @@ Value::element_iterator Value::erase(size_t index)
 
 Object& Value::_get_or_assign_object()
 {
-    assert(is_null() || is_object());
+    assert(is_undefined() || is_null() || is_object());
     if (!is_object()) {
         assign_object();
     }
@@ -2123,13 +2151,11 @@ Object& Value::_get_or_assign_object()
 
 Value& Value::operator[](Object::key_type const& key)
 {
-    assert(is_null() || is_object());
     return _get_or_assign_object()[key];
 }
 
 Value& Value::operator[](Object::key_type&& key)
 {
-    assert(is_null() || is_object());
     return _get_or_assign_object()[std::move(key)];
 }
 
@@ -2150,6 +2176,7 @@ String& Value::_assign_string(Args&&... args)
 {
     switch (type_)
     {
+    case Type::undefined:
     case Type::null:
     case Type::boolean:
     case Type::number:
@@ -2176,7 +2203,7 @@ String& Value::_assign_string(Args&&... args)
         }
         break;
     default:
-        JSON_UNREACHABLE();
+        assert(false && "invalid type");
         break;
     }
 
@@ -2188,6 +2215,7 @@ Array& Value::_assign_array(Args&&... args)
 {
     switch (type_)
     {
+    case Type::undefined:
     case Type::null:
     case Type::boolean:
     case Type::number:
@@ -2214,7 +2242,7 @@ Array& Value::_assign_array(Args&&... args)
         }
         break;
     default:
-        JSON_UNREACHABLE();
+        assert(false && "invalid type");
         break;
     }
 
@@ -2226,6 +2254,7 @@ Object& Value::_assign_object(Args&&... args)
 {
     switch (type_)
     {
+    case Type::undefined:
     case Type::null:
     case Type::boolean:
     case Type::number:
@@ -2252,7 +2281,7 @@ Object& Value::_assign_object(Args&&... args)
         *data_.object = Object(std::forward<Args>(args)...);
         break;
     default:
-        JSON_UNREACHABLE();
+        assert(false && "invalid type");
         break;
     }
 
@@ -2261,10 +2290,10 @@ Object& Value::_assign_object(Args&&... args)
 
 bool Value::to_boolean() const noexcept
 {
-    assert(is_primitive());
-
     switch (type())
     {
+    case Type::undefined:
+        return false;
     case Type::null:
         return false;
     case Type::boolean:
@@ -2278,19 +2307,20 @@ bool Value::to_boolean() const noexcept
         return !as_string().empty();
     case Type::array:
     case Type::object:
-        break;
+        assert(false && "to_boolean must not be called for arrays or objects");
+        return {};
+    default:
+        assert(false && "invalid type");
+        return {};
     }
-
-    assert(false && "unreachable");
-    return {};
 }
 
 double Value::to_number() const noexcept
 {
-    assert(is_primitive());
-
     switch (type())
     {
+    case Type::undefined:
+        return std::numeric_limits<double>::quiet_NaN();
     case Type::null:
         return 0.0;
     case Type::boolean:
@@ -2308,11 +2338,12 @@ double Value::to_number() const noexcept
         }
     case Type::array:
     case Type::object:
-        break;
+        assert(false && "to_number must not be called for arrays or objects");
+        return {};
+    default:
+        assert(false && "invalid type");
+        return {};
     }
-
-    assert(false && "unreachable");
-    return {};
 }
 
 double Value::to_integer() const noexcept
@@ -2497,10 +2528,10 @@ int64_t Value::to_length() const noexcept
 
 String Value::to_string() const
 {
-    assert(is_primitive());
-
     switch (type())
     {
+    case Type::undefined:
+        return "undefined";
     case Type::null:
         return "null";
     case Type::boolean:
@@ -2516,11 +2547,12 @@ String Value::to_string() const
         return as_string();
     case Type::array:
     case Type::object:
-        break;
+        assert(false && "to_string must not be called for arrays or objects");
+        return {};
+    default:
+        assert(false && "invalid type");
+        return {};
     }
-
-    assert(false && "unreachable");
-    return {};
 }
 
 //==================================================================================================
@@ -3697,6 +3729,12 @@ ErrorCode json::parse(Value& value, std::string const& str, ParseOptions const& 
 
 static bool StringifyValue(std::string& str, Value const& value, StringifyOptions const& options, int curr_indent);
 
+static bool StringifyUndefined(std::string& str)
+{
+    str += "undefined";
+    return true;
+}
+
 static bool StringifyNull(std::string& str)
 {
     str += "null";
@@ -4015,6 +4053,8 @@ static bool StringifyValue(std::string& str, Value const& value, StringifyOption
 {
     switch (value.type())
     {
+    case Type::undefined:
+        return StringifyUndefined(str);
     case Type::null:
         return StringifyNull(str);
     case Type::boolean:
@@ -4028,8 +4068,8 @@ static bool StringifyValue(std::string& str, Value const& value, StringifyOption
     case Type::object:
         return StringifyObject(str, value.as_object(), options, curr_indent);
     default:
-        JSON_UNREACHABLE();
-        break;
+        assert(false && "invalid type");
+        return {};
     }
 }
 
