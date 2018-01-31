@@ -1359,16 +1359,15 @@ here */
     CHECK(val["/*empty object*/"].empty());
 }
 
-#if 0
 TEST_CASE("Conversion")
 {
     SECTION("ToBoolean")
     {
         json::Value copy;
 
-        json::Value j1(json::Type::null);
-        CHECK(false == j1.convert_to_boolean());
-        CHECK(false == j1.inplace_convert_to_boolean());
+        json::Value j1(json::Type::undefined);
+        CHECK(false == j1.to_boolean());
+        j1 = j1.to_boolean();
         copy = j1;
         CHECK(copy == j1);
         CHECK(!(copy != j1));
@@ -1378,10 +1377,9 @@ TEST_CASE("Conversion")
         CHECK(copy >= j1);
 
         json::Value j2(json::Type::boolean);
-        CHECK(false == j2.convert_to_boolean());
+        CHECK(false == j2.to_boolean());
         j2 = true;
-        CHECK(true == j2.convert_to_boolean());
-        CHECK(true == j2.inplace_convert_to_boolean());
+        CHECK(true == j2.to_boolean());
         copy = j2;
         CHECK(copy == j2);
         CHECK(!(copy != j2));
@@ -1391,14 +1389,14 @@ TEST_CASE("Conversion")
         CHECK(copy >= j2);
 
         json::Value j3(json::Type::number); // !nan(x) && x != 0
-        CHECK(false == j3.convert_to_boolean());
+        CHECK(false == j3.to_boolean());
         j3 = 1.0;
-        CHECK(true == j3.convert_to_boolean());
+        CHECK(true == j3.to_boolean());
         j3 = -std::numeric_limits<double>::quiet_NaN();
-        CHECK(false == j3.convert_to_boolean());
+        CHECK(false == j3.to_boolean());
         j3 = std::numeric_limits<double>::infinity();
-        CHECK(true == j3.convert_to_boolean());
-        CHECK(true == j3.inplace_convert_to_boolean());
+        CHECK(true == j3.to_boolean());
+        j3 = j3.to_boolean();
         copy = j3;
         CHECK(copy == j3);
         CHECK(!(copy != j3));
@@ -1408,10 +1406,10 @@ TEST_CASE("Conversion")
         CHECK(copy >= j3);
 
         json::Value j4(json::Type::string); // !empty(x)
-        CHECK(false == j4.convert_to_boolean());
+        CHECK(false == j4.to_boolean());
         j4 = "hello";
-        CHECK(true == j4.convert_to_boolean());
-        CHECK(true == j4.inplace_convert_to_boolean());
+        CHECK(true == j4.to_boolean());
+        j4 = j4.to_boolean();
         copy = j4;
         CHECK(copy == j4);
         CHECK(!(copy != j4));
@@ -1419,28 +1417,6 @@ TEST_CASE("Conversion")
         CHECK(copy <= j4);
         CHECK(!(copy > j4));
         CHECK(copy >= j4);
-
-        json::Value j5(json::Type::array); // => true
-        CHECK(true == j5.convert_to_boolean());
-        CHECK(true == j5.inplace_convert_to_boolean());
-        copy = j5;
-        CHECK(copy == j5);
-        CHECK(!(copy != j5));
-        CHECK(!(copy < j5));
-        CHECK(copy <= j5);
-        CHECK(!(copy > j5));
-        CHECK(copy >= j5);
-
-        json::Value j6(json::Type::object); // => true
-        CHECK(true == j6.convert_to_boolean());
-        CHECK(true == j6.inplace_convert_to_boolean());
-        copy = j6;
-        CHECK(copy == j6);
-        CHECK(!(copy != j6));
-        CHECK(!(copy < j6));
-        CHECK(copy <= j6);
-        CHECK(!(copy > j6));
-        CHECK(copy >= j6);
     }
 
     SECTION("ToNumber")
@@ -1448,8 +1424,8 @@ TEST_CASE("Conversion")
         json::Value copy;
 
         json::Value j1(json::Type::null);
-        CHECK(0.0 == j1.convert_to_number());
-        CHECK(0.0 == j1.inplace_convert_to_number());
+        CHECK(0.0 == j1.to_number());
+        j1 = j1.to_number();
         copy = j1;
         CHECK(copy == j1);
         CHECK(!(copy != j1));
@@ -1459,10 +1435,10 @@ TEST_CASE("Conversion")
         CHECK(copy >= j1);
 
         json::Value j2(json::Type::boolean);
-        CHECK(0.0 == j2.convert_to_number());
+        CHECK(0.0 == j2.to_number());
         j2 = true;
-        CHECK(1.0 == j2.convert_to_number());
-        CHECK(1.0 == j2.inplace_convert_to_number());
+        CHECK(1.0 == j2.to_number());
+        j2 = j2.to_number();
         copy = j2;
         CHECK(copy == j2);
         CHECK(!(copy != j2));
@@ -1472,16 +1448,16 @@ TEST_CASE("Conversion")
         CHECK(copy >= j2);
 
         json::Value j3(json::Type::number);
-        CHECK(0.0 == j3.convert_to_number());
+        CHECK(0.0 == j3.to_number());
         j3 = 1.0;
-        CHECK(1.0 == j3.convert_to_number());
+        CHECK(1.0 == j3.to_number());
         j3 = -std::numeric_limits<double>::quiet_NaN();
-        CHECK(std::isnan(j3.convert_to_number()));
+        CHECK(std::isnan(j3.to_number()));
         j3 = +std::numeric_limits<double>::quiet_NaN();
-        CHECK(std::isnan(j3.convert_to_number()));
+        CHECK(std::isnan(j3.to_number()));
         j3 = std::numeric_limits<double>::infinity();
-        CHECK(std::numeric_limits<double>::infinity() == j3.convert_to_number());
-        CHECK(std::numeric_limits<double>::infinity() == j3.inplace_convert_to_number());
+        CHECK(std::numeric_limits<double>::infinity() == j3.to_number());
+        j3 = j3.to_number();
         copy = j3;
         CHECK(copy == j3);
         CHECK(!(copy != j3));
@@ -1491,10 +1467,11 @@ TEST_CASE("Conversion")
         CHECK(copy >= j3);
 
         json::Value j4(json::Type::string); // !empty(x)
-        CHECK(0.0 == j4.convert_to_number());
+        CHECK(0.0 == j4.to_number());
         j4 = "1.0";
-        CHECK(1.0 == j4.convert_to_number());
-        CHECK(1.0 == j4.inplace_convert_to_number());
+        CHECK(1.0 == j4.to_number());
+        j4 = j4.to_number();
+        CHECK(1.0 == j4.as_number());
         copy = j4;
         CHECK(copy == j4);
         CHECK(!(copy != j4));
@@ -1502,33 +1479,6 @@ TEST_CASE("Conversion")
         CHECK(copy <= j4);
         CHECK(!(copy > j4));
         CHECK(copy >= j4);
-
-        json::Value j5(json::Type::array); // => true
-        CHECK(0.0 == j5.convert_to_number());
-        j5[0] = 1.0;
-        CHECK(1.0 == j5.convert_to_number());
-        CHECK(1.0 == j5.inplace_convert_to_number());
-        j5 = json::Array{"1.0"};
-        CHECK(1.0 == j5.convert_to_number());
-        CHECK(1.0 == j5.inplace_convert_to_number());
-        copy = j5;
-        CHECK(copy == j5);
-        CHECK(!(copy != j5));
-        CHECK(!(copy < j5));
-        CHECK(copy <= j5);
-        CHECK(!(copy > j5));
-        CHECK(copy >= j5);
-
-        json::Value j6(json::Type::object); // => true
-        CHECK(std::isnan(j6.convert_to_number()));
-        CHECK(std::isnan(j6.inplace_convert_to_number()));
-        copy = j6;
-        //CHECK(copy == j6);
-        //CHECK(!(copy != j6));
-        //CHECK(!(copy < j6));
-        //CHECK(copy <= j6);
-        //CHECK(!(copy > j6));
-        //CHECK(copy >= j6);
     }
 
     SECTION("ToString")
@@ -1536,8 +1486,9 @@ TEST_CASE("Conversion")
         json::Value copy;
 
         json::Value j1(json::Type::null);
-        CHECK("null" == j1.convert_to_string());
-        CHECK("null" == j1.inplace_convert_to_string());
+        CHECK("null" == j1.to_string());
+        j1 = j1.to_string();
+        CHECK("null" == j1.as_string());
         copy = j1;
         CHECK(copy == j1);
         CHECK(!(copy != j1));
@@ -1547,10 +1498,11 @@ TEST_CASE("Conversion")
         CHECK(copy >= j1);
 
         json::Value j2(json::Type::boolean);
-        CHECK("false" == j2.convert_to_string());
+        CHECK("false" == j2.to_string());
         j2 = true;
-        CHECK("true" == j2.convert_to_string());
-        CHECK("true" == j2.inplace_convert_to_string());
+        CHECK("true" == j2.to_string());
+        j2 = j2.to_string();
+        CHECK("true" == j2.as_string());
         copy = j2;
         CHECK(copy == j2);
         CHECK(!(copy != j2));
@@ -1560,10 +1512,11 @@ TEST_CASE("Conversion")
         CHECK(copy >= j2);
 
         json::Value j3(json::Type::number);
-        CHECK("0.0" == j3.convert_to_string());
+        CHECK("0.0" == j3.to_string());
         j3 = 1.0;
-        CHECK("1.0" == j3.convert_to_string());
-        CHECK("1.0" == j3.inplace_convert_to_string());
+        CHECK("1.0" == j3.to_string());
+        j3 = j3.to_string();
+        CHECK("1.0" == j3.as_string());
         copy = j3;
         CHECK(copy == j3);
         CHECK(!(copy != j3));
@@ -1573,10 +1526,11 @@ TEST_CASE("Conversion")
         CHECK(copy >= j3);
 
         json::Value j4(json::Type::string);
-        CHECK("" == j4.convert_to_string());
+        CHECK("" == j4.to_string());
         j4 = "hello";
-        CHECK("hello" == j4.convert_to_string());
-        CHECK("hello" == j4.inplace_convert_to_string());
+        CHECK("hello" == j4.to_string());
+        j4 = j4.to_string();
+        CHECK("hello" == j4.as_string());
         copy = j4;
         CHECK(copy == j4);
         CHECK(!(copy != j4));
@@ -1584,120 +1538,72 @@ TEST_CASE("Conversion")
         CHECK(copy <= j4);
         CHECK(!(copy > j4));
         CHECK(copy >= j4);
-
-        json::Value j5(json::Type::array);
-        CHECK("" == j5.convert_to_string());
-        j5.push_back(1.0);
-        CHECK("1.0" == j5.convert_to_string());
-        j5.push_back("hello world");
-        CHECK("1.0,hello world" == j5.convert_to_string());
-        CHECK("1.0,hello world" == j5.inplace_convert_to_string());
-        copy = j5;
-        CHECK(copy == j5);
-        CHECK(!(copy != j5));
-        CHECK(!(copy < j5));
-        CHECK(copy <= j5);
-        CHECK(!(copy > j5));
-        CHECK(copy >= j5);
-
-        json::Value j6(json::Type::object);
-        CHECK("[object Object]" == j6.convert_to_string());
-        CHECK("[object Object]" == j6.inplace_convert_to_string());
-        copy = j6;
-        CHECK(copy == j6);
-        CHECK(!(copy != j6));
-        CHECK(!(copy < j6));
-        CHECK(copy <= j6);
-        CHECK(!(copy > j6));
-        CHECK(copy >= j6);
     }
 
-    SECTION("ToArray")
+    SECTION("ToUint32")
     {
-        json::Value copy;
+        auto CheckIt = [](double x, uint32_t expected) {
+            CAPTURE(x);
+            CAPTURE(expected);
+            auto const u1 = json::Value(x).to_uint32();
+            CHECK(u1 == expected);
+            // The ToUint32 abstract operation is idempotent:
+            // if applied to a result that it produced, the second application leaves that value unchanged.
+            auto const u2 = json::Value(u1).to_uint32();
+            CHECK(u1 == u2);
+            // ToUint32(ToInt32(x)) is equal to ToUint32(x) for all values of x.
+            // (It is to preserve this latter property that +inf and -inf are mapped to +0.)
+            auto const u3 = json::Value(json::Value(x).to_int32()).to_uint32();
+            CHECK(u1 == u3);
+        };
 
-        json::Value j1(json::Type::null);
-        CHECK(json::Array{} == j1.convert_to_array());
-        CHECK(json::Array{} == j1.inplace_convert_to_array());
-        copy = j1;
-        CHECK(copy == j1);
-        CHECK(!(copy != j1));
-        CHECK(!(copy < j1));
-        CHECK(copy <= j1);
-        CHECK(!(copy > j1));
-        CHECK(copy >= j1);
-
-        json::Value j2(json::Type::boolean);
-        CHECK(json::Array{false} == j2.convert_to_array());
-        j2 = true;
-        CHECK(json::Array{true} == j2.convert_to_array());
-        CHECK(json::Array{true} == j2.inplace_convert_to_array());
-        copy = j2;
-        CHECK(copy == j2);
-        CHECK(!(copy != j2));
-        CHECK(!(copy < j2));
-        CHECK(copy <= j2);
-        CHECK(!(copy > j2));
-        CHECK(copy >= j2);
-
-        json::Value j3(json::Type::number);
-        CHECK(json::Array{0.0} == j3.convert_to_array());
-        j3 = 1.0;
-        CHECK(json::Array{1.0} == j3.convert_to_array());
-        CHECK(json::Array{1.0} == j3.inplace_convert_to_array());
-        copy = j3;
-        CHECK(copy == j3);
-        CHECK(!(copy != j3));
-        CHECK(!(copy < j3));
-        CHECK(copy <= j3);
-        CHECK(!(copy > j3));
-        CHECK(copy >= j3);
-
-        json::Value j4(json::Type::string);
-        CHECK(json::Array{""} == j4.convert_to_array());
-        j4 = "hello";
-        CHECK(json::Array{"hello"} == j4.convert_to_array());
-        CHECK(json::Array{"hello"} == j4.inplace_convert_to_array());
-        copy = j4;
-        CHECK(copy == j4);
-        CHECK(!(copy != j4));
-        CHECK(!(copy < j4));
-        CHECK(copy <= j4);
-        CHECK(!(copy > j4));
-        CHECK(copy >= j4);
-
-        json::Value j5(json::Type::array);
-        CHECK(json::Array{} == j5.convert_to_array());
-        j5.push_back(1.0);
-        CHECK(json::Array{1.0} == j5.convert_to_array());
-        CHECK(json::Array{1.0} == j5.inplace_convert_to_array());
-        copy = j5;
-        CHECK(copy == j5);
-        CHECK(!(copy != j5));
-        CHECK(!(copy < j5));
-        CHECK(copy <= j5);
-        CHECK(!(copy > j5));
-        CHECK(copy >= j5);
-
-        json::Value j6(json::Type::object);
-        CHECK(json::Array{json::Object{}} == j6.convert_to_array());
-        j6["eins"] = 1.0;
-        CHECK(json::Array{json::Object{{"eins", 1.0}}} == j6.convert_to_array());
-        CHECK(json::Array{json::Object{{"eins", 1.0}}} == j6.inplace_convert_to_array());
-        copy = j6;
-        CHECK(copy == j6);
-        CHECK(!(copy != j6));
-        CHECK(!(copy < j6));
-        CHECK(copy <= j6);
-        CHECK(!(copy > j6));
-        CHECK(copy >= j6);
+        CheckIt(         -0.0,          0u);
+        CheckIt(          0.0,          0u);
+        CheckIt(-2147483649.0, 2147483647u);
+        CheckIt(-2147483648.0, 2147483648u);
+        CheckIt(-2147483647.0, 2147483649u);
+        CheckIt( 2147483647.0, 2147483647u);
+        CheckIt( 2147483648.0, 2147483648u);
+        CheckIt( 4294967295.0, 4294967295u);
+        CheckIt( 4294967296.0,          0u);
+        CheckIt( 4294967297.0,          1u);
+        CheckIt( std::numeric_limits<double>::quiet_NaN(), 0u);
+        CheckIt( std::numeric_limits<double>::infinity(), 0u);
+        CheckIt(-std::numeric_limits<double>::infinity(), 0u);
     }
 
-    SECTION("ToObject")
+    SECTION("ToInt32")
     {
+        auto CheckIt = [](double x, int32_t expected) {
+            CAPTURE(x);
+            CAPTURE(expected);
+            auto const i1 = json::Value(x).to_int32();
+            CHECK(i1 == expected);
+            // The ToInt32 abstract operation is idempotent:
+            // if applied to a result that it produced, the second application leaves that value unchanged.
+            auto const i2 = json::Value(i1).to_int32();
+            CHECK(i1 == i2);
+            // ToInt32(ToUint32(x)) is equal to ToInt32(x) for all values of x.
+            // (It is to preserve this latter property that +inf and -inf are mapped to +0.)
+            auto const i3 = json::Value(json::Value(x).to_uint32()).to_int32();
+            CHECK(i1 == i3);
+        };
+
+        CheckIt(         -0.0,           0);
+        CheckIt(          0.0,           0);
+        CheckIt(-2147483649.0,  2147483647);
+        CheckIt(-2147483648.0, -2147483647 - 1);
+        CheckIt(-2147483647.0, -2147483647);
+        CheckIt( 2147483647.0,  2147483647);
+        CheckIt( 2147483648.0, -2147483647 - 1);
+        CheckIt( 4294967295.0,          -1);
+        CheckIt( 4294967296.0,           0);
+        CheckIt( 4294967297.0,           1);
+        CheckIt( std::numeric_limits<double>::quiet_NaN(), 0);
+        CheckIt( std::numeric_limits<double>::infinity(), 0);
+        CheckIt(-std::numeric_limits<double>::infinity(), 0);
     }
 }
-#endif
 
 static std::string TimesString(std::string const& s, int count)
 {

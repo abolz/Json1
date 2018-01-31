@@ -2389,7 +2389,7 @@ int32_t Value::to_int32() const noexcept
     auto k = Modulo(i, kTwo32);
 
     if (k >= kTwo31) {
-        k -= kTwo31;
+        k -= kTwo32;
     }
 
     return static_cast<int32_t>(k);
@@ -2426,7 +2426,7 @@ int16_t Value::to_int16() const noexcept
     auto k = Modulo(i, kTwo16);
 
     if (k >= kTwo15) {
-        k -= kTwo15;
+        k -= kTwo16;
     }
 
     return static_cast<int16_t>(k);
@@ -2461,7 +2461,7 @@ int8_t Value::to_int8() const noexcept
     auto k = Modulo(i, kTwo8);
 
     if (k >= kTwo7) {
-        k -= kTwo7;
+        k -= kTwo8;
     }
 
     return static_cast<int8_t>(k);
