@@ -14,6 +14,7 @@
 
 #include <tuple>
 #include <limits>
+#include <cstring>
 #include <cmath>
 
 namespace json {
