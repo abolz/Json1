@@ -1733,42 +1733,6 @@ Value& Value::operator=(Value const& rhs)
     return *this;
 }
 
-Value::Value(Tag_string, String const& v)
-{
-    data_.string = new String(v);
-    type_ = Type::string;
-}
-
-Value::Value(Tag_string, String&& v)
-{
-    data_.string = new String(std::move(v));
-    type_ = Type::string;
-}
-
-Value::Value(Tag_array, Array const& v)
-{
-    data_.array = new Array(v);
-    type_ = Type::array;
-}
-
-Value::Value(Tag_array, Array&& v)
-{
-    data_.array = new Array(std::move(v));
-    type_ = Type::array;
-}
-
-Value::Value(Tag_object, Object const& v)
-{
-    data_.object = new Object(v);
-    type_ = Type::object;
-}
-
-Value::Value(Tag_object, Object&& v)
-{
-    data_.object = new Object(std::move(v));
-    type_ = Type::object;
-}
-
 Value::Value(Type t)
 {
     switch (t)
@@ -1796,6 +1760,7 @@ Value::Value(Type t)
         t = Type::undefined;
         break;
     }
+
     type_ = t; // Don't move to constructor initializer list!
 }
 

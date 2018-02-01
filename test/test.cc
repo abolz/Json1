@@ -377,7 +377,7 @@ TEST_CASE("arrays")
     SECTION("std::forward_list")
     {
         std::forward_list<json::Value> a {1, "two", 3.3, true};
-        json::Value j = json::Value::from_array(a);
+        json::Value j = json::Value(json::Tag_array{}, a.begin(), a.end());
         REQUIRE(j.is_array());
         REQUIRE(j.size() == 4);
         REQUIRE(j[0].is_number());
@@ -552,7 +552,7 @@ TEST_CASE("Value - custom")
             {1.0, 2.0},
             {3.0, 4.0},
         };
-        json::Value j = json::Value::from_array(points);
+        json::Value j = points;
         CHECK(j.is_array());
         CHECK(j.isa<std::vector<Point>>());
         CHECK(j.size() == 2);
@@ -640,14 +640,14 @@ namespace json
     template <typename T>
     struct Traits<std::optional<T>>
     {
-        using tag = Tag_t<T>;
+        using tag = TagFor<T>;
 
         template <typename V>
         static Value to_json(V&& in) // V = std::optional<T> [const][&]
         {
             if (!in.has_value())
                 return {}; // null
-            return Traits_t<T>::to_json(std::forward<V>(in).value());
+            return TraitsFor<T>::to_json(std::forward<V>(in).value());
         }
 
         template <typename V>
@@ -656,9 +656,9 @@ namespace json
             if (in.type() != tag::value)
                 return {}; // nullopt
 #if 1
-            return Traits_t<T>::from_json(std::forward<V>(in));
+            return TraitsFor<T>::from_json(std::forward<V>(in));
 #else
-            return static_cast<T>( Traits_t<TargetType_t<T>>::from_json(std::forward<V>(in)) );
+            return static_cast<T>( TraitsFor<TargetTypeFor<T>>::from_json(std::forward<V>(in)) );
 #endif
         }
     };

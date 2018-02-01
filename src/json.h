@@ -280,16 +280,16 @@ struct Traits
 };
 
 template <typename T>
-using Traits_t = Traits<std::decay_t<T>>;
+using TraitsFor = Traits<std::decay_t<T>>;
 
 template <typename T>
-using Tag_t = typename Traits_t<T>::tag;
+using TagFor = typename TraitsFor<T>::tag;
 
 template <typename T>
-using TargetType_t = typename TargetType<Tag_t<T>::value>::type;
+using TargetTypeFor = typename TargetType<TagFor<T>::value>::type;
 
 template <typename T>
-using SourceType_t = decltype(( Traits_t<T>::to_json(std::declval<T>()) ));
+using SourceTypeFor = decltype(( TraitsFor<T>::to_json(std::declval<T>()) ));
 
 //------------------------------------------------------------------------------
 //
@@ -310,8 +310,23 @@ class Value final
 
     static Value const kUndefined;
 
+    template <typename T>
+    using IsJsonValue
+        = std::integral_constant<bool,
+            std::is_same< Value, std::decay_t<T> >::value>;
+
+    template <typename T>
+    using IsConvertible
+        = std::integral_constant<bool,
+            IsJsonValue< SourceTypeFor<T> >::value || std::is_convertible< SourceTypeFor<T>, TargetTypeFor<T> >::value>;
+
+    template <typename T>
+    using IsConstructible
+        = std::integral_constant<bool,
+            IsJsonValue< SourceTypeFor<T> >::value || std::is_constructible< TargetTypeFor<T>, SourceTypeFor<T> >::value>;
+
 public:
-    /*constexpr*/ Value() noexcept = default;
+    Value() noexcept = default;
    ~Value() noexcept
     {
         assign_undefined();
@@ -332,50 +347,120 @@ public:
         return *this;
     }
 
-private:
-    template <typename T>
-    using AllowConversion
-        = std::integral_constant<bool,
-            !std::is_same< Value, std::decay_t<T> >::value>;
-
-    template <typename T>
-    using IsConvertible
-        = std::integral_constant<bool,
-            std::is_same< std::decay_t<SourceType_t<T>>, Value >::value // to_json might return a 'Value'
-            || std::is_convertible< SourceType_t<T>, TargetType_t<T> >::value>;
-
-    template <typename T>
-    using IsConstructible
-        = std::integral_constant<bool,
-            std::is_same< std::decay_t<SourceType_t<T>>, Value >::value // to_json might return a 'Value'
-            || std::is_constructible< TargetType_t<T>, SourceType_t<T> >::value>;
-
-    Value(Tag_null,    Null           ) noexcept : type_(Type::null) {}
-    Value(Tag_boolean, bool          v) noexcept : type_(Type::boolean) { data_.boolean = v; }
-    Value(Tag_number,  double        v) noexcept : type_(Type::number) { data_.number = v; }
-    Value(Tag_string,  String const& v);
-    Value(Tag_string,  String&&      v);
-    Value(Tag_array,   Array const&  v);
-    Value(Tag_array,   Array&&       v);
-    Value(Tag_object,  Object const& v);
-    Value(Tag_object,  Object&&      v);
-
-    // to_json might return a 'Value'
-    template <Type Ty> Value(Type_const<Ty>, Value const& v) : Value(v) {}
-    template <Type Ty> Value(Type_const<Ty>, Value&&      v) : Value(std::move(v)) {}
-
-public:
     Value(Type t);
 
-    template <typename T, std::enable_if_t< AllowConversion<T>::value && IsConvertible<T>::value, int > = 0>
-    Value(T&& v)
-        : Value(Tag_t<T>{}, Traits_t<T>::to_json(std::forward<T>(v)))
+    // null
+
+    Value(Tag_null) noexcept
+        : type_(Type::null)
     {
     }
 
-    template <typename T, std::enable_if_t< AllowConversion<T>::value && !IsConvertible<T>::value && IsConstructible<T>::value, int > = 1>
+    Value(Tag_null, Null) noexcept
+        : type_(Type::null)
+    {
+    }
+
+    // boolean
+
+    Value(Tag_boolean) noexcept
+        : type_(Type::boolean)
+    {
+        data_.boolean = {};
+    }
+
+    template <typename Arg, std::enable_if_t< !IsJsonValue<Arg>::value, int > = 0>
+    Value(Tag_boolean, Arg&& arg) noexcept
+        : type_(Type::boolean)
+    {
+        // Use ?: to include explicit operator bool.
+        data_.boolean = std::forward<Arg>(arg) ? true : false;
+    }
+
+    // number
+
+    Value(Tag_number) noexcept
+        : type_(Type::number)
+    {
+        data_.number = {};
+    }
+
+    template <typename Arg, std::enable_if_t< !IsJsonValue<Arg>::value, int > = 0>
+    Value(Tag_number, Arg&& arg) noexcept
+        : type_(Type::number)
+    {
+        data_.number = std::forward<Arg>(arg);
+    }
+
+    // string
+
+    Value(Tag_string)
+    {
+        data_.string = new String();
+        type_ = Type::string;
+    }
+
+    template <typename Arg, typename ...Args, std::enable_if_t< /*(sizeof...(Args) > 0) ||*/ !IsJsonValue<Arg>::value, int > = 0>
+    Value(Tag_string, Arg&& arg, Args&&... args)
+    {
+        data_.string = new String(std::forward<Arg>(arg), std::forward<Args>(args)...);
+        type_ = Type::string;
+    }
+
+    // array
+
+    Value(Tag_array)
+    {
+        data_.array = new Array();
+        type_ = Type::array;
+    }
+
+    template <typename Arg, typename ...Args, std::enable_if_t< /*(sizeof...(Args) > 0) ||*/ !IsJsonValue<Arg>::value, int > = 0>
+    Value(Tag_array, Arg&& arg, Args&&... args)
+    {
+        data_.array = new Array(std::forward<Arg>(arg), std::forward<Args>(args)...);
+        type_ = Type::array;
+    }
+
+    // object
+
+    Value(Tag_object)
+    {
+        data_.object = new Object();
+        type_ = Type::object;
+    }
+
+    template <typename Arg, typename ...Args, std::enable_if_t< /*(sizeof...(Args) > 0) ||*/ !IsJsonValue<Arg>::value, int > = 0>
+    Value(Tag_object, Arg&& arg, Args&&... args)
+    {
+        data_.object = new Object(std::forward<Arg>(arg), std::forward<Args>(args)...);
+        type_ = Type::object;
+    }
+
+    // value
+
+    Value(Tag_boolean, Value const& v) : Value(v) {}
+    Value(Tag_boolean, Value&&      v) noexcept : Value(std::move(v)) {}
+    Value(Tag_number,  Value const& v) : Value(v) {}
+    Value(Tag_number,  Value&&      v) noexcept : Value(std::move(v)) {}
+    Value(Tag_string,  Value const& v) : Value(v) {}
+    Value(Tag_string,  Value&&      v) noexcept : Value(std::move(v)) {}
+    Value(Tag_array,   Value const& v) : Value(v) {}
+    Value(Tag_array,   Value&&      v) noexcept : Value(std::move(v)) {}
+    Value(Tag_object,  Value const& v) : Value(v) {}
+    Value(Tag_object,  Value&&      v) noexcept : Value(std::move(v)) {}
+
+    // generic (converting) constructurs
+
+    template <typename T, std::enable_if_t< !IsJsonValue<T>::value && IsConvertible<T>::value, int > = 0>
+    Value(T&& v)
+        : Value(TagFor<T>{}, TraitsFor<T>::to_json(std::forward<T>(v)))
+    {
+    }
+
+    template <typename T, std::enable_if_t< !IsJsonValue<T>::value && !IsConvertible<T>::value && IsConstructible<T>::value, int > = 1>
     explicit Value(T&& v)
-        : Value(Tag_t<T>{}, static_cast<TargetType_t<T>>( Traits_t<T>::to_json(std::forward<T>(v)) ))
+        : Value(TagFor<T>{}, static_cast<TargetTypeFor<T>>( TraitsFor<T>::to_json(std::forward<T>(v)) ))
     {
     }
 
@@ -402,27 +487,14 @@ private:
     template <Type Ty> void _assign_from(Type_const<Ty>, Value&&      v) { *this = std::move(v); }
 
 public:
-    template <typename T, std::enable_if_t< AllowConversion<T>::value && IsConvertible<T>::value, int > = 0>
+    template <typename T, std::enable_if_t< !IsJsonValue<T>::value && IsConvertible<T>::value, int > = 0>
     Value& operator=(T&& v)
     {
-        _assign_from(Tag_t<T>{}, Traits_t<T>::to_json(std::forward<T>(v)));
+        _assign_from(TagFor<T>{}, TraitsFor<T>::to_json(std::forward<T>(v)));
         return *this;
     }
 
-    // Construct from any array
-    template <typename T>
-    static Value from_array(T const& v)
-    {
-        return Array(v.begin(), v.end());
-    }
-
-    // Construct from any object
-    template <typename T>
-    static Value from_object(T const& v)
-    {
-        return Object(v.begin(), v.end());
-    }
-
+public:
     // Returns the type of the actual value stored in this JSON object.
     Type type() const noexcept
     {
@@ -558,15 +630,15 @@ public:
     // isa<T>
 
     template <typename T>
-    bool isa() const noexcept { return type() == Tag_t<T>::value; }
+    bool isa() const noexcept { return type() == TagFor<T>::value; }
 
     // as<T> uses Traits::from_json to convert this JSON value into an object
     // of type T.
 
-    template <typename T> T as() const&  noexcept { return Traits_t<T>::from_json(*this); }
-    template <typename T> T as() &       noexcept { return Traits_t<T>::from_json(*this); }
-    template <typename T> T as() const&& noexcept { return Traits_t<T>::from_json(static_cast<Value const&&>(*this)); }
-    template <typename T> T as() &&      noexcept { return Traits_t<T>::from_json(static_cast<Value&&      >(*this)); }
+    template <typename T> T as() const&  noexcept { return TraitsFor<T>::from_json(*this); }
+    template <typename T> T as() &       noexcept { return TraitsFor<T>::from_json(*this); }
+    template <typename T> T as() const&& noexcept { return TraitsFor<T>::from_json(static_cast<Value const&&>(*this)); }
+    template <typename T> T as() &&      noexcept { return TraitsFor<T>::from_json(static_cast<Value&&      >(*this)); }
 
 #if JSON_VALUE_HAS_EXPLICIT_OPERATOR_T
     template <typename T> explicit operator T() const&  noexcept { return this->as<T>(); }
@@ -626,12 +698,12 @@ public:
     ItRange<const_element_iterator> elements() const&  { return {elements_begin(), elements_end()}; }
 
     // Convert this value into an array an return a reference to the index-th element.
-    // PRE: is_array() or is_null()
+    // PRE: is_undefined() or is_null() or is_array()
     Value& operator[](size_t index);
 
     // Returns a reference to the index-th element.
+    // Or a reference to an 'undefined' value if the index is out of range.
     // PRE: is_array()
-    // PRE: size() > index
     Value const& operator[](size_t index) const noexcept;
 
     // Returns a pointer the the value at the given index.
@@ -640,7 +712,7 @@ public:
     Value const* get_ptr(size_t index) const;
 
     // Convert this value into an array and append a new element constructed from the given arguments.
-    // PRE: is_array() or is_null()
+    // PRE: is_undefined() or is_null() or is_array()
     template <typename ...Args>
     Value& emplace_back(Args&&... args)
     {
@@ -650,7 +722,7 @@ public:
     }
 
     // Convert this value into an array and append a new element.
-    // PRE: is_array() or is_null()
+    // PRE: is_undefined() or is_null() or is_array()
     Value& push_back(Value const& value) { return emplace_back(value); }
     Value& push_back(Value&&      value) { return emplace_back(std::move(value)); }
 
@@ -673,8 +745,7 @@ private:
     using EnableIfIsKey = std::enable_if_t<
         !std::is_integral<T>::value // disallow literal '0': String might be convertible from nullptr...
         && !std::is_convertible< T, Object::const_iterator >::value
-        && std::is_convertible< decltype(std::declval<Object const&>().find(std::declval<T>())), typename Object::const_iterator >::value
-    >;
+        && std::is_convertible< decltype(std::declval<Object const&>().find(std::declval<T>())), typename Object::const_iterator >::value>;
 
     Object& _get_or_assign_object();
 
@@ -796,7 +867,7 @@ public:
     ItRange<const_value_iterator> values() const& { return {values_begin(), values_end()}; }
 
     // Convert this value into an object and return a reference to the value with the given key.
-    // PRE: is_object() or is_null()
+    // PRE: is_undefined() or is_null() or is_object()
     Value& operator[](Object::key_type const& key);
     Value& operator[](Object::key_type&& key);
 
@@ -817,8 +888,8 @@ public:
     }
 
     // Returns a reference to the value with the given key.
+    // Or a reference to an 'undefined' value if an element for 'key' does not exist.
     // PRE: is_object()
-    // PRE: as_object().find(key) != as_object().end()
     template <typename T, typename = EnableIfIsKey<T>>
     Value const& operator[](T&& key) const noexcept
     {
@@ -868,7 +939,7 @@ public:
     }
 
     // Convert this value into an object and insert a new element constructed from the given arguments.
-    // PRE: is_object() or is_null()
+    // PRE: is_undefined() or is_null() or is_object()
     template <typename ...Args>
     std::pair<item_iterator, bool> emplace(Args&&... args)
     {
@@ -876,7 +947,7 @@ public:
     }
 
     // Convert this value to an object and insert the given {key, value} pair.
-    // PRE: is_object() or is_null()
+    // PRE: is_undefined() or is_null() or is_object()
     std::pair<item_iterator, bool> insert(Object::value_type const& pair) { return emplace(pair); }
     std::pair<item_iterator, bool> insert(Object::value_type&&      pair) { return emplace(std::move(pair)); }
 
@@ -991,14 +1062,14 @@ namespace impl
 template < typename L, typename R, std::enable_if_t< std::is_same<Value, L>::value && !std::is_same<Value, R>::value, int > = 0 >
 bool operator==(L const& lhs, R const& rhs) noexcept
 {
-    return impl::CmpEQ(lhs, rhs, Tag_t<R>{});
+    return impl::CmpEQ(lhs, rhs, TagFor<R>{});
 }
 
 // T == Value
 template < typename L, typename R, std::enable_if_t< !std::is_same<Value, L>::value && std::is_same<Value, R>::value, int > = 1 >
 bool operator==(L const& lhs, R const& rhs) noexcept
 {
-    return impl::CmpEQ(rhs, lhs, Tag_t<L>{});
+    return impl::CmpEQ(rhs, lhs, TagFor<L>{});
 }
 
 // Value != T
@@ -1019,14 +1090,14 @@ bool operator!=(L const& lhs, R const& rhs) noexcept
 template < typename L, typename R, std::enable_if_t< std::is_same<Value, L>::value && !std::is_same<Value, R>::value, int > = 0 >
 bool operator<(L const& lhs, R const& rhs) noexcept
 {
-    return impl::CmpLT(lhs, rhs, Tag_t<R>{});
+    return impl::CmpLT(lhs, rhs, TagFor<R>{});
 }
 
 // T < Value
 template < typename L, typename R, std::enable_if_t< !std::is_same<Value, L>::value && std::is_same<Value, R>::value, int > = 1 >
 bool operator<(L const& lhs, R const& rhs) noexcept
 {
-    return impl::CmpGT(rhs, lhs, Tag_t<L>{});
+    return impl::CmpGT(rhs, lhs, TagFor<L>{});
 }
 
 // Value >= T
