@@ -1713,19 +1713,19 @@ Value& Value::operator=(Value const& rhs)
             assign_null();
             break;
         case Type::boolean:
-            assign_boolean(rhs.as_boolean());
+            assign_boolean(rhs.get_boolean());
             break;
         case Type::number:
-            assign_number(rhs.as_number());
+            assign_number(rhs.get_number());
             break;
         case Type::string:
-            _assign_string(rhs.as_string());
+            _assign_string(rhs.get_string());
             break;
         case Type::array:
-            _assign_array(rhs.as_array());
+            _assign_array(rhs.get_array());
             break;
         case Type::object:
-            _assign_object(rhs.as_object());
+            _assign_object(rhs.get_object());
             break;
         }
     }
@@ -1823,7 +1823,7 @@ bool& Value::assign_boolean(bool v) noexcept
     data_.boolean = v;
     type_ = Type::boolean;
 
-    return as_boolean();
+    return get_boolean();
 }
 
 double& Value::assign_number(double v) noexcept
@@ -1833,7 +1833,7 @@ double& Value::assign_number(double v) noexcept
     data_.number = v;
     type_ = Type::number;
 
-    return as_number();
+    return get_number();
 }
 
 String& Value::assign_string()
@@ -1896,15 +1896,15 @@ bool Value::equal_to(Value const& rhs) const noexcept
     case Type::null:
         return true;
     case Type::boolean:
-        return as_boolean() == rhs.as_boolean();
+        return get_boolean() == rhs.get_boolean();
     case Type::number:
-        return as_number() == rhs.as_number();
+        return get_number() == rhs.get_number();
     case Type::string:
-        return as_string() == rhs.as_string();
+        return get_string() == rhs.get_string();
     case Type::array:
-        return as_array() == rhs.as_array();
+        return get_array() == rhs.get_array();
     case Type::object:
-        return as_object() == rhs.as_object();
+        return get_object() == rhs.get_object();
     default:
         assert(false && "invalid type");
         return {};
@@ -1928,15 +1928,15 @@ bool Value::less_than(Value const& rhs) const noexcept
     case Type::null:
         return false;
     case Type::boolean:
-        return as_boolean() < rhs.as_boolean();
+        return get_boolean() < rhs.get_boolean();
     case Type::number:
-        return as_number() < rhs.as_number();
+        return get_number() < rhs.get_number();
     case Type::string:
-        return as_string() < rhs.as_string();
+        return get_string() < rhs.get_string();
     case Type::array:
-        return as_array() < rhs.as_array();
+        return get_array() < rhs.get_array();
     case Type::object:
-        return as_object() < rhs.as_object();
+        return get_object() < rhs.get_object();
     default:
         assert(false && "invalid type");
         return {};
@@ -1959,15 +1959,15 @@ size_t Value::hash() const noexcept
     case Type::null:
         return 0;
     case Type::boolean:
-        return std::hash<bool>()(as_boolean());
+        return std::hash<bool>()(get_boolean());
     case Type::number:
-        return std::hash<double>()(as_number());
+        return std::hash<double>()(get_number());
     case Type::string:
-        return std::hash<String>()(as_string());
+        return std::hash<String>()(get_string());
     case Type::array:
         {
             size_t h = std::hash<char>()('['); // initial value for empty arrays
-            for (auto const& v : as_array())
+            for (auto const& v : get_array())
             {
                 h = HashCombine(h, v.hash());
             }
@@ -1976,7 +1976,7 @@ size_t Value::hash() const noexcept
     case Type::object:
         {
             size_t h = std::hash<char>()('{'); // initial value for empty objects
-            for (auto const& v : as_object())
+            for (auto const& v : get_object())
             {
                 auto const h1 = std::hash<String>()(v.first);
                 auto const h2 = v.second.hash();
@@ -2007,11 +2007,11 @@ size_t Value::size() const noexcept
         assert(false && "size() must not be called for null, boolean or number");
         return 0;
     case Type::string:
-        return as_string().size();
+        return get_string().size();
     case Type::array:
-        return as_array().size();
+        return get_array().size();
     case Type::object:
-        return as_object().size();
+        return get_object().size();
     default:
         assert(false && "invalid type");
         return {};
@@ -2029,11 +2029,11 @@ bool Value::empty() const noexcept
         assert(false && "empty() must not be called for null, boolean or number");
         return true; // i.e. size() == 0
     case Type::string:
-        return as_string().empty();
+        return get_string().empty();
     case Type::array:
-        return as_array().empty();
+        return get_array().empty();
     case Type::object:
-        return as_object().empty();
+        return get_object().empty();
     default:
         assert(false && "invalid type");
         return {};
@@ -2046,7 +2046,7 @@ Array& Value::_get_or_assign_array()
     if (!is_array()) {
         assign_array();
     }
-    return as_array();
+    return get_array();
 }
 
 Value& Value::operator[](size_t index)
@@ -2062,7 +2062,7 @@ Value& Value::operator[](size_t index)
 
 Value const& Value::operator[](size_t index) const noexcept
 {
-    auto& arr = as_array();
+    auto& arr = get_array();
     if (index < arr.size()) {
         return arr[index];
     }
@@ -2073,7 +2073,7 @@ Value* Value::get_ptr(size_t index)
 {
     if (is_array())
     {
-        auto& arr = as_array();
+        auto& arr = get_array();
         if (index < arr.size()) {
             return &arr[index];
         }
@@ -2085,7 +2085,7 @@ Value const* Value::get_ptr(size_t index) const
 {
     if (is_array())
     {
-        auto& arr = as_array();
+        auto& arr = get_array();
         if (index < arr.size()) {
             return &arr[index];
         }
@@ -2095,12 +2095,12 @@ Value const* Value::get_ptr(size_t index) const
 
 void Value::pop_back()
 {
-    as_array().pop_back();
+    get_array().pop_back();
 }
 
 Value::element_iterator Value::erase(size_t index)
 {
-    auto& arr = as_array();
+    auto& arr = get_array();
     assert(index < arr.size());
     return arr.erase(arr.begin() + static_cast<intptr_t>(index));
 }
@@ -2111,7 +2111,7 @@ Object& Value::_get_or_assign_object()
     if (!is_object()) {
         assign_object();
     }
-    return as_object();
+    return get_object();
 }
 
 Value& Value::operator[](Object::key_type const& key)
@@ -2126,13 +2126,13 @@ Value& Value::operator[](Object::key_type&& key)
 
 Value::item_iterator Value::erase(const_item_iterator pos)
 {
-    auto& obj = as_object();
+    auto& obj = get_object();
     return obj.erase(pos);
 }
 
 Value::item_iterator Value::erase(const_item_iterator first, const_item_iterator last)
 {
-    auto& obj = as_object();
+    auto& obj = get_object();
     return obj.erase(first, last);
 }
 
@@ -2172,7 +2172,7 @@ String& Value::_assign_string(Args&&... args)
         break;
     }
 
-    return as_string();
+    return get_string();
 }
 
 template <typename ...Args>
@@ -2211,7 +2211,7 @@ Array& Value::_assign_array(Args&&... args)
         break;
     }
 
-    return as_array();
+    return get_array();
 }
 
 template <typename ...Args>
@@ -2250,7 +2250,7 @@ Object& Value::_assign_object(Args&&... args)
         break;
     }
 
-    return as_object();
+    return get_object();
 }
 
 bool Value::to_boolean() const noexcept
@@ -2262,14 +2262,14 @@ bool Value::to_boolean() const noexcept
     case Type::null:
         return false;
     case Type::boolean:
-        return as_boolean();
+        return get_boolean();
     case Type::number:
         {
-            auto v = as_number();
+            auto v = get_number();
             return !std::isnan(v) && v != 0.0;
         }
     case Type::string:
-        return !as_string().empty();
+        return !get_string().empty();
     case Type::array:
     case Type::object:
         assert(false && "to_boolean must not be called for arrays or objects");
@@ -2289,12 +2289,12 @@ double Value::to_number() const noexcept
     case Type::null:
         return 0.0;
     case Type::boolean:
-        return as_boolean() ? 1.0 : 0.0;
+        return get_boolean() ? 1.0 : 0.0;
     case Type::number:
-        return as_number();
+        return get_number();
     case Type::string:
         {
-            auto const& v = as_string();
+            auto const& v = get_string();
 #if JSON_HAS_DOUBLE_CONVERSION
             return Strtod(v.c_str(), static_cast<int>(v.size()));
 #else
@@ -2500,16 +2500,16 @@ String Value::to_string() const
     case Type::null:
         return "null";
     case Type::boolean:
-        return as_boolean() ? "true" : "false";
+        return get_boolean() ? "true" : "false";
     case Type::number:
         {
             char buf[32];
             char* first = &buf[0];
-            char* last = Dtoa(first, first + 32, as_number());
+            char* last = Dtoa(first, first + 32, get_number());
             return String(first, last);
         }
     case Type::string:
-        return as_string();
+        return get_string();
     case Type::array:
     case Type::object:
         assert(false && "to_string must not be called for arrays or objects");
@@ -4023,15 +4023,15 @@ static bool StringifyValue(std::string& str, Value const& value, StringifyOption
     case Type::null:
         return StringifyNull(str);
     case Type::boolean:
-        return StringifyBoolean(str, value.as_boolean());
+        return StringifyBoolean(str, value.get_boolean());
     case Type::number:
-        return StringifyNumber(str, value.as_number(), options);
+        return StringifyNumber(str, value.get_number(), options);
     case Type::string:
-        return StringifyString(str, value.as_string(), options);
+        return StringifyString(str, value.get_string(), options);
     case Type::array:
-        return StringifyArray(str, value.as_array(), options, curr_indent);
+        return StringifyArray(str, value.get_array(), options, curr_indent);
     case Type::object:
-        return StringifyObject(str, value.as_object(), options, curr_indent);
+        return StringifyObject(str, value.get_object(), options, curr_indent);
     default:
         assert(false && "invalid type");
         return {};

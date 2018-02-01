@@ -38,62 +38,62 @@ TEST_CASE("Value - implicit constructors")
     {
         json::Value j0 = true;
         CHECK(j0.is_boolean());
-        CHECK(j0.as_boolean() == true);
+        CHECK(j0.get_boolean() == true);
 
         json::Value j1 = false;
         CHECK(j1.is_boolean());
-        CHECK(j1.as_boolean() == false);
+        CHECK(j1.get_boolean() == false);
     }
 
     SECTION("number")
     {
         json::Value j0 = static_cast<signed char>(-1);
         CHECK(j0.is_number());
-        CHECK(j0.as_number() == -1.0);
+        CHECK(j0.get_number() == -1.0);
 
         json::Value j1 = static_cast<signed short>(-1);
         CHECK(j1.is_number());
-        CHECK(j1.as_number() == -1.0);
+        CHECK(j1.get_number() == -1.0);
 
         json::Value j2 = -1;
         CHECK(j2.is_number());
-        CHECK(j2.as_number() == -1.0);
+        CHECK(j2.get_number() == -1.0);
 
         json::Value j3 = -1l; // (warning expected)
         CHECK(j3.is_number());
-        CHECK(j3.as_number() == -1.0);
+        CHECK(j3.get_number() == -1.0);
 
         json::Value j4 = -1ll; // warning expected
         CHECK(j4.is_number());
-        CHECK(j4.as_number() == -1.0);
+        CHECK(j4.get_number() == -1.0);
 
         json::Value j4_1(-1ll); // no warning expected
         CHECK(j4_1.is_number());
-        CHECK(j4_1.as_number() == -1.0);
+        CHECK(j4_1.get_number() == -1.0);
 
         json::Value j5 = static_cast<unsigned char>(1);
         CHECK(j5.is_number());
-        CHECK(j5.as_number() == 1.0);
+        CHECK(j5.get_number() == 1.0);
 
         json::Value j6 = static_cast<unsigned short>(1);
         CHECK(j6.is_number());
-        CHECK(j6.as_number() == 1.0);
+        CHECK(j6.get_number() == 1.0);
 
         json::Value j7 = 1u;
         CHECK(j7.is_number());
-        CHECK(j7.as_number() == 1.0);
+        CHECK(j7.get_number() == 1.0);
 
         json::Value j8 = 1ul; // (warning expected)
         CHECK(j8.is_number());
-        CHECK(j8.as_number() == 1.0);
+        CHECK(j8.get_number() == 1.0);
 
         json::Value j9 = 1ull; // warning expected
         CHECK(j9.is_number());
-        CHECK(j9.as_number() == 1.0);
+        CHECK(j9.get_number() == 1.0);
 
         json::Value j10 = 1.2;
         CHECK(j10.is_number());
-        CHECK(j10.as_number() == 1.2);
+        CHECK(j10.get_number() == 1.2);
 
 #if JSON_VALUE_HAS_EXPLICIT_OPERATOR_T
         int i0 = static_cast<int>(j10); // warning expected (double -> int)
@@ -113,14 +113,14 @@ TEST_CASE("Value - implicit constructors")
 
         json::Value j11 = 1.234f;
         CHECK(j11.is_number());
-        CHECK(j11.as_number() == static_cast<double>(1.234f));
+        CHECK(j11.get_number() == static_cast<double>(1.234f));
     }
 
     SECTION("string")
     {
         json::Value j0 = std::string("hello");
         CHECK(j0.is_string());
-        CHECK(j0.as_string() == "hello");
+        CHECK(j0.get_string() == "hello");
 #if 0
         // Should not compile!
         auto s0 = std::move(j1).cast<char const*>();
@@ -132,7 +132,7 @@ TEST_CASE("Value - implicit constructors")
 
         json::Value j1 = "hello";
         CHECK(j1.is_string());
-        CHECK(j1.as_string() == "hello");
+        CHECK(j1.get_string() == "hello");
 
         //auto s1 = j1.to<char const*>();
         //CHECK(s1 == std::string("hello"));
@@ -141,15 +141,15 @@ TEST_CASE("Value - implicit constructors")
 
         json::Value j2 = const_cast<char*>("hello");
         CHECK(j2.is_string());
-        CHECK(j2.as_string() == "hello");
+        CHECK(j2.get_string() == "hello");
 
         json::Value j3 = "hello";
         CHECK(j3.is_string());
-        CHECK(j3.as_string() == "hello");
+        CHECK(j3.get_string() == "hello");
 
         //json::Value j4 = cxx::string_view("hello");
         //CHECK(j4.is_string());
-        //CHECK(j4.as_string() == "hello");
+        //CHECK(j4.get_string() == "hello");
 
         //auto s3 = j4.to<char*>();
         //CHECK(s3 == std::string("hello"));
@@ -239,40 +239,40 @@ TEST_CASE("Parse")
     json::parse(val, input.data(), input.data() + input.size());
 
     CHECK(val.is_object());
-    CHECK(val.as_object().size() == 5);
+    CHECK(val.get_object().size() == 5);
     CHECK(val.size() == 5);
     CHECK(val.has_member("FirstName"));
     CHECK(val["FirstName"].is_string());
-    CHECK(val["FirstName"].as_string().size() == 4);
-    CHECK(val["FirstName"].as_string() == "John");
+    CHECK(val["FirstName"].get_string().size() == 4);
+    CHECK(val["FirstName"].get_string() == "John");
     CHECK(val["FirstName"].size() == 4);
     CHECK(val["FirstName"] == "John");
     CHECK(val.has_member("LastName"));
     CHECK(val["LastName"].is_string());
-    CHECK(val["LastName"].as_string().size() == 3);
-    CHECK(val["LastName"].as_string() == "Doe");
+    CHECK(val["LastName"].get_string().size() == 3);
+    CHECK(val["LastName"].get_string() == "Doe");
     CHECK(val["LastName"].size() == 3);
     CHECK(val["LastName"] == "Doe");
     CHECK(val.has_member("Age"));
     CHECK(val["Age"].is_number());
-    CHECK(val["Age"].as_number() == 43);
+    CHECK(val["Age"].get_number() == 43);
     CHECK(val["Age"] == 43);
     CHECK(43 == val["Age"]);
     CHECK(val["Age"] < 44);
     CHECK(42 < val["Age"]);
     CHECK(val.has_member("Address"));
     CHECK(val["Address"].is_object());
-    CHECK(val["Address"].as_object().size() == 3);
+    CHECK(val["Address"].get_object().size() == 3);
     CHECK(val["Address"].size() == 3);
     CHECK(val["Address"].has_member("Street"));
     CHECK(val["Address"]["Street"].is_string());
-    CHECK(val["Address"]["Street"].as_string().size() == 19);
-    CHECK(val["Address"]["Street"].as_string() == "Downing \"Street\" 10");
+    CHECK(val["Address"]["Street"].get_string().size() == 19);
+    CHECK(val["Address"]["Street"].get_string() == "Downing \"Street\" 10");
     CHECK(val["Address"]["Street"].size() == 19);
     CHECK(val["Address"]["Street"] == "Downing \"Street\" 10");
     CHECK(val.has_member("Phone numbers"));
     CHECK(val["Phone numbers"].is_array());
-    CHECK(val["Phone numbers"].as_array().size() == 2);
+    CHECK(val["Phone numbers"].get_array().size() == 2);
     CHECK(val["Phone numbers"][0].is_string());
     CHECK(val["Phone numbers"][0] == "+44 1234567");
     CHECK(val["Phone numbers"][1].is_string());
@@ -349,13 +349,13 @@ TEST_CASE("arrays")
         REQUIRE(j.is_array());
         REQUIRE(j.size() == 4);
         REQUIRE(j[0].is_number());
-        REQUIRE(j[0].as_number() == 1);
+        REQUIRE(j[0].get_number() == 1);
         REQUIRE(j[1].is_string());
-        REQUIRE(j[1].as_string() == "two");
+        REQUIRE(j[1].get_string() == "two");
         REQUIRE(j[2].is_number());
-        REQUIRE(j[2].as_number() == 3.3);
+        REQUIRE(j[2].get_number() == 3.3);
         REQUIRE(j[3].is_boolean());
-        REQUIRE(j[3].as_boolean() == true);
+        REQUIRE(j[3].get_boolean() == true);
     }
 
     SECTION("std::list")
@@ -365,13 +365,13 @@ TEST_CASE("arrays")
         REQUIRE(j.is_array());
         REQUIRE(j.size() == 4);
         REQUIRE(j[0].is_number());
-        REQUIRE(j[0].as_number() == 1);
+        REQUIRE(j[0].get_number() == 1);
         REQUIRE(j[1].is_string());
-        REQUIRE(j[1].as_string() == "two");
+        REQUIRE(j[1].get_string() == "two");
         REQUIRE(j[2].is_number());
-        REQUIRE(j[2].as_number() == 3.3);
+        REQUIRE(j[2].get_number() == 3.3);
         REQUIRE(j[3].is_boolean());
-        REQUIRE(j[3].as_boolean() == true);
+        REQUIRE(j[3].get_boolean() == true);
     }
 
     SECTION("std::forward_list")
@@ -381,13 +381,13 @@ TEST_CASE("arrays")
         REQUIRE(j.is_array());
         REQUIRE(j.size() == 4);
         REQUIRE(j[0].is_number());
-        REQUIRE(j[0].as_number() == 1);
+        REQUIRE(j[0].get_number() == 1);
         REQUIRE(j[1].is_string());
-        REQUIRE(j[1].as_string() == "two");
+        REQUIRE(j[1].get_string() == "two");
         REQUIRE(j[2].is_number());
-        REQUIRE(j[2].as_number() == 3.3);
+        REQUIRE(j[2].get_number() == 3.3);
         REQUIRE(j[3].is_boolean());
-        REQUIRE(j[3].as_boolean() == true);
+        REQUIRE(j[3].get_boolean() == true);
     }
 
     SECTION("std::set")
@@ -398,13 +398,13 @@ TEST_CASE("arrays")
         REQUIRE(j.size() == 4);
         // bool < number < string
         REQUIRE(j[0].is_boolean());
-        REQUIRE(j[0].as_boolean() == true);
+        REQUIRE(j[0].get_boolean() == true);
         REQUIRE(j[1].is_number());
-        REQUIRE(j[1].as_number() == 1);
+        REQUIRE(j[1].get_number() == 1);
         REQUIRE(j[2].is_number());
-        REQUIRE(j[2].as_number() == 3.3);
+        REQUIRE(j[2].get_number() == 3.3);
         REQUIRE(j[3].is_string());
-        REQUIRE(j[3].as_string() == "two");
+        REQUIRE(j[3].get_string() == "two");
     }
 }
 
@@ -418,7 +418,7 @@ namespace json
         using tag = Tag_array;
         template <typename V> static decltype(auto) to_json(V&&) { return Array(); }
         template <typename V> static decltype(auto) from_json(V&& in) {
-            assert(in.as_array().empty());
+            assert(in.get_array().empty());
             static_cast<void>(in); // may be unused
             return std::tuple<>{};
         }
@@ -434,8 +434,8 @@ namespace json
         }
         template <typename V> static decltype(auto) from_json(V&& in) // V = Value [const&]
         {
-            assert(in.as_array().size() == 1 + sizeof...(Tn));
-            auto I = std::make_move_iterator(in.as_array().begin()); // Does _not_ move for V = Value const&
+            assert(in.get_array().size() == 1 + sizeof...(Tn));
+            auto I = std::make_move_iterator(in.get_array().begin()); // Does _not_ move for V = Value const&
             return std::tuple<T1, Tn...>{json::cast<T1>(*I), json::cast<Tn>(*++I)...};
         }
     };
@@ -487,14 +487,14 @@ TEST_CASE("tuple")
         REQUIRE(std::get<0>(t1) == 2.34);
         REQUIRE(std::get<1>(t1) == "hello hello hello hello hello hello hello hello ");
         REQUIRE(j[1].is_string());
-        REQUIRE(j[1].as_string() == "hello hello hello hello hello hello hello hello ");
+        REQUIRE(j[1].get_string() == "hello hello hello hello hello hello hello hello ");
 
         auto t2 = json::cast<Tup>(std::move(j));
         REQUIRE(std::get<0>(t2) == 2.34);
         REQUIRE(std::get<1>(t2) == "hello hello hello hello hello hello hello hello ");
 #if 0//_MSC_VER // These tests probably work... XXX: Add a test type which has a distinguished moved-from state...
         REQUIRE(j[1].is_string());
-        REQUIRE(j[1].as_string().empty());
+        REQUIRE(j[1].get_string().empty());
 #endif
     }
 }
@@ -525,8 +525,8 @@ namespace json
         }
         static decltype(auto) from_json(Value const& in) {
             Point out;
-            out.x = in["x"].as_number();
-            out.y = in["y"].as_number();
+            out.x = in["x"].get_number();
+            out.y = in["y"].get_number();
             return out;
         }
     };
@@ -680,14 +680,14 @@ TEST_CASE("optional")
 
         json::Value j1 = oi1;
         CHECK(j1.is_number());
-        CHECK(j1.as_number() == 123);
+        CHECK(j1.get_number() == 123);
     }
 
     SECTION("Value -> optional")
     {
         json::Value j0 = 123;
         CHECK(j0.is_number());
-        CHECK(j0.as_number() == 123);
+        CHECK(j0.get_number() == 123);
 
         auto oi0 = j0.as<std::optional<int>>(); // warning expected -- XXX: need a way to silence this warning...
         CHECK(oi0.has_value());
@@ -702,7 +702,7 @@ TEST_CASE("optional")
         // The implicit constructor then calls 'explicit operator T' (not 'explicit operator std::optional<T>').
 
         // This works,
-        // since Value's 'explicit operator int' is called, which calls as_number() and j0 actually contains a number.
+        // since Value's 'explicit operator int' is called, which calls get_number() and j0 actually contains a number.
         auto oi4 = std::optional<int>(j0); // warning expected
         CHECK(oi4.has_value());
         CHECK(oi4.value() == 123);
@@ -1275,9 +1275,9 @@ TEST_CASE("Parse_string")
         auto const res1 = json::parse(val1, test.inp.data(), test.inp.data() + test.inp.size());
         CHECK(res1.ec == json::ErrorCode::success);
         CHECK(val1.is_array());
-        CHECK(val1.as_array().size() == 1);
+        CHECK(val1.get_array().size() == 1);
         CHECK(val1[0].is_string());
-        CHECK(val1[0].as_string() == test.expected);
+        CHECK(val1[0].get_string() == test.expected);
 
         std::string s;
         auto const str_ok = json::stringify(s, val1);
@@ -1287,9 +1287,9 @@ TEST_CASE("Parse_string")
         auto const res2 = json::parse(val2, s.data(), s.data() + s.size());
         CHECK(res2.ec == json::ErrorCode::success);
         CHECK(val2.is_array());
-        CHECK(val2.as_array().size() == 1);
+        CHECK(val2.get_array().size() == 1);
         CHECK(val2[0].is_string());
-        CHECK(val2[0].as_string() == test.expected);
+        CHECK(val2[0].get_string() == test.expected);
     }
 }
 
@@ -1471,7 +1471,7 @@ TEST_CASE("Conversion")
         j4 = "1.0";
         CHECK(1.0 == j4.to_number());
         j4 = j4.to_number();
-        CHECK(1.0 == j4.as_number());
+        CHECK(1.0 == j4.get_number());
         copy = j4;
         CHECK(copy == j4);
         CHECK(!(copy != j4));
@@ -1488,7 +1488,7 @@ TEST_CASE("Conversion")
         json::Value j1(json::Type::null);
         CHECK("null" == j1.to_string());
         j1 = j1.to_string();
-        CHECK("null" == j1.as_string());
+        CHECK("null" == j1.get_string());
         copy = j1;
         CHECK(copy == j1);
         CHECK(!(copy != j1));
@@ -1502,7 +1502,7 @@ TEST_CASE("Conversion")
         j2 = true;
         CHECK("true" == j2.to_string());
         j2 = j2.to_string();
-        CHECK("true" == j2.as_string());
+        CHECK("true" == j2.get_string());
         copy = j2;
         CHECK(copy == j2);
         CHECK(!(copy != j2));
@@ -1516,7 +1516,7 @@ TEST_CASE("Conversion")
         j3 = 1.0;
         CHECK("1.0" == j3.to_string());
         j3 = j3.to_string();
-        CHECK("1.0" == j3.as_string());
+        CHECK("1.0" == j3.get_string());
         copy = j3;
         CHECK(copy == j3);
         CHECK(!(copy != j3));
@@ -1530,7 +1530,7 @@ TEST_CASE("Conversion")
         j4 = "hello";
         CHECK("hello" == j4.to_string());
         j4 = j4.to_string();
-        CHECK("hello" == j4.as_string());
+        CHECK("hello" == j4.get_string());
         copy = j4;
         CHECK(copy == j4);
         CHECK(!(copy != j4));
@@ -1839,14 +1839,14 @@ TEST_CASE("Value - array op")
 
     j.push_back(1);
     CHECK(j.is_array());
-    CHECK(j.as_array().size() == 1);
+    CHECK(j.get_array().size() == 1);
     CHECK(j[0].is_number());
     CHECK(j[0] == 1);
 
     j.push_back(2);
     j.push_back(3);
     CHECK(j.is_array());
-    CHECK(j.as_array().size() == 3);
+    CHECK(j.get_array().size() == 3);
     CHECK(j[0].is_number());
     CHECK(j[0] == 1);
     CHECK(j[1].is_number());
@@ -1856,7 +1856,7 @@ TEST_CASE("Value - array op")
 
     j.pop_back();
     CHECK(j.is_array());
-    CHECK(j.as_array().size() == 2);
+    CHECK(j.get_array().size() == 2);
     CHECK(j[0].is_number());
     CHECK(j[0] == 1);
     CHECK(j[1].is_number());
@@ -1881,15 +1881,15 @@ TEST_CASE("Value - array op")
     CHECK(j.is_array());
     CHECK(j.size() == 2);
     CHECK(j[0].is_number());
-    CHECK(j[0].as_number() == 2);
+    CHECK(j[0].get_number() == 2);
     CHECK(j[0] == 2);
     CHECK(j[1].is_string());
     CHECK(j[1].size() == 5);
-    CHECK(j[1].as_string() == "Hello");
+    CHECK(j[1].get_string() == "Hello");
     CHECK(j[1] == "Hello");
 
     CHECK(j2.is_array());
-    CHECK(j2.as_array().size() == 3);
+    CHECK(j2.get_array().size() == 3);
     CHECK(j2.size() == 3);
     CHECK(j2[0].is_number());
     CHECK(j2[0] == 1);
@@ -1906,7 +1906,7 @@ TEST_CASE("Value - array op")
     CHECK(j2.get_ptr(2)->is_string());
     CHECK(*j2.get_ptr(0) == 1);
     CHECK(*j2.get_ptr(1) == 2);
-    CHECK((*j2.get_ptr(2)).as_string() == "Hello");
+    CHECK((*j2.get_ptr(2)).get_string() == "Hello");
 }
 
 TEST_CASE("Value - object op")
@@ -1919,7 +1919,7 @@ TEST_CASE("Value - object op")
     CHECK(j.size() == 1);
     CHECK(j.has_member("eins"));
     CHECK(j["eins"].is_number());
-    CHECK(j["eins"].as_number() == 1);
+    CHECK(j["eins"].get_number() == 1);
     CHECK(j["eins"] == 1);
 
     j["zwei"] = "zwei";
@@ -1928,7 +1928,7 @@ TEST_CASE("Value - object op")
     CHECK(j.has_member("zwei"));
     CHECK(j.get_ptr("zwei") != nullptr);
     CHECK(j.get_ptr("zwei")->is_string());
-    CHECK(j.get_ptr("zwei")->as_string() == "zwei");
+    CHECK(j.get_ptr("zwei")->get_string() == "zwei");
     CHECK(*j.get_ptr("zwei") == "zwei");
 
     j.emplace("drei", 333);
@@ -1937,7 +1937,7 @@ TEST_CASE("Value - object op")
     CHECK(j.has_member("drei"));
     CHECK(j["drei"].is_number());
     CHECK(j.get_ptr("drei") != nullptr);
-    CHECK(j.get_ptr("drei")->as_number() == 333);
+    CHECK(j.get_ptr("drei")->get_number() == 333);
     CHECK(*j.get_ptr("drei") == 333);
 
     const auto j3 = j;
@@ -1974,15 +1974,15 @@ TEST_CASE("Value - object op")
     CHECK(j3.has_member("zwei"));
     CHECK(j3.has_member("drei"));
     CHECK(j3["eins"].is_number());
-    CHECK(j3["eins"].as_number() == 1);
+    CHECK(j3["eins"].get_number() == 1);
     CHECK(j3["eins"] == 1);
     CHECK(j3.get_ptr("zwei") != nullptr);
     CHECK(j3.get_ptr("zwei")->is_string());
-    CHECK(j3.get_ptr("zwei")->as_string() == "zwei");
+    CHECK(j3.get_ptr("zwei")->get_string() == "zwei");
     CHECK(*j3.get_ptr("zwei") == "zwei");
     CHECK(j3["drei"].is_number());
     CHECK(j3.get_ptr("drei") != nullptr);
-    CHECK(j3.get_ptr("drei")->as_number() == 333);
+    CHECK(j3.get_ptr("drei")->get_number() == 333);
     CHECK(*j3.get_ptr("drei") == 333);
     CHECK(j3.get_ptr("Zwei") == nullptr);
 }

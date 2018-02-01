@@ -95,37 +95,37 @@ struct DefaultTraits_null {
 struct DefaultTraits_boolean {
     using tag = Tag_boolean;
     template <typename V> static decltype(auto) to_json(V&& in) { return std::forward<V>(in); }
-    template <typename V> static decltype(auto) from_json(V&& in) { return std::forward<V>(in).as_boolean(); }
+    template <typename V> static decltype(auto) from_json(V&& in) { return std::forward<V>(in).get_boolean(); }
 };
 
 struct DefaultTraits_float {
     using tag = Tag_number;
     template <typename V> static decltype(auto) to_json(V&& in) { return std::forward<V>(in); }
-    template <typename V> static decltype(auto) from_json(V&& in) { return std::forward<V>(in).as_number(); }
+    template <typename V> static decltype(auto) from_json(V&& in) { return std::forward<V>(in).get_number(); }
 };
 
 struct DefaultTraits_int {
     using tag = Tag_number;
     template <typename V> static decltype(auto) to_json(V&& in) { return std::forward<V>(in); }
-    template <typename V> static decltype(auto) from_json(V&& in) { return std::forward<V>(in).as_number(); }
+    template <typename V> static decltype(auto) from_json(V&& in) { return std::forward<V>(in).get_number(); }
 };
 
 struct DefaultTraits_string {
     using tag = Tag_string;
     template <typename V> static decltype(auto) to_json(V&& in) { return std::forward<V>(in); }
-    template <typename V> static decltype(auto) from_json(V&& in) { return std::forward<V>(in).as_string(); }
+    template <typename V> static decltype(auto) from_json(V&& in) { return std::forward<V>(in).get_string(); }
 };
 
 struct DefaultTraits_array {
     using tag = Tag_array;
     template <typename V> static decltype(auto) to_json(V&& in) { return std::forward<V>(in); }
-    template <typename V> static decltype(auto) from_json(V&& in) { return std::forward<V>(in).as_array(); }
+    template <typename V> static decltype(auto) from_json(V&& in) { return std::forward<V>(in).get_array(); }
 };
 
 struct DefaultTraits_object {
     using tag = Tag_object;
     template <typename V> static decltype(auto) to_json(V&& in) { return std::forward<V>(in); }
-    template <typename V> static decltype(auto) from_json(V&& in) { return std::forward<V>(in).as_object(); }
+    template <typename V> static decltype(auto) from_json(V&& in) { return std::forward<V>(in).get_object(); }
 };
 
 template <typename T>
@@ -162,7 +162,7 @@ struct DefaultTraits<char const*>
     template <typename V> static decltype(auto) from_json(V&& in)
     {
         static_assert(std::is_lvalue_reference<V>::value, "Dangling pointer");
-        return in.as_string().c_str();
+        return in.get_string().c_str();
     }
 #endif
 };
@@ -179,11 +179,11 @@ struct DefaultTraits<char*>
     {
 #if __cplusplus >= 201703 || (_MSC_VER >= 1910 && _HAS_CXX17)
         static_assert(std::is_lvalue_reference<V>::value, "Dangling pointer");
-        return in.as_string().data(); // works since C++17
+        return in.get_string().data(); // works since C++17
 #else
 #if 0
         static_assert(std::is_lvalue_reference<V>::value, "Dangling pointer");
-        return in.as_string().empty() ? static_cast<char*>(nullptr) : &in.as_string()[0];
+        return in.get_string().empty() ? static_cast<char*>(nullptr) : &in.get_string()[0];
 #else
         static_assert(AlwaysFalse<V>::value, "Unsupported conversion");
         return static_cast<char*>(nullptr);
@@ -202,7 +202,7 @@ struct DefaultTraits<cxx::string_view>
     template <typename V> static decltype(auto) from_json(V&& in)
     {
         static_assert(std::is_lvalue_reference<V>::value, "Dangling pointer");
-        return cxx::string_view(in.as_string());
+        return cxx::string_view(in.get_string());
     }
 };
 #endif
@@ -221,9 +221,9 @@ struct DefaultTraits_any_array
     {
         T out;
 
-        out.reserve(in.as_array().size());
+        out.reserve(in.get_array().size());
 
-        for (auto&& p : in.as_array()) {
+        for (auto&& p : in.get_array()) {
             out.emplace_back(p.template as<typename T::value_type>());
         }
 
@@ -505,91 +505,91 @@ public:
     // get_X returns a reference to the value of type X stored in this JSON object.
     // PRE: is_X() == true
 
-    bool& as_boolean() & noexcept
+    bool& get_boolean() & noexcept
     {
         assert(is_boolean());
         return data_.boolean;
     }
 
-    bool const& as_boolean() const& noexcept
+    bool const& get_boolean() const& noexcept
     {
         assert(is_boolean());
         return data_.boolean;
     }
 
-    bool as_boolean() && noexcept
+    bool get_boolean() && noexcept
     {
         assert(is_boolean());
         return data_.boolean;
     }
 
-    double& as_number() & noexcept
+    double& get_number() & noexcept
     {
         assert(is_number());
         return data_.number;
     }
 
-    double const& as_number() const& noexcept
+    double const& get_number() const& noexcept
     {
         assert(is_number());
         return data_.number;
     }
 
-    double as_number() && noexcept
+    double get_number() && noexcept
     {
         assert(is_number());
         return data_.number;
     }
 
-    String& as_string() & noexcept
+    String& get_string() & noexcept
     {
         assert(is_string());
         return *data_.string;
     }
 
-    String const& as_string() const& noexcept
+    String const& get_string() const& noexcept
     {
         assert(is_string());
         return *data_.string;
     }
 
-    String as_string() && noexcept
+    String get_string() && noexcept
     {
         assert(is_string());
         return std::move(*data_.string);
     }
 
-    Array& as_array() & noexcept
+    Array& get_array() & noexcept
     {
         assert(is_array());
         return *data_.array;
     }
 
-    Array const& as_array() const& noexcept
+    Array const& get_array() const& noexcept
     {
         assert(is_array());
         return *data_.array;
     }
 
-    Array as_array() && noexcept
+    Array get_array() && noexcept
     {
         assert(is_array());
         return std::move(*data_.array);
     }
 
-    Object& as_object() & noexcept
+    Object& get_object() & noexcept
     {
         assert(is_object());
         return *data_.object;
     }
 
-    Object const& as_object() const& noexcept
+    Object const& get_object() const& noexcept
     {
         assert(is_object());
         return *data_.object;
     }
 
-    Object as_object() && noexcept
+    Object get_object() && noexcept
     {
         assert(is_object());
         return std::move(*data_.object);
@@ -670,10 +670,10 @@ public:
     using element_iterator       = Array::iterator;
     using const_element_iterator = Array::const_iterator;
 
-    element_iterator       elements_begin()      & { return as_array().begin(); }
-    element_iterator       elements_end()        & { return as_array().end();   }
-    const_element_iterator elements_begin() const& { return as_array().begin(); }
-    const_element_iterator elements_end()   const& { return as_array().end();   }
+    element_iterator       elements_begin()      & { return get_array().begin(); }
+    element_iterator       elements_end()        & { return get_array().end();   }
+    const_element_iterator elements_begin() const& { return get_array().begin(); }
+    const_element_iterator elements_end()   const& { return get_array().end();   }
 
     template <typename It>
     struct ItRange {
@@ -744,10 +744,10 @@ public:
     using item_iterator       = Object::iterator;
     using const_item_iterator = Object::const_iterator;
 
-    item_iterator       items_begin()      & { return as_object().begin(); }
-    item_iterator       items_end()        & { return as_object().end();   }
-    const_item_iterator items_begin() const& { return as_object().begin(); }
-    const_item_iterator items_end()   const& { return as_object().end();   }
+    item_iterator       items_begin()      & { return get_object().begin(); }
+    item_iterator       items_end()        & { return get_object().end();   }
+    const_item_iterator items_begin() const& { return get_object().begin(); }
+    const_item_iterator items_end()   const& { return get_object().end();   }
 
     ItRange<item_iterator>       items()      &  { return {items_begin(), items_end()}; }
     ItRange<const_item_iterator> items() const&  { return {items_begin(), items_end()}; }
@@ -882,7 +882,7 @@ public:
     template <typename T, typename = EnableIfIsKey<T>>
     Value const& operator[](T&& key) const noexcept
     {
-        auto&& obj = as_object();
+        auto&& obj = get_object();
         auto it = obj.find(std::forward<T>(key));
         if (it != obj.end()) {
             return it->second;
@@ -896,7 +896,7 @@ public:
     Value* get_ptr(T&& key)
     {
         if (is_object()) {
-            auto&& obj = as_object();
+            auto&& obj = get_object();
             auto it = obj.find(std::forward<T>(key));
             if (it != obj.end()) {
                 return &it->second;
@@ -911,7 +911,7 @@ public:
     Value const* get_ptr(T&& key) const
     {
         if (is_object()) {
-            auto&& obj = as_object();
+            auto&& obj = get_object();
             auto it = obj.find(std::forward<T>(key));
             if (it != obj.end()) {
                 return &it->second;
@@ -945,7 +945,7 @@ public:
     template <typename T, typename = EnableIfIsKey<T>>
     size_t erase(T&& key)
     {
-        return as_object().erase(std::forward<T>(key));
+        return get_object().erase(std::forward<T>(key));
     }
 
     // Erase the the given key.
@@ -1026,25 +1026,25 @@ inline bool operator<=(Value const& lhs, Value const& rhs) noexcept
 namespace impl
 {
     template <typename T> bool CmpEQ(Value const& lhs, T const&,     Tag_null   ) noexcept { return lhs.is_null(); }
-    template <typename T> bool CmpEQ(Value const& lhs, T const& rhs, Tag_boolean) noexcept { return lhs.type() == Type::boolean && lhs.as_boolean() == rhs; }
-    template <typename T> bool CmpEQ(Value const& lhs, T const& rhs, Tag_number ) noexcept { return lhs.type() == Type::number  && lhs.as_number () == rhs; }
-    template <typename T> bool CmpEQ(Value const& lhs, T const& rhs, Tag_string ) noexcept { return lhs.type() == Type::string  && lhs.as_string () == rhs; }
-    template <typename T> bool CmpEQ(Value const& lhs, T const& rhs, Tag_array  ) noexcept { return lhs.type() == Type::array   && lhs.as_array  () == rhs; }
-    template <typename T> bool CmpEQ(Value const& lhs, T const& rhs, Tag_object ) noexcept { return lhs.type() == Type::object  && lhs.as_object () == rhs; }
+    template <typename T> bool CmpEQ(Value const& lhs, T const& rhs, Tag_boolean) noexcept { return lhs.type() == Type::boolean && lhs.get_boolean() == rhs; }
+    template <typename T> bool CmpEQ(Value const& lhs, T const& rhs, Tag_number ) noexcept { return lhs.type() == Type::number  && lhs.get_number () == rhs; }
+    template <typename T> bool CmpEQ(Value const& lhs, T const& rhs, Tag_string ) noexcept { return lhs.type() == Type::string  && lhs.get_string () == rhs; }
+    template <typename T> bool CmpEQ(Value const& lhs, T const& rhs, Tag_array  ) noexcept { return lhs.type() == Type::array   && lhs.get_array  () == rhs; }
+    template <typename T> bool CmpEQ(Value const& lhs, T const& rhs, Tag_object ) noexcept { return lhs.type() == Type::object  && lhs.get_object () == rhs; }
 
     template <typename T> bool CmpLT(Value const&,     T const&,     Tag_null   ) noexcept { return false; } // type < null || (type == null && nullptr < nullptr)
-    template <typename T> bool CmpLT(Value const& lhs, T const& rhs, Tag_boolean) noexcept { return lhs.type() < Type::boolean || (lhs.type() == Type::boolean && lhs.as_boolean() < rhs); }
-    template <typename T> bool CmpLT(Value const& lhs, T const& rhs, Tag_number ) noexcept { return lhs.type() < Type::number  || (lhs.type() == Type::number  && lhs.as_number () < rhs); }
-    template <typename T> bool CmpLT(Value const& lhs, T const& rhs, Tag_string ) noexcept { return lhs.type() < Type::string  || (lhs.type() == Type::string  && lhs.as_string () < rhs); }
-    template <typename T> bool CmpLT(Value const& lhs, T const& rhs, Tag_array  ) noexcept { return lhs.type() < Type::array   || (lhs.type() == Type::array   && lhs.as_array  () < rhs); }
-    template <typename T> bool CmpLT(Value const& lhs, T const& rhs, Tag_object ) noexcept { return lhs.type() < Type::object  || (lhs.type() == Type::object  && lhs.as_object () < rhs); }
+    template <typename T> bool CmpLT(Value const& lhs, T const& rhs, Tag_boolean) noexcept { return lhs.type() < Type::boolean || (lhs.type() == Type::boolean && lhs.get_boolean() < rhs); }
+    template <typename T> bool CmpLT(Value const& lhs, T const& rhs, Tag_number ) noexcept { return lhs.type() < Type::number  || (lhs.type() == Type::number  && lhs.get_number () < rhs); }
+    template <typename T> bool CmpLT(Value const& lhs, T const& rhs, Tag_string ) noexcept { return lhs.type() < Type::string  || (lhs.type() == Type::string  && lhs.get_string () < rhs); }
+    template <typename T> bool CmpLT(Value const& lhs, T const& rhs, Tag_array  ) noexcept { return lhs.type() < Type::array   || (lhs.type() == Type::array   && lhs.get_array  () < rhs); }
+    template <typename T> bool CmpLT(Value const& lhs, T const& rhs, Tag_object ) noexcept { return lhs.type() < Type::object  || (lhs.type() == Type::object  && lhs.get_object () < rhs); }
 
     template <typename T> bool CmpGT(Value const& lhs, T const&,     Tag_null   ) noexcept { return !lhs.is_null(); } // null < type || (null == type && nullptr < nullptr)
-    template <typename T> bool CmpGT(Value const& lhs, T const& rhs, Tag_boolean) noexcept { return Type::boolean < lhs.type() || (Type::boolean == lhs.type() && rhs < lhs.as_boolean()); }
-    template <typename T> bool CmpGT(Value const& lhs, T const& rhs, Tag_number ) noexcept { return Type::number  < lhs.type() || (Type::number  == lhs.type() && rhs < lhs.as_number ()); }
-    template <typename T> bool CmpGT(Value const& lhs, T const& rhs, Tag_string ) noexcept { return Type::string  < lhs.type() || (Type::string  == lhs.type() && rhs < lhs.as_string ()); }
-    template <typename T> bool CmpGT(Value const& lhs, T const& rhs, Tag_array  ) noexcept { return Type::array   < lhs.type() || (Type::array   == lhs.type() && rhs < lhs.as_array  ()); }
-    template <typename T> bool CmpGT(Value const& lhs, T const& rhs, Tag_object ) noexcept { return Type::object  < lhs.type() || (Type::object  == lhs.type() && rhs < lhs.as_object ()); }
+    template <typename T> bool CmpGT(Value const& lhs, T const& rhs, Tag_boolean) noexcept { return Type::boolean < lhs.type() || (Type::boolean == lhs.type() && rhs < lhs.get_boolean()); }
+    template <typename T> bool CmpGT(Value const& lhs, T const& rhs, Tag_number ) noexcept { return Type::number  < lhs.type() || (Type::number  == lhs.type() && rhs < lhs.get_number ()); }
+    template <typename T> bool CmpGT(Value const& lhs, T const& rhs, Tag_string ) noexcept { return Type::string  < lhs.type() || (Type::string  == lhs.type() && rhs < lhs.get_string ()); }
+    template <typename T> bool CmpGT(Value const& lhs, T const& rhs, Tag_array  ) noexcept { return Type::array   < lhs.type() || (Type::array   == lhs.type() && rhs < lhs.get_array  ()); }
+    template <typename T> bool CmpGT(Value const& lhs, T const& rhs, Tag_object ) noexcept { return Type::object  < lhs.type() || (Type::object  == lhs.type() && rhs < lhs.get_object ()); }
 }
 
 // Value == T
