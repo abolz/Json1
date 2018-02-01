@@ -2332,8 +2332,8 @@ double Value::to_integer() const noexcept
 // such that abs(k) < abs(y) and x-k = q * y for some integer q.
 static double Modulo(double x, double y)
 {
-    // XXX:
-    // fmod might return NaN...
+    assert(std::isfinite(x));
+    assert(std::isfinite(y) && y > 0.0);
 
     double m = std::fmod(x, y);
     if (m < 0.0) {
