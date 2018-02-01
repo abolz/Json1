@@ -131,17 +131,6 @@ struct DefaultTraits_object {
 template <typename T>
 struct DefaultTraits
 {
-    struct NotConvertible {};
-
-    using tag = Tag_null;
-    template <typename V> static NotConvertible to_json(V&&) {
-        static_assert(impl::AlwaysFalse<T>::value, "Converting objects of type T to JSON is not supported. Implement Traits<T>::to_json.");
-        return {};
-    }
-    template <typename V> static NotConvertible from_json(V&&) {
-        static_assert(impl::AlwaysFalse<T>::value, "Converting JSON to objects of type T is not supported. Implement Traits<T>::from_json.");
-        return {};
-    }
 };
 
 template <> struct DefaultTraits<std::nullptr_t    > : DefaultTraits_null    {};
