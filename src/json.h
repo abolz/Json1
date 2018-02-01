@@ -882,10 +882,12 @@ public:
     template <typename T, typename = EnableIfIsKey<T>>
     Value const& operator[](T&& key) const noexcept
     {
-        auto&& obj = get_object();
-        auto it = obj.find(std::forward<T>(key));
-        if (it != obj.end()) {
-            return it->second;
+        if (is_object()) {
+            auto&& obj = get_object();
+            auto it = obj.find(std::forward<T>(key));
+            if (it != obj.end()) {
+                return it->second;
+            }
         }
         return kUndefined;
     }

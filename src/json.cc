@@ -2062,9 +2062,12 @@ Value& Value::operator[](size_t index)
 
 Value const& Value::operator[](size_t index) const noexcept
 {
-    auto& arr = get_array();
-    if (index < arr.size()) {
-        return arr[index];
+    if (is_array())
+    {
+        auto& arr = get_array();
+        if (index < arr.size()) {
+            return arr[index];
+        }
     }
     return kUndefined;
 }

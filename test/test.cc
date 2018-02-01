@@ -2100,3 +2100,61 @@ TEST_CASE("as")
     //j.as<int>() = 3;
     auto x = j.as<int>();
 }
+
+TEST_CASE("undefined")
+{
+    SECTION("array 1")
+    {
+        const json::Value j{};
+        const auto& x1 = j[100];
+        CHECK(x1.is_undefined());
+        const auto& x2 = j[100][200];
+        CHECK(x2.is_undefined());
+    }
+
+    SECTION("array 2")
+    {
+        const json::Value j = json::Value(json::Tag_array{});
+        CHECK(j.is_array());
+        CHECK(j.empty());
+        const auto& x1 = j[100];
+        CHECK(x1.is_undefined());
+        const auto& x2 = j[100][200];
+        CHECK(x2.is_undefined());
+    }
+
+    SECTION("array 3")
+    {
+        const json::Value j = json::Value(json::Tag_array{}, size_t(101), json::Value(999));
+        CHECK(j.is_array());
+        CHECK(j.size() == 101);
+        const auto& x1 = j[100];
+        CHECK(x1.is_number());
+        CHECK(x1 == 999);
+        const auto& x2 = j[100][200];
+        CHECK(x2.is_undefined());
+    }
+
+    SECTION("object 1")
+    {
+        const json::Value j{};
+        CHECK(j.is_undefined());
+        const auto& x1 = j["eins"];
+        CHECK(j.is_undefined());
+        CHECK(x1.is_undefined());
+        const auto& x2 = j["eins"]["zwei"];
+        CHECK(j.is_undefined());
+        CHECK(x2.is_undefined());
+    }
+
+    SECTION("object 2")
+    {
+        const json::Value j = json::Object{{"eins", 1}};
+        CHECK(j.is_object());
+        const auto& x1 = j["eins"];
+        CHECK(x1.is_number());
+        CHECK(x1 == 1);
+        const auto& x2 = j["eins"]["zwei"];
+        CHECK(x2.is_undefined());
+    }
+}
