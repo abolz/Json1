@@ -33,7 +33,7 @@
 // Value
 //==================================================================================================
 
-#define JSON_VALUE_HAS_EXPLICIT_OPERATOR_T                      1
+#define JSON_VALUE_HAS_EXPLICIT_OPERATOR_T                      0
 #define JSON_VALUE_HAS_IMPLICIT_INITIALIZER_LIST_CONSTRUCTOR    0
 
 namespace json {
