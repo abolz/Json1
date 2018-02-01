@@ -646,15 +646,15 @@ namespace json
         static Value to_json(V&& in) // V = std::optional<T> [const][&]
         {
             if (!in.has_value())
-                return {}; // null
+                return {}; // undefined
             return TraitsFor<T>::to_json(std::forward<V>(in).value());
         }
 
         template <typename V>
         static std::optional<T> from_json(V&& in) // V = Value [const][&]
         {
-            if (in.type() != tag::value)
-                return {}; // nullopt
+            if (/*in.is_undefined() ||*/ in.type() != tag::value)
+                return std::nullopt;
 #if 1
             return TraitsFor<T>::from_json(std::forward<V>(in));
 #else
@@ -2258,4 +2258,269 @@ TEST_CASE("undefined relational")
     CHECK((""          <= j_undefined) == false);
     CHECK((""          >  j_undefined) == true);
     CHECK((""          >= j_undefined) == true);
+}
+
+template <typename Target, typename Source>
+static Target reinterpret_bits(const Source source)
+{
+    static_assert(sizeof(Target) == sizeof(Source), "size mismatch");
+
+    Target target;
+    std::memcpy(&target, &source, sizeof(Source));
+    return target;
+}
+
+static double make_double(uint64_t sign_bit, uint64_t biased_exponent, uint64_t significand)
+{
+    assert(sign_bit == 0 || sign_bit == 1);
+    assert(biased_exponent <= 0x7FF);
+    assert(significand <= 0x000FFFFFFFFFFFFF);
+
+    uint64_t bits = 0;
+
+    bits |= sign_bit << 63;
+    bits |= biased_exponent << 52;
+    bits |= significand;
+
+    return reinterpret_bits<double>(bits);
+}
+
+// ldexp -- convert f * 2^e to IEEE double precision
+static double make_double(uint64_t f, int e)
+{
+    constexpr uint64_t kHiddenBit               = 0x0010000000000000;
+    constexpr uint64_t kSignificandMask         = 0x000FFFFFFFFFFFFF;
+    constexpr int      kPhysicalSignificandSize = 52;  // Excludes the hidden bit.
+    constexpr int      kExponentBias            = 0x3FF + kPhysicalSignificandSize;
+    constexpr int      kDenormalExponent        = 1     - kExponentBias;
+    constexpr int      kMaxExponent             = 0x7FF - kExponentBias;
+
+    while (f > kHiddenBit + kSignificandMask)
+    {
+        f >>= 1;
+        e++;
+    }
+    if (e >= kMaxExponent)
+    {
+        return std::numeric_limits<double>::infinity();
+    }
+    if (e < kDenormalExponent)
+    {
+        return 0.0;
+    }
+    while (e > kDenormalExponent && (f & kHiddenBit) == 0)
+    {
+        f <<= 1;
+        e--;
+    }
+
+    uint64_t biased_exponent = (e == kDenormalExponent && (f & kHiddenBit) == 0)
+                               ? 0
+                               : static_cast<uint64_t>(e + kExponentBias);
+
+    uint64_t bits = (f & kSignificandMask) | (biased_exponent << kPhysicalSignificandSize);
+    return reinterpret_bits<double>(bits);
+}
+
+TEST_CASE("Doubles 1")
+{
+    auto check_double = [](double number, const std::string & expected)
+    {
+        CAPTURE(number);
+        std::string actual;
+        json::stringify(actual, number);
+        CHECK(actual == expected);
+        json::Value back;
+        json::parse(back, actual);
+        CHECK(back.is_number());
+        CHECK(back.get_number() == number);
+    };
+
+    check_double(make_double(0,    0, 0x0000000000000001), "5e-324"); // min denormal
+    check_double(make_double(0,    0, 0x000FFFFFFFFFFFFF), "2.225073858507201e-308"); // max denormal
+    check_double(make_double(0,    1, 0x0000000000000000), "2.2250738585072014e-308"); // min normal
+    check_double(make_double(0,    1, 0x0000000000000001), "2.225073858507202e-308");
+    check_double(make_double(0,    1, 0x000FFFFFFFFFFFFF), "4.4501477170144023e-308");
+    check_double(make_double(0,    2, 0x0000000000000000), "4.450147717014403e-308");
+    check_double(make_double(0,    2, 0x0000000000000001), "4.450147717014404e-308");
+    check_double(make_double(0,    4, 0x0000000000000000), "1.7800590868057611e-307"); // fail if no special case in normalized boundaries
+    check_double(make_double(0,    5, 0x0000000000000000), "3.5601181736115222e-307"); // fail if no special case in normalized boundaries
+    check_double(make_double(0,    6, 0x0000000000000000), "7.120236347223045e-307"); // fail if no special case in normalized boundaries
+    check_double(make_double(0,   10, 0x0000000000000000), "1.1392378155556871e-305"); // fail if no special case in normalized boundaries
+    check_double(make_double(0, 2046, 0x000FFFFFFFFFFFFE), "1.7976931348623155e+308");
+    check_double(make_double(0, 2046, 0x000FFFFFFFFFFFFF), "1.7976931348623157e+308"); // max normal
+
+    // Test different paths in DigitGen
+    check_double(                  10000, "10000");
+    check_double(                1200000, "1200000");
+    check_double(4.9406564584124654e-324, "5e-324"); // exit integral loop
+    check_double(2.2250738585072009e-308, "2.225073858507201e-308"); // exit fractional loop
+    check_double(   1.82877982605164e-99, "1.82877982605164e-99");
+    check_double( 1.1505466208671903e-09, "1.1505466208671903e-9");
+    check_double( 5.5645893133766722e+20, "556458931337667200000.0");
+    check_double(     53.034830388866226, "53.034830388866226");
+    check_double(  0.0021066531670178605, "0.0021066531670178605");
+
+    // V. Paxson and W. Kahan, "A Program for Testing IEEE Binary-Decimal Conversion", manuscript, May 1991,
+    // ftp://ftp.ee.lbl.gov/testbase-report.ps.Z    (report)
+    // ftp://ftp.ee.lbl.gov/testbase.tar.Z          (program)
+
+    // Table 3: Stress Inputs for Converting 53-bit Binary to Decimal, < 1/2 ULP
+    check_double(make_double(8511030020275656,  -342), "9.5e-88");
+    check_double(make_double(5201988407066741,  -824), "4.65e-233");
+    check_double(make_double(6406892948269899,  +237), "1.415e+87");
+    check_double(make_double(8431154198732492,   +72), "3.9815e+37");
+    check_double(make_double(6475049196144587,   +99), "4.10405e+45");
+    check_double(make_double(8274307542972842,  +726), "2.920845e+234");
+    check_double(make_double(5381065484265332,  -456), "2.8919465e-122");
+    check_double(make_double(6761728585499734, -1057), "4.37877185e-303");
+    check_double(make_double(7976538478610756,  +376), "1.227701635e+129");
+    check_double(make_double(5982403858958067,  +377), "1.8415524525e+129");
+    check_double(make_double(5536995190630837,   +93), "5.48357443505e+43");
+    check_double(make_double(7225450889282194,  +710), "3.891901811465e+229");
+    check_double(make_double(7225450889282194,  +709), "1.9459509057325e+229");
+    check_double(make_double(8703372741147379,  +117), "1.44609583816055e+51");
+    check_double(make_double(8944262675275217, -1001), "4.173677474585315e-286");
+    check_double(make_double(7459803696087692,  -707), "1.1079507728788885e-197");
+    check_double(make_double(6080469016670379,  -381), "1.234550136632744e-99");
+    check_double(make_double(8385515147034757,  +721), "9.25031711960365e+232");
+    check_double(make_double(7514216811389786,  -828), "4.19804715028489e-234");
+    check_double(make_double(8397297803260511,  -345), "1.1716315319786511e-88");
+    check_double(make_double(6733459239310543,  +202), "4.328100728446125e+76");
+    check_double(make_double(8091450587292794,  -473), "3.317710118160031e-127");
+
+    // Table 4: Stress Inputs for Converting 53-bit Binary to Decimal, > 1/2 ULP
+    check_double(make_double(6567258882077402,  +952), "2.5e+302");
+    check_double(make_double(6712731423444934,  +535), "7.55e+176");
+    check_double(make_double(6712731423444934,  +534), "3.775e+176");
+    check_double(make_double(5298405411573037,  -957), "4.3495e-273");
+    check_double(make_double(5137311167659507,  -144), "2.30365e-28");
+    check_double(make_double(6722280709661868,  +363), "1.263005e+125");
+    check_double(make_double(5344436398034927,  -169), "7.1422105e-36");
+    check_double(make_double(8369123604277281,  -853), "1.39345735e-241");
+    check_double(make_double(8995822108487663,  -780), "1.414634485e-219");
+    check_double(make_double(8942832835564782,  -383), "4.5392779195e-100");
+    check_double(make_double(8942832835564782,  -384), "2.26963895975e-100");
+    check_double(make_double(8942832835564782,  -385), "1.134819479875e-100");
+    check_double(make_double(6965949469487146,  -249), "7.7003665618895e-60");
+    check_double(make_double(6965949469487146,  -250), "3.85018328094475e-60");
+    check_double(make_double(6965949469487146,  -251), "1.925091640472375e-60");
+    check_double(make_double(7487252720986826,  +548), "6.8985865317742005e+180");
+    check_double(make_double(5592117679628511,  +164), "1.3076622631878654e+65");
+    check_double(make_double(8887055249355788,  +665), "1.3605202075612124e+216");
+    check_double(make_double(6994187472632449,  +690), "3.5928102174759597e+223");
+    check_double(make_double(8797576579012143,  +588), "8.912519771248455e+192");
+    check_double(make_double(7363326733505337,  +272), "5.5876975736230114e+97");
+    check_double(make_double(8549497411294502,  -448), "1.1762578307285404e-119");
+
+    // Table 20: Stress Inputs for Converting 56-bit Binary to Decimal, < 1/2 ULP
+    check_double(make_double(50883641005312716, -172), "8.499999999999999e-36");
+    check_double(make_double(38162730753984537, -170), "2.55e-35");
+    check_double(make_double(50832789069151999, -101), "2.0049999999999997e-14");
+    check_double(make_double(51822367833714164, -109), "7.984499999999999e-17");
+    check_double(make_double(66840152193508133, -172), "1.1165499999999999e-35");
+    check_double(make_double(55111239245584393, -138), "1.581615e-25");
+    check_double(make_double(71704866733321482, -112), "1.3809855e-17");
+    check_double(make_double(67160949328233173, -142), "1.2046404499999999e-26");
+    check_double(make_double(53237141308040189, -152), "9.325140544999999e-30");
+    check_double(make_double(62785329394975786, -112), "1.2092014595e-17");
+    check_double(make_double(48367680154689523,  -77), "3.20070458385e-7");
+    check_double(make_double(42552223180606797, -102), "8.391946324354999e-15");
+    check_double(make_double(63626356173011241, -112), "1.2253990460585e-17");
+    check_double(make_double(43566388595783643,  -99), "6.87356414897605e-14");
+    check_double(make_double(54512669636675272, -159), "7.459816430480385e-32");
+    check_double(make_double(52306490527514614, -167), "2.796058839814255e-34");
+    check_double(make_double(52306490527514614, -168), "1.3980294199071276e-34");
+    check_double(make_double(41024721590449423,  -89), "6.627901237305736e-11");
+    check_double(make_double(37664020415894738, -132), "6.917788004396807e-24");
+    check_double(make_double(37549883692866294,  -93), "3.791569310834971e-12");
+    check_double(make_double(69124110374399839, -104), "3.4080817676591365e-15");
+    check_double(make_double(69124110374399839, -105), "1.7040408838295683e-15");
+
+    // Table 21: Stress Inputs for Converting 56-bit Binary to Decimal, > 1/2 ULP
+    check_double(make_double(49517601571415211,  -94), "2.5e-12");
+    check_double(make_double(49517601571415211,  -95), "1.25e-12");
+    check_double(make_double(54390733528642804, -133), "4.9949999999999996e-24"); // shortest: 4995e-27
+    check_double(make_double(71805402319113924, -157), "3.9304999999999998e-31"); // shortest: 39305e-35
+    check_double(make_double(40435277969631694, -179), "5.277049999999999e-38");
+    check_double(make_double(57241991568619049, -165), "1.223955e-33");
+    check_double(make_double(65224162876242886,  +58), "1.8799584999999998e+34");
+    check_double(make_double(70173376848895368, -138), "2.01387715e-25");
+    check_double(make_double(37072848117383207,  -99), "5.849064104999999e-14");
+    check_double(make_double(56845051585389697, -176), "5.9349003055e-37");
+    check_double(make_double(54791673366936431, -145), "1.2284718039499998e-27");
+    check_double(make_double(66800318669106231, -169), "8.927076718084999e-35");
+    check_double(make_double(66800318669106231, -170), "4.4635383590424995e-35");
+    check_double(make_double(66574323440112438, -119), "1.0016990862549499e-19");
+    check_double(make_double(65645179969330963, -173), "5.482941262802465e-36");
+    check_double(make_double(61847254334681076, -109), "9.529078328103644e-17");
+    check_double(make_double(39990712921393606, -145), "8.966227936640555e-28");
+    check_double(make_double(59292318184400283, -149), "8.308623441805854e-29");
+    check_double(make_double(69116558615326153, -143), "6.1985873566126555e-27");
+    check_double(make_double(69116558615326153, -144), "3.0992936783063277e-27");
+    check_double(make_double(39462549494468513, -152), "6.912351250617602e-30");
+    check_double(make_double(39462549494468513, -153), "3.456175625308801e-30");
+}
+
+TEST_CASE("DOubles 2")
+{
+    auto check_double = [](double number, const std::string & expected)
+    {
+        CAPTURE(number);
+        std::string actual;
+        json::stringify(actual, number);
+        CHECK(actual == expected);
+        json::Value back;
+        json::parse(back, actual);
+        CHECK(back.is_number());
+        CHECK(back.get_number() == number);
+    };
+
+    check_double( -1.2345e-22,  "-1.2345e-22"             );
+    check_double( -1.2345e-21,  "-1.2345e-21"             );
+    check_double( -1.2345e-20,  "-1.2345e-20"             );
+    check_double( -1.2345e-19,  "-1.2345e-19"             );
+    check_double( -1.2345e-18,  "-1.2345e-18"             );
+    check_double( -1.2345e-17,  "-1.2345e-17"             );
+    check_double( -1.2345e-16,  "-1.2345e-16"             );
+    check_double( -1.2345e-15,  "-1.2345e-15"             );
+    check_double( -1.2345e-14,  "-1.2345e-14"             );
+    check_double( -1.2345e-13,  "-1.2345e-13"             );
+    check_double( -1.2345e-12,  "-1.2345e-12"             );
+    check_double( -1.2345e-11,  "-1.2345e-11"             );
+    check_double( -1.2345e-10,  "-1.2345e-10"             );
+    check_double( -1.2345e-9,   "-1.2345e-9"              );
+    check_double( -1.2345e-8,   "-1.2345e-8"              );
+    check_double( -1.2345e-7,   "-1.2345e-7"              );
+    check_double( -1.2345e-6,   "-0.0000012345"           );
+    check_double( -1.2345e-5,   "-0.000012345"            );
+    check_double( -1.2345e-4,   "-0.00012345"             );
+    check_double( -1.2345e-3,   "-0.0012345"              );
+    check_double( -1.2345e-2,   "-0.012345"               );
+    check_double( -1.2345e-1,   "-0.12345"                );
+    check_double( -0.0,         "-0.0"                    ); // -0 != +0
+    check_double(  0.0,          "0"                      );
+    check_double(  1.2345e+0,    "1.2345"                 );
+    check_double(  1.2345e+1,    "12.345"                 );
+    check_double(  1.2345e+2,    "123.45"                 );
+    check_double(  1.2345e+3,    "1234.5"                 );
+    check_double(  1.2345e+4,    "12345"                  );
+    check_double(  1.2345e+5,    "123450"                 );
+    check_double(  1.2345e+6,    "1234500"                );
+    check_double(  1.2345e+7,    "12345000"               );
+    check_double(  1.2345e+8,    "123450000"              );
+    check_double(  1.2345e+9,    "1234500000"             );
+    check_double(  1.2345e+10,   "12345000000"            );
+    check_double(  1.2345e+11,   "123450000000"           );
+    check_double(  1.2345e+12,   "1234500000000"          );
+    check_double(  1.2345e+13,   "12345000000000"         );
+    check_double(  1.2345e+14,   "123450000000000"        );
+    check_double(  1.2345e+15,   "1234500000000000"       );
+    check_double(  1.2345e+16,   "12345000000000000.0"    ); // Not exactly representable as double => trailing ".0"
+    check_double(  1.2345e+17,   "123450000000000000.0"   ); // Not exactly representable as double => trailing ".0"
+    check_double(  1.2345e+18,   "1234500000000000000.0"  ); // Not exactly representable as double => trailing ".0"
+    check_double(  1.2345e+19,   "12345000000000000000.0" ); // Not exactly representable as double => trailing ".0"
+    check_double(  1.2345e+20,   "123450000000000000000.0"); // Not exactly representable as double => trailing ".0"
+    check_double(  1.2345e+21,   "1.2344999999999999e+21" ); // Grisu2 "fails"
+    check_double(  1.2345e+22,   "1.2345e+22"             );
 }
