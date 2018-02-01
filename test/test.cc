@@ -2158,3 +2158,104 @@ TEST_CASE("undefined")
         CHECK(x2.is_undefined());
     }
 }
+
+TEST_CASE("undefined relational")
+{
+    const double Infinity = std::numeric_limits<double>::infinity();
+    const double NaN = std::numeric_limits<double>::quiet_NaN();
+
+    json::Value j_undefined;
+    json::Value j_null = nullptr;
+    json::Value j_boolean = false;
+    json::Value j_number = 0.0;
+    json::Value j_string = "";
+
+    CHECK(j_undefined.is_undefined());
+    CHECK(j_null.is_null());
+    CHECK(j_boolean.is_boolean());
+    CHECK(j_number.is_number());
+    CHECK(j_string.is_string());
+
+    // XXX:
+    //
+    // In JavaScript all these comparisons with 'undefined' are false,
+    // i.e. 'undefined' is unordered (like NaN).
+    //
+    // Here 'undefined' is ordered, to preserve  x <= y <==> !(y < x)
+
+    CHECK((j_undefined <  j_undefined) == false);
+    CHECK((j_undefined <= j_undefined) == true);
+    CHECK((j_undefined >  j_undefined) == false);
+    CHECK((j_undefined >= j_undefined) == true);
+    CHECK((j_undefined <  j_null     ) == true);
+    CHECK((j_undefined <= j_null     ) == true);
+    CHECK((j_undefined >  j_null     ) == false);
+    CHECK((j_undefined >= j_null     ) == false);
+    CHECK((j_undefined <  j_boolean  ) == true);
+    CHECK((j_undefined <= j_boolean  ) == true);
+    CHECK((j_undefined >  j_boolean  ) == false);
+    CHECK((j_undefined >= j_boolean  ) == false);
+    CHECK((j_undefined <  j_number   ) == true);
+    CHECK((j_undefined <= j_number   ) == true);
+    CHECK((j_undefined >  j_number   ) == false);
+    CHECK((j_undefined >= j_number   ) == false);
+    CHECK((j_undefined <  j_string   ) == true);
+    CHECK((j_undefined <= j_string   ) == true);
+    CHECK((j_undefined >  j_string   ) == false);
+    CHECK((j_undefined >= j_string   ) == false);
+
+    CHECK((j_undefined <  j_undefined) == false);
+    CHECK((j_undefined <= j_undefined) == true);
+    CHECK((j_undefined >  j_undefined) == false);
+    CHECK((j_undefined >= j_undefined) == true);
+    CHECK((j_null      <  j_undefined) == false);
+    CHECK((j_null      <= j_undefined) == false);
+    CHECK((j_null      >  j_undefined) == true);
+    CHECK((j_null      >= j_undefined) == true);
+    CHECK((j_boolean   <  j_undefined) == false);
+    CHECK((j_boolean   <= j_undefined) == false);
+    CHECK((j_boolean   >  j_undefined) == true);
+    CHECK((j_boolean   >= j_undefined) == true);
+    CHECK((j_number    <  j_undefined) == false);
+    CHECK((j_number    <= j_undefined) == false);
+    CHECK((j_number    >  j_undefined) == true);
+    CHECK((j_number    >= j_undefined) == true);
+    CHECK((j_string    <  j_undefined) == false);
+    CHECK((j_string    <= j_undefined) == false);
+    CHECK((j_string    >  j_undefined) == true);
+    CHECK((j_string    >= j_undefined) == true);
+
+    CHECK((j_undefined <  nullptr    ) == true);
+    CHECK((j_undefined <= nullptr    ) == true);
+    CHECK((j_undefined >  nullptr    ) == false);
+    CHECK((j_undefined >= nullptr    ) == false);
+    CHECK((j_undefined <  false      ) == true);
+    CHECK((j_undefined <= false      ) == true);
+    CHECK((j_undefined >  false      ) == false);
+    CHECK((j_undefined >= false      ) == false);
+    CHECK((j_undefined <  0.0        ) == true);
+    CHECK((j_undefined <= 0.0        ) == true);
+    CHECK((j_undefined >  0.0        ) == false);
+    CHECK((j_undefined >= 0.0        ) == false);
+    CHECK((j_undefined <  ""         ) == true);
+    CHECK((j_undefined <= ""         ) == true);
+    CHECK((j_undefined >  ""         ) == false);
+    CHECK((j_undefined >= ""         ) == false);
+
+    CHECK((nullptr     <  j_undefined) == false);
+    CHECK((nullptr     <= j_undefined) == false);
+    CHECK((nullptr     >  j_undefined) == true);
+    CHECK((nullptr     >= j_undefined) == true);
+    CHECK((false       <  j_undefined) == false);
+    CHECK((false       <= j_undefined) == false);
+    CHECK((false       >  j_undefined) == true);
+    CHECK((false       >= j_undefined) == true);
+    CHECK((0.0         <  j_undefined) == false);
+    CHECK((0.0         <= j_undefined) == false);
+    CHECK((0.0         >  j_undefined) == true);
+    CHECK((0.0         >= j_undefined) == true);
+    CHECK((""          <  j_undefined) == false);
+    CHECK((""          <= j_undefined) == false);
+    CHECK((""          >  j_undefined) == true);
+    CHECK((""          >= j_undefined) == true);
+}
