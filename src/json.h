@@ -370,7 +370,7 @@ public:
 
     // undefined
 
-    Value(Tag_undefined)
+    Value(Tag_undefined) noexcept
         : type_(Type::undefined)
     {
     }
