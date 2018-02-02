@@ -36,6 +36,12 @@
 #define JSON_VALUE_HAS_EXPLICIT_OPERATOR_T                      0
 #define JSON_VALUE_HAS_IMPLICIT_INITIALIZER_LIST_CONSTRUCTOR    0
 
+#if __cplusplus >= 201703 || __cpp_inline_variables >= 201606
+#define JSON_INLINE_VARIABLE inline
+#else
+#define JSON_INLINE_VARIABLE
+#endif
+
 namespace json {
 
 //------------------------------------------------------------------------------
@@ -63,23 +69,46 @@ inline constexpr bool operator<(Type lhs, Type rhs) {
     return static_cast<std::underlying_type_t<Type>>(lhs) < static_cast<std::underlying_type_t<Type>>(rhs);
 }
 
+#if 1
+template <Type K>
+struct Type_const
+{
+    static constexpr Type value = K;
+
+    // NB:
+    // No "operator Type() const" here!
+};
+#else
 template <Type K>
 using Type_const = std::integral_constant<Type, K>;
+#endif
 
-using Tag_null    = Type_const<Type::null   >;
-using Tag_boolean = Type_const<Type::boolean>;
-using Tag_number  = Type_const<Type::number >;
-using Tag_string  = Type_const<Type::string >;
-using Tag_array   = Type_const<Type::array  >;
-using Tag_object  = Type_const<Type::object >;
+using Tag_undefined = Type_const<Type::undefined>;
+using Tag_null      = Type_const<Type::null   >;
+using Tag_boolean   = Type_const<Type::boolean>;
+using Tag_number    = Type_const<Type::number >;
+using Tag_string    = Type_const<Type::string >;
+using Tag_array     = Type_const<Type::array  >;
+using Tag_object    = Type_const<Type::object >;
+
+#if 1
+JSON_INLINE_VARIABLE constexpr Tag_undefined const undefined_t{};
+JSON_INLINE_VARIABLE constexpr Tag_null      const null_t{};
+JSON_INLINE_VARIABLE constexpr Tag_boolean   const boolean_t{};
+JSON_INLINE_VARIABLE constexpr Tag_number    const number_t{};
+JSON_INLINE_VARIABLE constexpr Tag_string    const string_t{};
+JSON_INLINE_VARIABLE constexpr Tag_array     const array_t{};
+JSON_INLINE_VARIABLE constexpr Tag_object    const object_t{};
+#endif
 
 template <Type> struct TargetType;
-template <>     struct TargetType<Type::null   > { using type = Null;    };
-template <>     struct TargetType<Type::boolean> { using type = bool;    };
-template <>     struct TargetType<Type::number > { using type = double;  };
-template <>     struct TargetType<Type::string > { using type = String;  };
-template <>     struct TargetType<Type::array  > { using type = Array;   };
-template <>     struct TargetType<Type::object > { using type = Object;  };
+template <>     struct TargetType<Type::undefined> { using type = void;    };
+template <>     struct TargetType<Type::null     > { using type = Null;    };
+template <>     struct TargetType<Type::boolean  > { using type = bool;    };
+template <>     struct TargetType<Type::number   > { using type = double;  };
+template <>     struct TargetType<Type::string   > { using type = String;  };
+template <>     struct TargetType<Type::array    > { using type = Array;   };
+template <>     struct TargetType<Type::object   > { using type = Object;  };
 
 namespace impl {
 
@@ -337,6 +366,13 @@ public:
     }
 
     Value(Type t);
+
+    // undefined
+
+    Value(Tag_undefined)
+        : type_(Type::undefined)
+    {
+    }
 
     // null
 
@@ -687,7 +723,7 @@ public:
     ItRange<const_element_iterator> elements() const&  { return {elements_begin(), elements_end()}; }
 
     // Convert this value into an array an return a reference to the index-th element.
-    // PRE: is_undefined() or is_null() or is_array()
+    // PRE: is_undefined() or is_array()
     Value& operator[](size_t index);
 
     // Returns a reference to the index-th element.
@@ -701,7 +737,7 @@ public:
     Value const* get_ptr(size_t index) const;
 
     // Convert this value into an array and append a new element constructed from the given arguments.
-    // PRE: is_undefined() or is_null() or is_array()
+    // PRE: is_undefined() or is_array()
     template <typename ...Args>
     Value& emplace_back(Args&&... args)
     {
@@ -711,7 +747,7 @@ public:
     }
 
     // Convert this value into an array and append a new element.
-    // PRE: is_undefined() or is_null() or is_array()
+    // PRE: is_undefined() or is_array()
     Value& push_back(Value const& value) { return emplace_back(value); }
     Value& push_back(Value&&      value) { return emplace_back(std::move(value)); }
 
@@ -856,10 +892,12 @@ public:
     ItRange<const_value_iterator> values() const& { return {values_begin(), values_end()}; }
 
     // Convert this value into an object and return a reference to the value with the given key.
-    // PRE: is_undefined() or is_null() or is_object()
+    // PRE: is_undefined() or is_object()
     Value& operator[](Object::key_type const& key);
     Value& operator[](Object::key_type&& key);
 
+    // Convert this value into an object and return a reference to the value with the given key.
+    // PRE: is_undefined() or is_object()
     template <typename T, typename = EnableIfIsKey<T>>
     Value& operator[](T&& key)
     {
@@ -882,12 +920,10 @@ public:
     template <typename T, typename = EnableIfIsKey<T>>
     Value const& operator[](T&& key) const noexcept
     {
-        if (is_object()) {
-            auto&& obj = get_object();
-            auto it = obj.find(std::forward<T>(key));
-            if (it != obj.end()) {
-                return it->second;
-            }
+        auto&& obj = get_object();
+        auto it = obj.find(std::forward<T>(key));
+        if (it != obj.end()) {
+            return it->second;
         }
         return kUndefined;
     }
@@ -930,7 +966,7 @@ public:
     }
 
     // Convert this value into an object and insert a new element constructed from the given arguments.
-    // PRE: is_undefined() or is_null() or is_object()
+    // PRE: is_undefined() or is_object()
     template <typename ...Args>
     std::pair<item_iterator, bool> emplace(Args&&... args)
     {
@@ -938,7 +974,7 @@ public:
     }
 
     // Convert this value to an object and insert the given {key, value} pair.
-    // PRE: is_undefined() or is_null() or is_object()
+    // PRE: is_undefined() or is_object()
     std::pair<item_iterator, bool> insert(Object::value_type const& pair) { return emplace(pair); }
     std::pair<item_iterator, bool> insert(Object::value_type&&      pair) { return emplace(std::move(pair)); }
 

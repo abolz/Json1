@@ -1955,6 +1955,7 @@ size_t Value::hash() const noexcept
     switch (type())
     {
     case Type::undefined:
+        assert(false && "cannot compute hash value for 'undefined'");
         return std::numeric_limits<size_t>::max(); // -1
     case Type::null:
         return 0;
@@ -2001,10 +2002,16 @@ size_t Value::size() const noexcept
     switch (type())
     {
     case Type::undefined:
+        assert(false && "cannot read property 'size' of 'undefined'");
+        return 0;
     case Type::null:
+        assert(false && "cannot read property 'size' of 'null'");
+        return 0;
     case Type::boolean:
+        assert(false && "cannot read property 'size' of 'boolean'");
+        return 0;
     case Type::number:
-        assert(false && "size() must not be called for null, boolean or number");
+        assert(false && "cannot read property 'size' of 'number'");
         return 0;
     case Type::string:
         return get_string().size();
@@ -2023,10 +2030,16 @@ bool Value::empty() const noexcept
     switch (type())
     {
     case Type::undefined:
+        assert(false && "cannot read property 'empty' of 'undefined'");
+        return true; // i.e. size() == 0
     case Type::null:
+        assert(false && "cannot read property 'empty' of 'null'");
+        return true; // i.e. size() == 0
     case Type::boolean:
+        assert(false && "cannot read property 'empty' of 'boolean'");
+        return true; // i.e. size() == 0
     case Type::number:
-        assert(false && "empty() must not be called for null, boolean or number");
+        assert(false && "cannot read property 'empty' of 'number'");
         return true; // i.e. size() == 0
     case Type::string:
         return get_string().empty();
@@ -2042,7 +2055,7 @@ bool Value::empty() const noexcept
 
 Array& Value::_get_or_assign_array()
 {
-    assert(is_undefined() || is_null() || is_array());
+    assert(is_undefined() || is_array());
     if (!is_array()) {
         assign_array();
     }
@@ -2062,12 +2075,9 @@ Value& Value::operator[](size_t index)
 
 Value const& Value::operator[](size_t index) const noexcept
 {
-    if (is_array())
-    {
-        auto& arr = get_array();
-        if (index < arr.size()) {
-            return arr[index];
-        }
+    auto& arr = get_array();
+    if (index < arr.size()) {
+        return arr[index];
     }
     return kUndefined;
 }
@@ -2110,7 +2120,7 @@ Value::element_iterator Value::erase(size_t index)
 
 Object& Value::_get_or_assign_object()
 {
-    assert(is_undefined() || is_null() || is_object());
+    assert(is_undefined() || is_object());
     if (!is_object()) {
         assign_object();
     }
@@ -3653,7 +3663,7 @@ ParseResult json::parse(Value& value, char const* next, char const* last, ParseO
     assert(last != nullptr);
 //  assert(reinterpret_cast<uintptr_t>(next) <= reinterpret_cast<uintptr_t>(last));
 
-    value.assign_null(); // clear!
+    value.assign_undefined(); // clear!
 
     if (options.skip_bom && last - next >= 3)
     {
@@ -3696,12 +3706,6 @@ ErrorCode json::parse(Value& value, std::string const& str, ParseOptions const& 
 //==================================================================================================
 
 static bool StringifyValue(std::string& str, Value const& value, StringifyOptions const& options, int curr_indent);
-
-static bool StringifyUndefined(std::string& str)
-{
-    str += "undefined";
-    return true;
-}
 
 static bool StringifyNull(std::string& str)
 {
@@ -4022,7 +4026,8 @@ static bool StringifyValue(std::string& str, Value const& value, StringifyOption
     switch (value.type())
     {
     case Type::undefined:
-        return StringifyUndefined(str);
+        assert(false && "cannot stringify 'undefined'");
+        return StringifyNull(str);
     case Type::null:
         return StringifyNull(str);
     case Type::boolean:
