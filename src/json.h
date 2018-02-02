@@ -35,6 +35,7 @@
 
 #define JSON_VALUE_HAS_EXPLICIT_OPERATOR_T                      0
 #define JSON_VALUE_HAS_IMPLICIT_INITIALIZER_LIST_CONSTRUCTOR    0
+#define JSON_VALUE_UNDEFINED_IS_UNORDERED                       0 // undefined OP x ==> false, undefined != x ==> true
 
 #if __cplusplus >= 201703 || __cpp_inline_variables >= 201606
 #define JSON_INLINE_VARIABLE inline
@@ -1038,6 +1039,11 @@ inline bool operator==(Value const& lhs, Value const& rhs) noexcept
 
 inline bool operator!=(Value const& lhs, Value const& rhs) noexcept
 {
+#if JSON_VALUE_UNDEFINED_IS_UNORDERED
+    if (lhs.is_undefined() || rhs.is_undefined())
+        return true;
+#endif
+
     return !(lhs == rhs);
 }
 
@@ -1048,16 +1054,31 @@ inline bool operator<(Value const& lhs, Value const& rhs) noexcept
 
 inline bool operator>=(Value const& lhs, Value const& rhs) noexcept
 {
+#if JSON_VALUE_UNDEFINED_IS_UNORDERED
+    if (lhs.is_undefined() || rhs.is_undefined())
+        return false;
+#endif
+
     return !(lhs < rhs);
 }
 
 inline bool operator>(Value const& lhs, Value const& rhs) noexcept
 {
+#if JSON_VALUE_UNDEFINED_IS_UNORDERED
+    if (lhs.is_undefined() || rhs.is_undefined())
+        return false;
+#endif
+
     return rhs < lhs;
 }
 
 inline bool operator<=(Value const& lhs, Value const& rhs) noexcept
 {
+#if JSON_VALUE_UNDEFINED_IS_UNORDERED
+    if (lhs.is_undefined() || rhs.is_undefined())
+        return false;
+#endif
+
     return !(rhs < lhs);
 }
 
@@ -1089,6 +1110,11 @@ namespace impl
 template < typename L, typename R, std::enable_if_t< std::is_same<Value, L>::value && !std::is_same<Value, R>::value, int > = 0 >
 bool operator==(L const& lhs, R const& rhs) noexcept
 {
+#if JSON_VALUE_UNDEFINED_IS_UNORDERED
+    if (lhs.is_undefined())
+        return false;
+#endif
+
     return impl::CmpEQ(lhs, rhs, TagFor<R>{});
 }
 
@@ -1096,6 +1122,11 @@ bool operator==(L const& lhs, R const& rhs) noexcept
 template < typename L, typename R, std::enable_if_t< !std::is_same<Value, L>::value && std::is_same<Value, R>::value, int > = 1 >
 bool operator==(L const& lhs, R const& rhs) noexcept
 {
+#if JSON_VALUE_UNDEFINED_IS_UNORDERED
+    if (rhs.is_undefined())
+        return false;
+#endif
+
     return impl::CmpEQ(rhs, lhs, TagFor<L>{});
 }
 
@@ -1103,6 +1134,11 @@ bool operator==(L const& lhs, R const& rhs) noexcept
 template < typename L, typename R, std::enable_if_t< std::is_same<Value, L>::value && !std::is_same<Value, R>::value, int > = 0 >
 bool operator!=(L const& lhs, R const& rhs) noexcept
 {
+#if JSON_VALUE_UNDEFINED_IS_UNORDERED
+    if (lhs.is_undefined())
+        return true;
+#endif
+
     return !(lhs == rhs);
 }
 
@@ -1110,6 +1146,11 @@ bool operator!=(L const& lhs, R const& rhs) noexcept
 template < typename L, typename R, std::enable_if_t< !std::is_same<Value, L>::value && std::is_same<Value, R>::value, int > = 1 >
 bool operator!=(L const& lhs, R const& rhs) noexcept
 {
+#if JSON_VALUE_UNDEFINED_IS_UNORDERED
+    if (rhs.is_undefined())
+        return true;
+#endif
+
     return !(lhs == rhs);
 }
 
@@ -1117,6 +1158,11 @@ bool operator!=(L const& lhs, R const& rhs) noexcept
 template < typename L, typename R, std::enable_if_t< std::is_same<Value, L>::value && !std::is_same<Value, R>::value, int > = 0 >
 bool operator<(L const& lhs, R const& rhs) noexcept
 {
+#if JSON_VALUE_UNDEFINED_IS_UNORDERED
+    if (lhs.is_undefined())
+        return false;
+#endif
+
     return impl::CmpLT(lhs, rhs, TagFor<R>{});
 }
 
@@ -1124,6 +1170,11 @@ bool operator<(L const& lhs, R const& rhs) noexcept
 template < typename L, typename R, std::enable_if_t< !std::is_same<Value, L>::value && std::is_same<Value, R>::value, int > = 1 >
 bool operator<(L const& lhs, R const& rhs) noexcept
 {
+#if JSON_VALUE_UNDEFINED_IS_UNORDERED
+    if (rhs.is_undefined())
+        return false;
+#endif
+
     return impl::CmpGT(rhs, lhs, TagFor<L>{});
 }
 
@@ -1131,6 +1182,11 @@ bool operator<(L const& lhs, R const& rhs) noexcept
 template < typename L, typename R, std::enable_if_t< std::is_same<Value, L>::value && !std::is_same<Value, R>::value, int > = 0 >
 bool operator>=(L const& lhs, R const& rhs) noexcept
 {
+#if JSON_VALUE_UNDEFINED_IS_UNORDERED
+    if (lhs.is_undefined())
+        return false;
+#endif
+
     return !(lhs < rhs);
 }
 
@@ -1138,6 +1194,11 @@ bool operator>=(L const& lhs, R const& rhs) noexcept
 template < typename L, typename R, std::enable_if_t< !std::is_same<Value, L>::value && std::is_same<Value, R>::value, int > = 1 >
 bool operator>=(L const& lhs, R const& rhs) noexcept
 {
+#if JSON_VALUE_UNDEFINED_IS_UNORDERED
+    if (rhs.is_undefined())
+        return false;
+#endif
+
     return !(lhs < rhs);
 }
 
@@ -1145,6 +1206,11 @@ bool operator>=(L const& lhs, R const& rhs) noexcept
 template < typename L, typename R, std::enable_if_t< std::is_same<Value, L>::value && !std::is_same<Value, R>::value, int > = 0 >
 bool operator>(L const& lhs, R const& rhs) noexcept
 {
+#if JSON_VALUE_UNDEFINED_IS_UNORDERED
+    if (lhs.is_undefined())
+        return false;
+#endif
+
     return rhs < lhs;
 }
 
@@ -1152,6 +1218,11 @@ bool operator>(L const& lhs, R const& rhs) noexcept
 template < typename L, typename R, std::enable_if_t< !std::is_same<Value, L>::value && std::is_same<Value, R>::value, int > = 1 >
 bool operator>(L const& lhs, R const& rhs) noexcept
 {
+#if JSON_VALUE_UNDEFINED_IS_UNORDERED
+    if (rhs.is_undefined())
+        return false;
+#endif
+
     return rhs < lhs;
 }
 
@@ -1159,6 +1230,11 @@ bool operator>(L const& lhs, R const& rhs) noexcept
 template < typename L, typename R, std::enable_if_t< std::is_same<Value, L>::value && !std::is_same<Value, R>::value, int > = 0 >
 bool operator<=(L const& lhs, R const& rhs) noexcept
 {
+#if JSON_VALUE_UNDEFINED_IS_UNORDERED
+    if (lhs.is_undefined())
+        return false;
+#endif
+
     return !(rhs < lhs);
 }
 
@@ -1166,6 +1242,11 @@ bool operator<=(L const& lhs, R const& rhs) noexcept
 template < typename L, typename R, std::enable_if_t< !std::is_same<Value, L>::value && std::is_same<Value, R>::value, int > = 1 >
 bool operator<=(L const& lhs, R const& rhs) noexcept
 {
+#if JSON_VALUE_UNDEFINED_IS_UNORDERED
+    if (rhs.is_undefined())
+        return false;
+#endif
+
     return !(rhs < lhs);
 }
 

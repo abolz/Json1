@@ -1883,6 +1883,11 @@ Object& Value::assign_object(Object&& v)
 
 bool Value::equal_to(Value const& rhs) const noexcept
 {
+#if JSON_VALUE_UNDEFINED_IS_UNORDERED
+    if (is_undefined() || rhs.is_undefined())
+        return false;
+#endif
+
     if (this == &rhs)
         return true;
 
@@ -1913,6 +1918,11 @@ bool Value::equal_to(Value const& rhs) const noexcept
 
 bool Value::less_than(Value const& rhs) const noexcept
 {
+#if JSON_VALUE_UNDEFINED_IS_UNORDERED
+    if (is_undefined() || rhs.is_undefined())
+        return false;
+#endif
+
     if (this == &rhs)
         return false;
 

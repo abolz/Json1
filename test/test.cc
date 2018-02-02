@@ -2163,6 +2163,13 @@ TEST_CASE("undefined")
 }
 #endif
 
+#if JSON_VALUE_UNDEFINED_IS_UNORDERED
+#define UNDEF_COMP(X) (false)
+#else
+#define UNDEF_COMP(X) (X)
+#endif
+
+
 TEST_CASE("undefined relational")
 {
     const double Infinity = std::numeric_limits<double>::infinity();
@@ -2187,81 +2194,83 @@ TEST_CASE("undefined relational")
     //
     // Here 'undefined' is ordered, to preserve  x <= y <==> !(y < x)
 
-    CHECK((j_undefined <  j_undefined) == false);
-    CHECK((j_undefined <= j_undefined) == true);
-    CHECK((j_undefined >  j_undefined) == false);
-    CHECK((j_undefined >= j_undefined) == true);
-    CHECK((j_undefined <  j_null     ) == true);
-    CHECK((j_undefined <= j_null     ) == true);
-    CHECK((j_undefined >  j_null     ) == false);
-    CHECK((j_undefined >= j_null     ) == false);
-    CHECK((j_undefined <  j_boolean  ) == true);
-    CHECK((j_undefined <= j_boolean  ) == true);
-    CHECK((j_undefined >  j_boolean  ) == false);
-    CHECK((j_undefined >= j_boolean  ) == false);
-    CHECK((j_undefined <  j_number   ) == true);
-    CHECK((j_undefined <= j_number   ) == true);
-    CHECK((j_undefined >  j_number   ) == false);
-    CHECK((j_undefined >= j_number   ) == false);
-    CHECK((j_undefined <  j_string   ) == true);
-    CHECK((j_undefined <= j_string   ) == true);
-    CHECK((j_undefined >  j_string   ) == false);
-    CHECK((j_undefined >= j_string   ) == false);
+    CHECK((j_undefined <  j_undefined) == UNDEF_COMP(false));
+    CHECK((j_undefined <= j_undefined) == UNDEF_COMP(true));
+    CHECK((j_undefined >  j_undefined) == UNDEF_COMP(false));
+    CHECK((j_undefined >= j_undefined) == UNDEF_COMP(true));
+    CHECK((j_undefined <  j_null     ) == UNDEF_COMP(true));
+    CHECK((j_undefined <= j_null     ) == UNDEF_COMP(true));
+    CHECK((j_undefined >  j_null     ) == UNDEF_COMP(false));
+    CHECK((j_undefined >= j_null     ) == UNDEF_COMP(false));
+    CHECK((j_undefined <  j_boolean  ) == UNDEF_COMP(true));
+    CHECK((j_undefined <= j_boolean  ) == UNDEF_COMP(true));
+    CHECK((j_undefined >  j_boolean  ) == UNDEF_COMP(false));
+    CHECK((j_undefined >= j_boolean  ) == UNDEF_COMP(false));
+    CHECK((j_undefined <  j_number   ) == UNDEF_COMP(true));
+    CHECK((j_undefined <= j_number   ) == UNDEF_COMP(true));
+    CHECK((j_undefined >  j_number   ) == UNDEF_COMP(false));
+    CHECK((j_undefined >= j_number   ) == UNDEF_COMP(false));
+    CHECK((j_undefined <  j_string   ) == UNDEF_COMP(true));
+    CHECK((j_undefined <= j_string   ) == UNDEF_COMP(true));
+    CHECK((j_undefined >  j_string   ) == UNDEF_COMP(false));
+    CHECK((j_undefined >= j_string   ) == UNDEF_COMP(false));
 
-    CHECK((j_undefined <  j_undefined) == false);
-    CHECK((j_undefined <= j_undefined) == true);
-    CHECK((j_undefined >  j_undefined) == false);
-    CHECK((j_undefined >= j_undefined) == true);
-    CHECK((j_null      <  j_undefined) == false);
-    CHECK((j_null      <= j_undefined) == false);
-    CHECK((j_null      >  j_undefined) == true);
-    CHECK((j_null      >= j_undefined) == true);
-    CHECK((j_boolean   <  j_undefined) == false);
-    CHECK((j_boolean   <= j_undefined) == false);
-    CHECK((j_boolean   >  j_undefined) == true);
-    CHECK((j_boolean   >= j_undefined) == true);
-    CHECK((j_number    <  j_undefined) == false);
-    CHECK((j_number    <= j_undefined) == false);
-    CHECK((j_number    >  j_undefined) == true);
-    CHECK((j_number    >= j_undefined) == true);
-    CHECK((j_string    <  j_undefined) == false);
-    CHECK((j_string    <= j_undefined) == false);
-    CHECK((j_string    >  j_undefined) == true);
-    CHECK((j_string    >= j_undefined) == true);
+    CHECK((j_undefined <  j_undefined) == UNDEF_COMP(false));
+    CHECK((j_undefined <= j_undefined) == UNDEF_COMP(true));
+    CHECK((j_undefined >  j_undefined) == UNDEF_COMP(false));
+    CHECK((j_undefined >= j_undefined) == UNDEF_COMP(true));
+    CHECK((j_null      <  j_undefined) == UNDEF_COMP(false));
+    CHECK((j_null      <= j_undefined) == UNDEF_COMP(false));
+    CHECK((j_null      >  j_undefined) == UNDEF_COMP(true));
+    CHECK((j_null      >= j_undefined) == UNDEF_COMP(true));
+    CHECK((j_boolean   <  j_undefined) == UNDEF_COMP(false));
+    CHECK((j_boolean   <= j_undefined) == UNDEF_COMP(false));
+    CHECK((j_boolean   >  j_undefined) == UNDEF_COMP(true));
+    CHECK((j_boolean   >= j_undefined) == UNDEF_COMP(true));
+    CHECK((j_number    <  j_undefined) == UNDEF_COMP(false));
+    CHECK((j_number    <= j_undefined) == UNDEF_COMP(false));
+    CHECK((j_number    >  j_undefined) == UNDEF_COMP(true));
+    CHECK((j_number    >= j_undefined) == UNDEF_COMP(true));
+    CHECK((j_string    <  j_undefined) == UNDEF_COMP(false));
+    CHECK((j_string    <= j_undefined) == UNDEF_COMP(false));
+    CHECK((j_string    >  j_undefined) == UNDEF_COMP(true));
+    CHECK((j_string    >= j_undefined) == UNDEF_COMP(true));
 
-    CHECK((j_undefined <  nullptr    ) == true);
-    CHECK((j_undefined <= nullptr    ) == true);
-    CHECK((j_undefined >  nullptr    ) == false);
-    CHECK((j_undefined >= nullptr    ) == false);
-    CHECK((j_undefined <  false      ) == true);
-    CHECK((j_undefined <= false      ) == true);
-    CHECK((j_undefined >  false      ) == false);
-    CHECK((j_undefined >= false      ) == false);
-    CHECK((j_undefined <  0.0        ) == true);
-    CHECK((j_undefined <= 0.0        ) == true);
-    CHECK((j_undefined >  0.0        ) == false);
-    CHECK((j_undefined >= 0.0        ) == false);
-    CHECK((j_undefined <  ""         ) == true);
-    CHECK((j_undefined <= ""         ) == true);
-    CHECK((j_undefined >  ""         ) == false);
-    CHECK((j_undefined >= ""         ) == false);
+    CHECK((j_undefined <  nullptr    ) == UNDEF_COMP(true));
+    CHECK((j_undefined <= nullptr    ) == UNDEF_COMP(true));
+    CHECK((j_undefined >  nullptr    ) == UNDEF_COMP(false));
+    CHECK((j_undefined >= nullptr    ) == UNDEF_COMP(false));
+    CHECK((j_undefined <  false      ) == UNDEF_COMP(true));
+    CHECK((j_undefined <= false      ) == UNDEF_COMP(true));
+    CHECK((j_undefined >  false      ) == UNDEF_COMP(false));
+    CHECK((j_undefined >= false      ) == UNDEF_COMP(false));
+    CHECK((j_undefined <  0.0        ) == UNDEF_COMP(true));
+    CHECK((j_undefined <= 0.0        ) == UNDEF_COMP(true));
+    CHECK((j_undefined >  0.0        ) == UNDEF_COMP(false));
+    CHECK((j_undefined >= 0.0        ) == UNDEF_COMP(false));
+    CHECK((j_undefined <  ""         ) == UNDEF_COMP(true));
+    CHECK((j_undefined <= ""         ) == UNDEF_COMP(true));
+    CHECK((j_undefined >  ""         ) == UNDEF_COMP(false));
+    CHECK((j_undefined >= ""         ) == UNDEF_COMP(false));
 
-    CHECK((nullptr     <  j_undefined) == false);
-    CHECK((nullptr     <= j_undefined) == false);
-    CHECK((nullptr     >  j_undefined) == true);
-    CHECK((nullptr     >= j_undefined) == true);
-    CHECK((false       <  j_undefined) == false);
-    CHECK((false       <= j_undefined) == false);
-    CHECK((false       >  j_undefined) == true);
-    CHECK((false       >= j_undefined) == true);
-    CHECK((0.0         <  j_undefined) == false);
-    CHECK((0.0         <= j_undefined) == false);
-    CHECK((0.0         >  j_undefined) == true);
-    CHECK((0.0         >= j_undefined) == true);
-    CHECK((""          <  j_undefined) == false);
-    CHECK((""          <= j_undefined) == false);
-    CHECK((""          >  j_undefined) == true);
-    CHECK((""          >= j_undefined) == true);
+    CHECK((nullptr     <  j_undefined) == UNDEF_COMP(false));
+    CHECK((nullptr     <= j_undefined) == UNDEF_COMP(false));
+    CHECK((nullptr     >  j_undefined) == UNDEF_COMP(true));
+    CHECK((nullptr     >= j_undefined) == UNDEF_COMP(true));
+    CHECK((false       <  j_undefined) == UNDEF_COMP(false));
+    CHECK((false       <= j_undefined) == UNDEF_COMP(false));
+    CHECK((false       >  j_undefined) == UNDEF_COMP(true));
+    CHECK((false       >= j_undefined) == UNDEF_COMP(true));
+    CHECK((0.0         <  j_undefined) == UNDEF_COMP(false));
+    CHECK((0.0         <= j_undefined) == UNDEF_COMP(false));
+    CHECK((0.0         >  j_undefined) == UNDEF_COMP(true));
+    CHECK((0.0         >= j_undefined) == UNDEF_COMP(true));
+    CHECK((""          <  j_undefined) == UNDEF_COMP(false));
+    CHECK((""          <= j_undefined) == UNDEF_COMP(false));
+    CHECK((""          >  j_undefined) == UNDEF_COMP(true));
+    CHECK((""          >= j_undefined) == UNDEF_COMP(true));
+
+    //bool const b1 = j_undefined < json::undefined_t;
 }
 
 template <typename Target, typename Source>
