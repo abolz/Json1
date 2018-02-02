@@ -1997,7 +1997,7 @@ TEST_CASE("Iterators")
 
     SECTION("object items")
     {
-        json::Value j = json::Object{{"a", 1}, {"b", 2}, {"c", 3}};
+        json::Value j = { json::object_t, {{"a", 1}, {"b", 2}, {"c", 3}} };
         CHECK(j.is_object());
         CHECK(j.size() == 3);
 

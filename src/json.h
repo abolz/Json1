@@ -448,6 +448,12 @@ public:
         type_ = Type::array;
     }
 
+    Value(Tag_array, std::initializer_list<typename Array::value_type> ilist)
+    {
+        data_.array = new Array(ilist);
+        type_ = Type::array;
+    }
+
     // object
 
     Value(Tag_object)
@@ -460,6 +466,12 @@ public:
     Value(Tag_object, Arg&& arg, Args&&... args)
     {
         data_.object = new Object(std::forward<Arg>(arg), std::forward<Args>(args)...);
+        type_ = Type::object;
+    }
+
+    Value(Tag_object, std::initializer_list<typename Object::value_type> ilist)
+    {
+        data_.object = new Object(ilist);
         type_ = Type::object;
     }
 
