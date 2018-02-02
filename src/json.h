@@ -488,7 +488,7 @@ public:
     Value(Tag_object,  Value const& v) : Value(v) {}
     Value(Tag_object,  Value&&      v) noexcept : Value(std::move(v)) {}
 
-    // generic (converting) constructurs
+    // generic (converting) constructors
 
     template <typename T, std::enable_if_t< !IsJsonValue<T>::value && IsConvertible<T>::value, int > = 0>
     Value(T&& v)
@@ -510,6 +510,23 @@ public:
 #endif
 
 private:
+    // FIXME:
+    // assign(tag, ...) should be (almost) the same as Value(tag, ...) ?!?!
+    //
+    // template <Type Ty, typename ...Args>
+    // void assign(Type_const<Ty> tag, Args&&... args)
+    // {
+    //     Value j(tag, std::forward<Args>(args)...);
+    //     swap(j);
+    // }
+    //
+    // template <typename T, std::enable_if_t< !IsJsonValue<T>::value && IsConvertible<T>::value, int > = 0>
+    // Value& operator=(T&& v)
+    // {
+    //     assign(TagFor<T>{}, TraitsFor<T>::to_json(std::forward<T>(v)));
+    //     return *this;
+    // }
+
     void _assign_from(Tag_null,    Null           ) noexcept { assign_null(); }
     void _assign_from(Tag_boolean, bool          v) noexcept { assign_boolean(v); }
     void _assign_from(Tag_number,  double        v) noexcept { assign_number(v); }
@@ -664,11 +681,6 @@ public:
     Object& assign_object   ();
     Object& assign_object   (Object const& v);
     Object& assign_object   (Object&&      v);
-
-    // isa<T>
-
-    template <typename T>
-    bool isa() const noexcept { return type() == TagFor<T>::value; }
 
     // as<T> uses Traits::from_json to convert this JSON value into an object
     // of type T.
