@@ -70,6 +70,18 @@ inline constexpr bool operator<(Type lhs, Type rhs) {
     return static_cast<std::underlying_type_t<Type>>(lhs) < static_cast<std::underlying_type_t<Type>>(rhs);
 }
 
+inline constexpr bool operator>(Type lhs, Type rhs) {
+    return rhs < lhs;
+}
+
+inline constexpr bool operator<=(Type lhs, Type rhs) {
+    return !(rhs < lhs);
+}
+
+inline constexpr bool operator>=(Type lhs, Type rhs) {
+    return !(lhs < rhs);
+}
+
 #if 1
 template <Type K>
 struct Type_const
@@ -564,7 +576,7 @@ public:
     bool is_string()    const noexcept { return type() == Type::string;    }
     bool is_array()     const noexcept { return type() == Type::array;     }
     bool is_object()    const noexcept { return type() == Type::object;    }
-    bool is_primitive() const noexcept { return type() != Type::array && type() != Type::object; }
+    bool is_primitive() const noexcept { return Type::null <= type() && type() <= Type::string; }
 
     bool is(Type t) const noexcept { return type() == t; }
 
