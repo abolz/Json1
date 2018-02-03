@@ -697,19 +697,19 @@ public:
     // as<T> uses Traits::from_json to convert this JSON value into an object
     // of type T.
 
-    template <typename T> T as() const&  noexcept { return TraitsFor<T>::from_json(*this); }
-    template <typename T> T as() &       noexcept { return TraitsFor<T>::from_json(*this); }
-    template <typename T> T as() const&& noexcept { return TraitsFor<T>::from_json(static_cast<Value const&&>(*this)); }
-    template <typename T> T as() &&      noexcept { return TraitsFor<T>::from_json(static_cast<Value&&      >(*this)); }
+    template <typename T> T as() const&  { return TraitsFor<T>::from_json(*this); }
+    template <typename T> T as() &       { return TraitsFor<T>::from_json(*this); }
+    template <typename T> T as() const&& { return TraitsFor<T>::from_json(static_cast<Value const&&>(*this)); }
+    template <typename T> T as() &&      { return TraitsFor<T>::from_json(static_cast<Value&&      >(*this)); }
 
 #if JSON_VALUE_HAS_EXPLICIT_OPERATOR_T
-    template <typename T> explicit operator T() const&  noexcept { return this->as<T>(); }
+    template <typename T> explicit operator T() const&  { return this->as<T>(); }
 #if 0
     // These are disabled to let g++ generate "conversion sequence is better" warnings...
-    template <typename T> explicit operator T() &       noexcept { return this->as<T>(); }
-    template <typename T> explicit operator T() const&& noexcept { return static_cast<Value const&&>(*this).as<T>(); }
+    template <typename T> explicit operator T() &       { return this->as<T>(); }
+    template <typename T> explicit operator T() const&& { return static_cast<Value const&&>(*this).as<T>(); }
 #endif
-    template <typename T> explicit operator T() &&      noexcept { return static_cast<Value&&      >(*this).as<T>(); }
+    template <typename T> explicit operator T() &&      { return static_cast<Value&&      >(*this).as<T>(); }
 #endif
 
     // Compare this value to another. Strict equality (i.e. types must match).
