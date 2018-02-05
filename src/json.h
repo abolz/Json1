@@ -1045,13 +1045,11 @@ public:
     double   to_integer() const noexcept;
     int32_t  to_int32() const noexcept;
     uint32_t to_uint32() const noexcept;
-#if 0
     int16_t  to_int16() const noexcept;
     uint16_t to_uint16() const noexcept;
     int8_t   to_int8() const noexcept;
     uint8_t  to_uint8() const noexcept;
     uint8_t  to_uint8_clamped() const noexcept;
-#endif
     int64_t  to_length() const noexcept;
     String   to_string() const;
 };

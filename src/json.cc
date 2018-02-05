@@ -2547,8 +2547,6 @@ uint32_t Value::to_uint32() const noexcept
     return static_cast<uint32_t>(k);
 }
 
-#if 0
-
 int16_t Value::to_int16() const noexcept
 {
     constexpr double kTwo16 = 65536.0;
@@ -2648,8 +2646,6 @@ uint8_t Value::to_uint8_clamped() const noexcept
 
     return static_cast<uint8_t>(f);
 }
-
-#endif
 
 int64_t Value::to_length() const noexcept
 {
