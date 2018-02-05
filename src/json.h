@@ -36,6 +36,7 @@
 #define JSON_VALUE_HAS_EXPLICIT_OPERATOR_T                      0
 #define JSON_VALUE_HAS_IMPLICIT_INITIALIZER_LIST_CONSTRUCTOR    0
 #define JSON_VALUE_UNDEFINED_IS_UNORDERED                       0 // undefined OP x ==> false, undefined != x ==> true
+#define JSON_VALUE_ALLOW_UNDEFINED_ACCESS                       0
 
 #if __cplusplus >= 201703 || __cpp_inline_variables >= 201606
 #define JSON_INLINE_VARIABLE inline
@@ -105,13 +106,13 @@ using Tag_array     = Type_const<Type::array  >;
 using Tag_object    = Type_const<Type::object >;
 
 #if 1
-JSON_INLINE_VARIABLE constexpr Tag_undefined const undefined_t{};
-JSON_INLINE_VARIABLE constexpr Tag_null      const null_t{};
-JSON_INLINE_VARIABLE constexpr Tag_boolean   const boolean_t{};
-JSON_INLINE_VARIABLE constexpr Tag_number    const number_t{};
-JSON_INLINE_VARIABLE constexpr Tag_string    const string_t{};
-JSON_INLINE_VARIABLE constexpr Tag_array     const array_t{};
-JSON_INLINE_VARIABLE constexpr Tag_object    const object_t{};
+JSON_INLINE_VARIABLE constexpr Tag_undefined const undefined_tag{};
+JSON_INLINE_VARIABLE constexpr Tag_null      const null_tag{};
+JSON_INLINE_VARIABLE constexpr Tag_boolean   const boolean_tag{};
+JSON_INLINE_VARIABLE constexpr Tag_number    const number_tag{};
+JSON_INLINE_VARIABLE constexpr Tag_string    const string_tag{};
+JSON_INLINE_VARIABLE constexpr Tag_array     const array_tag{};
+JSON_INLINE_VARIABLE constexpr Tag_object    const object_tag{};
 #endif
 
 template <Type> struct TargetType;
@@ -140,13 +141,7 @@ struct DefaultTraits_boolean {
     template <typename V> static decltype(auto) from_json(V&& in) { return std::forward<V>(in).get_boolean(); }
 };
 
-struct DefaultTraits_float {
-    using tag = Tag_number;
-    template <typename V> static decltype(auto) to_json(V&& in) { return std::forward<V>(in); }
-    template <typename V> static decltype(auto) from_json(V&& in) { return std::forward<V>(in).get_number(); }
-};
-
-struct DefaultTraits_int {
+struct DefaultTraits_number {
     using tag = Tag_number;
     template <typename V> static decltype(auto) to_json(V&& in) { return std::forward<V>(in); }
     template <typename V> static decltype(auto) from_json(V&& in) { return std::forward<V>(in).get_number(); }
@@ -177,18 +172,18 @@ struct DefaultTraits
 
 template <> struct DefaultTraits<std::nullptr_t    > : DefaultTraits_null    {};
 template <> struct DefaultTraits<bool              > : DefaultTraits_boolean {};
-template <> struct DefaultTraits<double            > : DefaultTraits_float   {};
-template <> struct DefaultTraits<float             > : DefaultTraits_float   {};
-template <> struct DefaultTraits<signed char       > : DefaultTraits_int     {};
-template <> struct DefaultTraits<signed short      > : DefaultTraits_int     {};
-template <> struct DefaultTraits<signed int        > : DefaultTraits_int     {};
-template <> struct DefaultTraits<signed long       > : DefaultTraits_int     {};
-template <> struct DefaultTraits<signed long long  > : DefaultTraits_int     {};
-template <> struct DefaultTraits<unsigned char     > : DefaultTraits_int     {};
-template <> struct DefaultTraits<unsigned short    > : DefaultTraits_int     {};
-template <> struct DefaultTraits<unsigned int      > : DefaultTraits_int     {};
-template <> struct DefaultTraits<unsigned long     > : DefaultTraits_int     {};
-template <> struct DefaultTraits<unsigned long long> : DefaultTraits_int     {};
+template <> struct DefaultTraits<double            > : DefaultTraits_number  {};
+template <> struct DefaultTraits<float             > : DefaultTraits_number  {};
+template <> struct DefaultTraits<signed char       > : DefaultTraits_number  {};
+template <> struct DefaultTraits<signed short      > : DefaultTraits_number  {};
+template <> struct DefaultTraits<signed int        > : DefaultTraits_number  {};
+template <> struct DefaultTraits<signed long       > : DefaultTraits_number  {};
+template <> struct DefaultTraits<signed long long  > : DefaultTraits_number  {};
+template <> struct DefaultTraits<unsigned char     > : DefaultTraits_number  {};
+template <> struct DefaultTraits<unsigned short    > : DefaultTraits_number  {};
+template <> struct DefaultTraits<unsigned int      > : DefaultTraits_number  {};
+template <> struct DefaultTraits<unsigned long     > : DefaultTraits_number  {};
+template <> struct DefaultTraits<unsigned long long> : DefaultTraits_number  {};
 template <> struct DefaultTraits<String            > : DefaultTraits_string  {};
 template <> struct DefaultTraits<Array             > : DefaultTraits_array   {};
 template <> struct DefaultTraits<Object            > : DefaultTraits_object  {};
@@ -348,7 +343,7 @@ public:
     Value() noexcept = default;
    ~Value() noexcept
     {
-       assign(undefined_t);
+       assign(undefined_tag);
     }
 
     Value(Value const& rhs);
@@ -377,73 +372,42 @@ public:
 
     // null
 
-    Value(Tag_null) noexcept
-        : type_(Type::null)
-    {
-    }
-
-    Value(Tag_null, Null) noexcept
+    Value(Tag_null, Null /*arg*/ = {}) noexcept
         : type_(Type::null)
     {
     }
 
     // boolean
 
-    Value(Tag_boolean) noexcept
+    Value(Tag_boolean, bool arg = {}) noexcept
         : type_(Type::boolean)
     {
-        data_.boolean = {};
-    }
-
-    template <typename Arg, std::enable_if_t< !IsValue<Arg>::value, int > = 0>
-    Value(Tag_boolean, Arg&& arg) noexcept
-        : type_(Type::boolean)
-    {
-        data_.boolean = static_cast<bool>(std::forward<Arg>(arg));
+        data_.boolean = arg;
     }
 
     // number
 
-    Value(Tag_number) noexcept
+    Value(Tag_number, double arg = {}) noexcept
         : type_(Type::number)
     {
-        data_.number = {};
-    }
-
-    template <typename Arg, std::enable_if_t< !IsValue<Arg>::value, int > = 0>
-    Value(Tag_number, Arg&& arg) noexcept
-        : type_(Type::number)
-    {
-        data_.number = std::forward<Arg>(arg);
+        data_.number = arg;
     }
 
     // string
 
-    Value(Tag_string)
+    template <typename ...Args>
+    Value(Tag_string, Args&&... args)
     {
-        data_.string = new String();
-        type_ = Type::string;
-    }
-
-    template <typename Arg, typename ...Args, std::enable_if_t< /*(sizeof...(Args) > 0) ||*/ !IsValue<Arg>::value, int > = 0>
-    Value(Tag_string, Arg&& arg, Args&&... args)
-    {
-        data_.string = new String(std::forward<Arg>(arg), std::forward<Args>(args)...);
+        data_.string = new String(std::forward<Args>(args)...);
         type_ = Type::string;
     }
 
     // array
 
-    Value(Tag_array)
+    template <typename ...Args>
+    Value(Tag_array, Args&&... args)
     {
-        data_.array = new Array();
-        type_ = Type::array;
-    }
-
-    template <typename Arg, typename ...Args, std::enable_if_t< /*(sizeof...(Args) > 0) ||*/ !IsValue<Arg>::value, int > = 0>
-    Value(Tag_array, Arg&& arg, Args&&... args)
-    {
-        data_.array = new Array(std::forward<Arg>(arg), std::forward<Args>(args)...);
+        data_.array = new Array(std::forward<Args>(args)...);
         type_ = Type::array;
     }
 
@@ -455,16 +419,10 @@ public:
 
     // object
 
-    Value(Tag_object)
+    template <typename ...Args>
+    Value(Tag_object, Args&&... args)
     {
-        data_.object = new Object();
-        type_ = Type::object;
-    }
-
-    template <typename Arg, typename ...Args, std::enable_if_t< /*(sizeof...(Args) > 0) ||*/ !IsValue<Arg>::value, int > = 0>
-    Value(Tag_object, Arg&& arg, Args&&... args)
-    {
-        data_.object = new Object(std::forward<Arg>(arg), std::forward<Args>(args)...);
+        data_.object = new Object(std::forward<Args>(args)...);
         type_ = Type::object;
     }
 
@@ -474,7 +432,7 @@ public:
         type_ = Type::object;
     }
 
-    // generic (converting) constructors
+    // generic constructors
 
     template <typename T,
         std::enable_if_t< !IsValue<T>::value
@@ -517,17 +475,17 @@ public:
 
     // null
 
-    void assign(Tag_null) noexcept { assign(null_t, Null{}); }
+    void assign(Tag_null) noexcept { assign(null_tag, {}); }
     void assign(Tag_null, Null) noexcept;
 
     // boolean
 
-    bool& assign(Tag_boolean) noexcept { return assign(boolean_t, false); }
+    bool& assign(Tag_boolean) noexcept { return assign(boolean_tag, {}); }
     bool& assign(Tag_boolean, bool value) noexcept;
 
     // number
 
-    double& assign(Tag_number) noexcept { return assign(number_t, 0.0); }
+    double& assign(Tag_number) noexcept { return assign(number_tag, {}); }
     double& assign(Tag_number, double value) noexcept;
 
     // string
@@ -541,14 +499,12 @@ public:
     Array& assign(Tag_array);
     Array& assign(Tag_array, Array const& value);
     Array& assign(Tag_array, Array&& value);
-    Array& assign(Tag_array, std::initializer_list<Array::value_type> value);
 
     // object
 
     Object& assign(Tag_object);
     Object& assign(Tag_object, Object const& value);
     Object& assign(Tag_object, Object&& value);
-    Object& assign(Tag_object, std::initializer_list<Object::value_type> value);
 
     // assignment operators
 
@@ -958,10 +914,15 @@ public:
     template <typename T, typename = EnableIfIsKey<T>>
     Value const& operator[](T&& key) const noexcept
     {
-        auto&& obj = get_object();
-        auto it = obj.find(std::forward<T>(key));
-        if (it != obj.end()) {
-            return it->second;
+#if JSON_VALUE_ALLOW_UNDEFINED_ACCESS
+        if (is_object())
+#endif
+        {
+            auto&& obj = get_object();
+            auto it = obj.find(std::forward<T>(key));
+            if (it != obj.end()) {
+                return it->second;
+            }
         }
         return kUndefined;
     }

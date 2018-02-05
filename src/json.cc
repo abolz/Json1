@@ -1707,25 +1707,25 @@ Value& Value::operator=(Value const& rhs)
         switch (rhs.type())
         {
         case Type::undefined:
-            assign(undefined_t);
+            assign(undefined_tag);
             break;
         case Type::null:
-            assign(null_t);
+            assign(null_tag);
             break;
         case Type::boolean:
-            assign(boolean_t, rhs.get_boolean());
+            assign(boolean_tag, rhs.get_boolean());
             break;
         case Type::number:
-            assign(number_t, rhs.get_number());
+            assign(number_tag, rhs.get_number());
             break;
         case Type::string:
-            assign(string_t, rhs.get_string());
+            assign(string_tag, rhs.get_string());
             break;
         case Type::array:
-            assign(array_t, rhs.get_array());
+            assign(array_tag, rhs.get_array());
             break;
         case Type::object:
-            assign(object_t, rhs.get_object());
+            assign(object_tag, rhs.get_object());
             break;
         }
     }
@@ -1898,11 +1898,6 @@ Array& Value::assign(Tag_array, Array&& v)
     return _assign_array(std::move(v));
 }
 
-Array& Value::assign(Tag_array, std::initializer_list<Array::value_type> value)
-{
-    return _assign_array(value);
-}
-
 Object& Value::assign(Tag_object)
 {
     switch (type_)
@@ -1951,11 +1946,6 @@ Object& Value::assign(Tag_object, Object const& v)
 Object& Value::assign(Tag_object, Object&& v)
 {
     return _assign_object(std::move(v));
-}
-
-Object& Value::assign(Tag_object, std::initializer_list<Object::value_type> value)
-{
-    return _assign_object(value);
 }
 
 void Value::_clear()
@@ -2333,7 +2323,7 @@ Array& Value::_get_or_assign_array()
 {
     assert(is_undefined() || is_array());
     if (!is_array()) {
-        assign(array_t);
+        assign(array_tag);
     }
     return get_array();
 }
@@ -2351,9 +2341,14 @@ Value& Value::operator[](size_t index)
 
 Value const& Value::operator[](size_t index) const noexcept
 {
-    auto& arr = get_array();
-    if (index < arr.size()) {
-        return arr[index];
+#if JSON_VALUE_ALLOW_UNDEFINED_ACCESS
+    if (is_array())
+#endif
+    {
+        auto& arr = get_array();
+        if (index < arr.size()) {
+            return arr[index];
+        }
     }
     return kUndefined;
 }
@@ -2398,7 +2393,7 @@ Object& Value::_get_or_assign_object()
 {
     assert(is_undefined() || is_object());
     if (!is_object()) {
-        assign(object_t);
+        assign(object_tag);
     }
     return get_object();
 }
@@ -3111,7 +3106,7 @@ ErrorCode Parser::ParseObject(Value& value, int depth, ParseOptions const& optio
 
     token = lexer.Lex(options); // skip '{'
 
-    auto& obj = value.assign(object_t);
+    auto& obj = value.assign(object_tag);
 
     if (token.kind != Token::r_brace)
     {
@@ -3214,7 +3209,7 @@ ErrorCode Parser::ParseArray(Value& value, int depth, ParseOptions const& option
 
     token = lexer.Lex(options); // skip '['
 
-    auto& arr = value.assign(array_t);
+    auto& arr = value.assign(array_tag);
 
     if (token.kind != Token::r_square)
     {
@@ -3257,11 +3252,11 @@ ErrorCode Parser::ParseString(Value& value, int /*depth*/, ParseOptions const& o
         if (ec != ErrorCode::success)
             return ec;
 
-        value.assign(string_t, std::move(out));
+        value.assign(string_tag, std::move(out));
     }
     else
     {
-        value.assign(string_t, String(token.ptr, token.end));
+        value.assign(string_tag, String(token.ptr, token.end));
     }
 
     token = lexer.Lex(options); // skip string
@@ -3500,7 +3495,7 @@ ErrorCode Parser::ParseNumber(Value& value, int /*depth*/, ParseOptions const& o
 
     if (options.parse_numbers_as_strings)
     {
-        value.assign(string_t, String(token.ptr, token.end));
+        value.assign(string_tag, String(token.ptr, token.end));
 
         token = lexer.Lex(options); // skip number
 
@@ -3549,7 +3544,7 @@ ErrorCode Parser::ParseNumber(Value& value, int /*depth*/, ParseOptions const& o
         num = Strtod(token.ptr, static_cast<int>(token.end - token.ptr));
     }
 
-    value.assign(number_t, num);
+    value.assign(number_tag, num);
 
     token = lexer.Lex(options); // skip number
 
@@ -3566,23 +3561,23 @@ ErrorCode Parser::ParseIdentifier(Value& value, int /*depth*/, ParseOptions cons
 
     if (len == 4 && memcmp(f, "null", 4) == 0)
     {
-        value.assign(null_t);
+        value.assign(null_tag);
     }
     else if (len == 4 && memcmp(f, "true", 4) == 0)
     {
-        value.assign(boolean_t, true);
+        value.assign(boolean_tag, true);
     }
     else if (len == 5 && memcmp(f, "false", 5) == 0)
     {
-        value.assign(boolean_t, false);
+        value.assign(boolean_tag, false);
     }
     else if (options.allow_nan_inf && IsNaNString(f, l))
     {
-        value.assign(number_t, std::numeric_limits<double>::quiet_NaN());
+        value.assign(number_tag, std::numeric_limits<double>::quiet_NaN());
     }
     else if (options.allow_nan_inf && IsInfinityString(f, l))
     {
-        value.assign(number_t, std::numeric_limits<double>::infinity());
+        value.assign(number_tag, std::numeric_limits<double>::infinity());
     }
     else
     {
@@ -3818,7 +3813,7 @@ ParseResult json::parse(Value& value, char const* next, char const* last, ParseO
     assert(last != nullptr);
 //  assert(reinterpret_cast<uintptr_t>(next) <= reinterpret_cast<uintptr_t>(last));
 
-    value.assign(undefined_t); // clear!
+    value.assign(undefined_tag); // clear!
 
     if (options.skip_bom && last - next >= 3)
     {

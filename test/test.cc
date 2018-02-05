@@ -17,6 +17,8 @@
 #include <cstring>
 #include <cmath>
 
+template <typename T> void Unused(T&& /*unused*/) {}
+
 namespace json {
     inline std::ostream& operator<<(std::ostream& os, ErrorCode ec) {
         return os << static_cast<int>(ec);
@@ -378,7 +380,8 @@ TEST_CASE("arrays")
     SECTION("std::forward_list")
     {
         std::forward_list<json::Value> a {1, "two", 3.3, true};
-        json::Value j = json::Value(json::Tag_array{}, a.begin(), a.end());
+        //json::Value j = json::Value(json::Tag_array{}, a.begin(), a.end());
+        json::Value j = {json::array_tag, a.begin(), a.end()};
         REQUIRE(j.is_array());
         REQUIRE(j.size() == 4);
         REQUIRE(j[0].is_number());
@@ -647,7 +650,7 @@ namespace json
         static Value to_json(V&& in) // V = std::optional<T> [const][&]
         {
             if (!in.has_value())
-                return json::undefined_t;
+                return json::undefined_tag;
 
             return TraitsFor<T>::to_json(std::forward<V>(in).value());
         }
@@ -2006,7 +2009,7 @@ TEST_CASE("Iterators")
 
     SECTION("object items")
     {
-        json::Value j = { json::object_t, {{"a", 1}, {"b", 2}, {"c", 3}} };
+        json::Value j = { json::object_tag, {{"a", 1}, {"b", 2}, {"c", 3}} };
         CHECK(j.is_object());
         CHECK(j.size() == 3);
 
@@ -2110,9 +2113,10 @@ TEST_CASE("as")
     //j.as<int&>() = 3.45;
     //j.as<int>() = 3;
     auto x = j.as<int>();
+    Unused(x);
 }
 
-#if 0
+#if JSON_VALUE_ALLOW_UNDEFINED_ACCESS
 TEST_CASE("undefined")
 {
     SECTION("array 1")
@@ -2126,7 +2130,7 @@ TEST_CASE("undefined")
 
     SECTION("array 2")
     {
-        const json::Value j = json::Value(json::array_tag{});
+        const json::Value j = json::Value(json::array_tag);
         CHECK(j.is_array());
         CHECK(j.empty());
         const auto& x1 = j[100];
@@ -2137,7 +2141,7 @@ TEST_CASE("undefined")
 
     SECTION("array 3")
     {
-        const json::Value j = json::Value(json::array_tag{}, size_t(101), json::Value(999));
+        const json::Value j = json::Value(json::array_tag, size_t(101), json::Value(999));
         CHECK(j.is_array());
         CHECK(j.size() == 101);
         const auto& x1 = j[100];
