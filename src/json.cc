@@ -1707,25 +1707,25 @@ Value& Value::operator=(Value const& rhs)
         switch (rhs.type())
         {
         case Type::undefined:
-            assign_undefined();
+            assign(undefined_t);
             break;
         case Type::null:
-            assign_null();
+            assign(null_t);
             break;
         case Type::boolean:
-            assign_boolean(rhs.get_boolean());
+            assign(boolean_t, rhs.get_boolean());
             break;
         case Type::number:
-            assign_number(rhs.get_number());
+            assign(number_t, rhs.get_number());
             break;
         case Type::string:
-            assign_string(rhs.get_string());
+            assign(string_t, rhs.get_string());
             break;
         case Type::array:
-            assign_array(rhs.get_array());
+            assign(array_t, rhs.get_array());
             break;
         case Type::object:
-            assign_object(rhs.get_object());
+            assign(object_t, rhs.get_object());
             break;
         }
     }
@@ -1764,61 +1764,23 @@ Value::Value(Type t)
     type_ = t; // Don't move to constructor initializer list!
 }
 
-void Value::assign_undefined() noexcept
+void Value::assign(Tag_undefined) noexcept
 {
-    switch (type_)
-    {
-    case Type::undefined:
-    case Type::null:
-    case Type::boolean:
-    case Type::number:
-        break;
-    case Type::string:
-        delete data_.string;
-        break;
-    case Type::array:
-        delete data_.array;
-        break;
-    case Type::object:
-        delete data_.object;
-        break;
-    default:
-        assert(false && "invalid type");
-        break;
-    }
+    _clear();
 
     type_ = Type::undefined;
 }
 
-void Value::assign_null() noexcept
+void Value::assign(Tag_null, Null) noexcept
 {
-    switch (type_)
-    {
-    case Type::undefined:
-    case Type::null:
-    case Type::boolean:
-    case Type::number:
-        break;
-    case Type::string:
-        delete data_.string;
-        break;
-    case Type::array:
-        delete data_.array;
-        break;
-    case Type::object:
-        delete data_.object;
-        break;
-    default:
-        assert(false && "invalid type");
-        break;
-    }
+    _clear();
 
     type_ = Type::null;
 }
 
-bool& Value::assign_boolean(bool v) noexcept
+bool& Value::assign(Tag_boolean, bool v) noexcept
 {
-    assign_undefined(); // release resources
+    _clear();
 
     data_.boolean = v;
     type_ = Type::boolean;
@@ -1826,9 +1788,9 @@ bool& Value::assign_boolean(bool v) noexcept
     return get_boolean();
 }
 
-double& Value::assign_number(double v) noexcept
+double& Value::assign(Tag_number, double v) noexcept
 {
-    assign_undefined(); // release resources
+    _clear();
 
     data_.number = v;
     type_ = Type::number;
@@ -1836,7 +1798,7 @@ double& Value::assign_number(double v) noexcept
     return get_number();
 }
 
-String& Value::assign_string()
+String& Value::assign(Tag_string)
 {
     switch (type_)
     {
@@ -1876,87 +1838,17 @@ String& Value::assign_string()
     return get_string();
 }
 
-String& Value::assign_string(String const& v)
+String& Value::assign(Tag_string, String const& v)
 {
-    switch (type_)
-    {
-    case Type::undefined:
-    case Type::null:
-    case Type::boolean:
-    case Type::number:
-        data_.string = new String(v);
-        type_ = Type::string;
-        break;
-    case Type::string:
-        *data_.string = v;
-        break;
-    case Type::array:
-        {
-            auto p = new String(v);
-            // noexcept ->
-            delete data_.array;
-            data_.string = p;
-            type_ = Type::string;
-        }
-        break;
-    case Type::object:
-        {
-            auto p = new String(v);
-            // noexcept ->
-            delete data_.object;
-            data_.string = p;
-            type_ = Type::string;
-        }
-        break;
-    default:
-        assert(false && "invalid type");
-        break;
-    }
-
-    return get_string();
+    return _assign_string(v);
 }
 
-String& Value::assign_string(String&& v)
+String& Value::assign(Tag_string, String&& v)
 {
-    switch (type_)
-    {
-    case Type::undefined:
-    case Type::null:
-    case Type::boolean:
-    case Type::number:
-        data_.string = new String(std::move(v));
-        type_ = Type::string;
-        break;
-    case Type::string:
-        *data_.string = std::move(v);
-        break;
-    case Type::array:
-        {
-            auto p = new String(std::move(v));
-            // noexcept ->
-            delete data_.array;
-            data_.string = p;
-            type_ = Type::string;
-        }
-        break;
-    case Type::object:
-        {
-            auto p = new String(std::move(v));
-            // noexcept ->
-            delete data_.object;
-            data_.string = p;
-            type_ = Type::string;
-        }
-        break;
-    default:
-        assert(false && "invalid type");
-        break;
-    }
-
-    return get_string();
+    return _assign_string(std::move(v));
 }
 
-Array& Value::assign_array()
+Array& Value::assign(Tag_array)
 {
     switch (type_)
     {
@@ -1996,87 +1888,22 @@ Array& Value::assign_array()
     return get_array();
 }
 
-Array& Value::assign_array(Array const& v)
+Array& Value::assign(Tag_array, Array const& v)
 {
-    switch (type_)
-    {
-    case Type::undefined:
-    case Type::null:
-    case Type::boolean:
-    case Type::number:
-        data_.array = new Array(v);
-        type_ = Type::array;
-        break;
-    case Type::string:
-        {
-            auto p = new Array(v);
-            // noexcept ->
-            delete data_.string;
-            data_.array = p;
-            type_ = Type::array;
-        }
-        break;
-    case Type::array:
-        *data_.array = v;
-        break;
-    case Type::object:
-        {
-            auto p = new Array(v);
-            // noexcept ->
-            delete data_.object;
-            data_.array = p;
-            type_ = Type::array;
-        }
-        break;
-    default:
-        assert(false && "invalid type");
-        break;
-    }
-
-    return get_array();
+    return _assign_array(v);
 }
 
-Array& Value::assign_array(Array&& v)
+Array& Value::assign(Tag_array, Array&& v)
 {
-    switch (type_)
-    {
-    case Type::undefined:
-    case Type::null:
-    case Type::boolean:
-    case Type::number:
-        data_.array = new Array(std::move(v));
-        type_ = Type::array;
-        break;
-    case Type::string:
-        {
-            auto p = new Array(std::move(v));
-            // noexcept ->
-            delete data_.string;
-            data_.array = p;
-            type_ = Type::array;
-        }
-        break;
-    case Type::array:
-        *data_.array = std::move(v);
-        break;
-    case Type::object:
-        {
-            auto p = new Array(std::move(v));
-            // noexcept ->
-            delete data_.object;
-            data_.array = p;
-            type_ = Type::array;
-        }
-        break;
-    default:
-        assert(false && "invalid type");
-        break;
-    }
-
-    return get_array();
+    return _assign_array(std::move(v));
 }
 
-Object& Value::assign_object()
+Array& Value::assign(Tag_array, std::initializer_list<Array::value_type> value)
+{
+    return _assign_array(value);
+}
+
+Object& Value::assign(Tag_object)
 {
     switch (type_)
     {
@@ -2116,7 +1943,22 @@ Object& Value::assign_object()
     return get_object();
 }
 
-Object& Value::assign_object(Object const& v)
+Object& Value::assign(Tag_object, Object const& v)
+{
+    return _assign_object(v);
+}
+
+Object& Value::assign(Tag_object, Object&& v)
+{
+    return _assign_object(std::move(v));
+}
+
+Object& Value::assign(Tag_object, std::initializer_list<Object::value_type> value)
+{
+    return _assign_object(value);
+}
+
+void Value::_clear()
 {
     switch (type_)
     {
@@ -2124,39 +1966,26 @@ Object& Value::assign_object(Object const& v)
     case Type::null:
     case Type::boolean:
     case Type::number:
-        data_.object = new Object(v);
-        type_ = Type::object;
         break;
     case Type::string:
-        {
-            auto p = new Object(v);
-            // noexcept ->
-            delete data_.string;
-            data_.object = p;
-            type_ = Type::object;
-        }
+        delete data_.string;
         break;
     case Type::array:
-        {
-            auto p = new Object(v);
-            // noexcept ->
-            delete data_.array;
-            data_.object = p;
-            type_ = Type::object;
-        }
+        delete data_.array;
         break;
     case Type::object:
-        *data_.object = v;
+        delete data_.object;
         break;
     default:
         assert(false && "invalid type");
         break;
     }
 
-    return get_object();
+    type_ = Type::undefined;
 }
 
-Object& Value::assign_object(Object&& v)
+template <typename T>
+String& Value::_assign_string(T&& value)
 {
     switch (type_)
     {
@@ -2164,12 +1993,94 @@ Object& Value::assign_object(Object&& v)
     case Type::null:
     case Type::boolean:
     case Type::number:
-        data_.object = new Object(std::move(v));
+        data_.string = new String(std::forward<T>(value));
+        type_ = Type::string;
+        break;
+    case Type::string:
+        *data_.string = std::forward<T>(value);
+        break;
+    case Type::array:
+        {
+            auto p = new String(std::forward<T>(value));
+            // noexcept ->
+            delete data_.array;
+            data_.string = p;
+            type_ = Type::string;
+        }
+        break;
+    case Type::object:
+        {
+            auto p = new String(std::forward<T>(value));
+            // noexcept ->
+            delete data_.object;
+            data_.string = p;
+            type_ = Type::string;
+        }
+        break;
+    default:
+        assert(false && "invalid type");
+        break;
+    }
+
+    return get_string();
+}
+
+template <typename T>
+Array& Value::_assign_array(T&& value)
+{
+    switch (type_)
+    {
+    case Type::undefined:
+    case Type::null:
+    case Type::boolean:
+    case Type::number:
+        data_.array = new Array(std::forward<T>(value));
+        type_ = Type::array;
+        break;
+    case Type::string:
+        {
+            auto p = new Array(std::forward<T>(value));
+            // noexcept ->
+            delete data_.string;
+            data_.array = p;
+            type_ = Type::array;
+        }
+        break;
+    case Type::array:
+        *data_.array = std::forward<T>(value);
+        break;
+    case Type::object:
+        {
+            auto p = new Array(std::forward<T>(value));
+            // noexcept ->
+            delete data_.object;
+            data_.array = p;
+            type_ = Type::array;
+        }
+        break;
+    default:
+        assert(false && "invalid type");
+        break;
+    }
+
+    return get_array();
+}
+
+template <typename T>
+Object& Value::_assign_object(T&& value)
+{
+    switch (type_)
+    {
+    case Type::undefined:
+    case Type::null:
+    case Type::boolean:
+    case Type::number:
+        data_.object = new Object(std::forward<T>(value));
         type_ = Type::object;
         break;
     case Type::string:
         {
-            auto p = new Object(std::move(v));
+            auto p = new Object(std::forward<T>(value));
             // noexcept ->
             delete data_.string;
             data_.object = p;
@@ -2178,7 +2089,7 @@ Object& Value::assign_object(Object&& v)
         break;
     case Type::array:
         {
-            auto p = new Object(std::move(v));
+            auto p = new Object(std::forward<T>(value));
             // noexcept ->
             delete data_.array;
             data_.object = p;
@@ -2186,7 +2097,7 @@ Object& Value::assign_object(Object&& v)
         }
         break;
     case Type::object:
-        *data_.object = std::move(v);
+        *data_.object = std::forward<T>(value);
         break;
     default:
         assert(false && "invalid type");
@@ -2316,10 +2227,50 @@ size_t Value::hash() const noexcept
     }
 }
 
-void Value::swap(Value& other) noexcept
+void Value::swap(Value& rhs) noexcept
 {
-    std::swap(data_, other.data_);
-    std::swap(type_, other.type_);
+#if 0
+    auto& lhs = *this;
+
+    if (lhs.type() == rhs.type())
+    {
+        using std::swap;
+
+        switch (type())
+        {
+        case Type::undefined:
+        case Type::null:
+            break;
+        case Type::boolean:
+            swap(lhs.data_.boolean, rhs.data_.boolean);
+            break;
+        case Type::number:
+            swap(lhs.data_.number, rhs.data_.number);
+            break;
+        case Type::string:
+            swap(*lhs.data_.string, *rhs.data_.string);
+            break;
+        case Type::array:
+            swap(*lhs.data_.array, *rhs.data_.array);
+            break;
+        case Type::object:
+            swap(*lhs.data_.object, *rhs.data_.object);
+            break;
+        default:
+            assert(false && "invalid index");
+            break;
+        }
+    }
+    else
+    {
+        auto tmp = std::move(lhs);
+        lhs = std::move(rhs);
+        rhs = std::move(tmp);
+    }
+#else
+    std::swap(data_, rhs.data_);
+    std::swap(type_, rhs.type_);
+#endif
 }
 
 size_t Value::size() const noexcept
@@ -2382,7 +2333,7 @@ Array& Value::_get_or_assign_array()
 {
     assert(is_undefined() || is_array());
     if (!is_array()) {
-        assign_array();
+        assign(array_t);
     }
     return get_array();
 }
@@ -2447,7 +2398,7 @@ Object& Value::_get_or_assign_object()
 {
     assert(is_undefined() || is_object());
     if (!is_object()) {
-        assign_object();
+        assign(object_t);
     }
     return get_object();
 }
@@ -3164,7 +3115,7 @@ ErrorCode Parser::ParseObject(Value& value, int depth, ParseOptions const& optio
 
     token = lexer.Lex(options); // skip '{'
 
-    auto& obj = value.assign_object();
+    auto& obj = value.assign(object_t);
 
     if (token.kind != Token::r_brace)
     {
@@ -3267,7 +3218,7 @@ ErrorCode Parser::ParseArray(Value& value, int depth, ParseOptions const& option
 
     token = lexer.Lex(options); // skip '['
 
-    auto& arr = value.assign_array();
+    auto& arr = value.assign(array_t);
 
     if (token.kind != Token::r_square)
     {
@@ -3310,11 +3261,11 @@ ErrorCode Parser::ParseString(Value& value, int /*depth*/, ParseOptions const& o
         if (ec != ErrorCode::success)
             return ec;
 
-        value.assign_string(std::move(out));
+        value.assign(string_t, std::move(out));
     }
     else
     {
-        value.assign_string(String(token.ptr, token.end));
+        value.assign(string_t, String(token.ptr, token.end));
     }
 
     token = lexer.Lex(options); // skip string
@@ -3553,7 +3504,7 @@ ErrorCode Parser::ParseNumber(Value& value, int /*depth*/, ParseOptions const& o
 
     if (options.parse_numbers_as_strings)
     {
-        value.assign_string(String(token.ptr, token.end));
+        value.assign(string_t, String(token.ptr, token.end));
 
         token = lexer.Lex(options); // skip number
 
@@ -3602,7 +3553,7 @@ ErrorCode Parser::ParseNumber(Value& value, int /*depth*/, ParseOptions const& o
         num = Strtod(token.ptr, static_cast<int>(token.end - token.ptr));
     }
 
-    value.assign_number(num);
+    value.assign(number_t, num);
 
     token = lexer.Lex(options); // skip number
 
@@ -3619,23 +3570,23 @@ ErrorCode Parser::ParseIdentifier(Value& value, int /*depth*/, ParseOptions cons
 
     if (len == 4 && memcmp(f, "null", 4) == 0)
     {
-        value.assign_null();
+        value.assign(null_t);
     }
     else if (len == 4 && memcmp(f, "true", 4) == 0)
     {
-        value.assign_boolean(true);
+        value.assign(boolean_t, true);
     }
     else if (len == 5 && memcmp(f, "false", 5) == 0)
     {
-        value.assign_boolean(false);
+        value.assign(boolean_t, false);
     }
     else if (options.allow_nan_inf && IsNaNString(f, l))
     {
-        value.assign_number(std::numeric_limits<double>::quiet_NaN());
+        value.assign(number_t, std::numeric_limits<double>::quiet_NaN());
     }
     else if (options.allow_nan_inf && IsInfinityString(f, l))
     {
-        value.assign_number(std::numeric_limits<double>::infinity());
+        value.assign(number_t, std::numeric_limits<double>::infinity());
     }
     else
     {
@@ -3871,7 +3822,7 @@ ParseResult json::parse(Value& value, char const* next, char const* last, ParseO
     assert(last != nullptr);
 //  assert(reinterpret_cast<uintptr_t>(next) <= reinterpret_cast<uintptr_t>(last));
 
-    value.assign_undefined(); // clear!
+    value.assign(undefined_t); // clear!
 
     if (options.skip_bom && last - next >= 3)
     {

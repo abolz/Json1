@@ -342,25 +342,13 @@ class Value final
     static Value const kUndefined;
 
     template <typename T>
-    using IsJsonValue
-        = std::integral_constant<bool,
-            std::is_same< Value, std::decay_t<T> >::value>;
-
-    template <typename T>
-    using IsConvertible
-        = std::integral_constant<bool,
-            IsJsonValue< SourceTypeFor<T> >::value || std::is_convertible< SourceTypeFor<T>, TargetTypeFor<T> >::value>;
-
-    template <typename T>
-    using IsConstructible
-        = std::integral_constant<bool,
-            IsJsonValue< SourceTypeFor<T> >::value || std::is_constructible< TargetTypeFor<T>, SourceTypeFor<T> >::value>;
+    using IsValue = std::integral_constant<bool, std::is_same< Value, std::decay_t<T> >::value>;
 
 public:
     Value() noexcept = default;
    ~Value() noexcept
     {
-        assign_undefined();
+       assign(undefined_t);
     }
 
     Value(Value const& rhs);
@@ -407,12 +395,11 @@ public:
         data_.boolean = {};
     }
 
-    template <typename Arg, std::enable_if_t< !IsJsonValue<Arg>::value, int > = 0>
+    template <typename Arg, std::enable_if_t< !IsValue<Arg>::value, int > = 0>
     Value(Tag_boolean, Arg&& arg) noexcept
         : type_(Type::boolean)
     {
-        // Use ?: to include explicit operator bool.
-        data_.boolean = std::forward<Arg>(arg) ? true : false;
+        data_.boolean = static_cast<bool>(std::forward<Arg>(arg));
     }
 
     // number
@@ -423,7 +410,7 @@ public:
         data_.number = {};
     }
 
-    template <typename Arg, std::enable_if_t< !IsJsonValue<Arg>::value, int > = 0>
+    template <typename Arg, std::enable_if_t< !IsValue<Arg>::value, int > = 0>
     Value(Tag_number, Arg&& arg) noexcept
         : type_(Type::number)
     {
@@ -438,7 +425,7 @@ public:
         type_ = Type::string;
     }
 
-    template <typename Arg, typename ...Args, std::enable_if_t< /*(sizeof...(Args) > 0) ||*/ !IsJsonValue<Arg>::value, int > = 0>
+    template <typename Arg, typename ...Args, std::enable_if_t< /*(sizeof...(Args) > 0) ||*/ !IsValue<Arg>::value, int > = 0>
     Value(Tag_string, Arg&& arg, Args&&... args)
     {
         data_.string = new String(std::forward<Arg>(arg), std::forward<Args>(args)...);
@@ -453,14 +440,14 @@ public:
         type_ = Type::array;
     }
 
-    template <typename Arg, typename ...Args, std::enable_if_t< /*(sizeof...(Args) > 0) ||*/ !IsJsonValue<Arg>::value, int > = 0>
+    template <typename Arg, typename ...Args, std::enable_if_t< /*(sizeof...(Args) > 0) ||*/ !IsValue<Arg>::value, int > = 0>
     Value(Tag_array, Arg&& arg, Args&&... args)
     {
         data_.array = new Array(std::forward<Arg>(arg), std::forward<Args>(args)...);
         type_ = Type::array;
     }
 
-    Value(Tag_array, std::initializer_list<typename Array::value_type> ilist)
+    Value(Tag_array, std::initializer_list<Array::value_type> ilist)
     {
         data_.array = new Array(ilist);
         type_ = Type::array;
@@ -474,43 +461,45 @@ public:
         type_ = Type::object;
     }
 
-    template <typename Arg, typename ...Args, std::enable_if_t< /*(sizeof...(Args) > 0) ||*/ !IsJsonValue<Arg>::value, int > = 0>
+    template <typename Arg, typename ...Args, std::enable_if_t< /*(sizeof...(Args) > 0) ||*/ !IsValue<Arg>::value, int > = 0>
     Value(Tag_object, Arg&& arg, Args&&... args)
     {
         data_.object = new Object(std::forward<Arg>(arg), std::forward<Args>(args)...);
         type_ = Type::object;
     }
 
-    Value(Tag_object, std::initializer_list<typename Object::value_type> ilist)
+    Value(Tag_object, std::initializer_list<Object::value_type> ilist)
     {
         data_.object = new Object(ilist);
         type_ = Type::object;
     }
 
-    // value
-
-    Value(Tag_boolean, Value const& v) : Value(v) {}
-    Value(Tag_boolean, Value&&      v) noexcept : Value(std::move(v)) {}
-    Value(Tag_number,  Value const& v) : Value(v) {}
-    Value(Tag_number,  Value&&      v) noexcept : Value(std::move(v)) {}
-    Value(Tag_string,  Value const& v) : Value(v) {}
-    Value(Tag_string,  Value&&      v) noexcept : Value(std::move(v)) {}
-    Value(Tag_array,   Value const& v) : Value(v) {}
-    Value(Tag_array,   Value&&      v) noexcept : Value(std::move(v)) {}
-    Value(Tag_object,  Value const& v) : Value(v) {}
-    Value(Tag_object,  Value&&      v) noexcept : Value(std::move(v)) {}
-
     // generic (converting) constructors
 
-    template <typename T, std::enable_if_t< !IsJsonValue<T>::value && IsConvertible<T>::value, int > = 0>
+    template <typename T,
+        std::enable_if_t< !IsValue<T>::value
+                          && !IsValue< SourceTypeFor<T> >::value
+                          && std::is_convertible< SourceTypeFor<T>, TargetTypeFor<T> >::value, int> = 0>
     Value(T&& v)
         : Value(TagFor<T>{}, TraitsFor<T>::to_json(std::forward<T>(v)))
     {
     }
 
-    template <typename T, std::enable_if_t< !IsJsonValue<T>::value && !IsConvertible<T>::value && IsConstructible<T>::value, int > = 1>
+    template <typename T,
+        std::enable_if_t< !IsValue<T>::value
+                          && !IsValue< SourceTypeFor<T> >::value
+                          && !std::is_convertible< SourceTypeFor<T>, TargetTypeFor<T> >::value
+                          && std::is_constructible< TargetTypeFor<T>, SourceTypeFor<T> >::value, int> = 1>
     explicit Value(T&& v)
         : Value(TagFor<T>{}, static_cast<TargetTypeFor<T>>( TraitsFor<T>::to_json(std::forward<T>(v)) ))
+    {
+    }
+
+    template <typename T,
+        std::enable_if_t< !IsValue<T>::value
+                          && IsValue< SourceTypeFor<T> >::value, int> = 2>
+    Value(T&& v)
+        : Value(TraitsFor<T>::to_json(std::forward<T>(v)))
     {
     }
 
@@ -521,45 +510,78 @@ public:
     }
 #endif
 
-private:
-    // FIXME:
-    // assign(tag, ...) should be (almost) the same as Value(tag, ...) ?!?!
-    //
-    // template <Type Ty, typename ...Args>
-    // void assign(Type_const<Ty> tag, Args&&... args)
-    // {
-    //     Value j(tag, std::forward<Args>(args)...);
-    //     swap(j);
-    // }
-    //
-    // template <typename T, std::enable_if_t< !IsJsonValue<T>::value && IsConvertible<T>::value, int > = 0>
-    // Value& operator=(T&& v)
-    // {
-    //     assign(TagFor<T>{}, TraitsFor<T>::to_json(std::forward<T>(v)));
-    //     return *this;
-    // }
-
-    void _assign_from(Tag_null,    Null           ) noexcept { assign_null(); }
-    void _assign_from(Tag_boolean, bool          v) noexcept { assign_boolean(v); }
-    void _assign_from(Tag_number,  double        v) noexcept { assign_number(v); }
-    void _assign_from(Tag_string,  String const& v)          { assign_string(v); }
-    void _assign_from(Tag_string,  String&&      v)          { assign_string(std::move(v)); }
-    void _assign_from(Tag_array,   Array const&  v)          { assign_array(v); }
-    void _assign_from(Tag_array,   Array&&       v)          { assign_array(std::move(v)); }
-    void _assign_from(Tag_object,  Object const& v)          { assign_object(v); }
-    void _assign_from(Tag_object,  Object&&      v)          { assign_object(std::move(v)); }
-
-    // to_json might return a 'Value'
-    template <Type Ty> void _assign_from(Type_const<Ty>, Value const& v) { *this = v; }
-    template <Type Ty> void _assign_from(Type_const<Ty>, Value&&      v) { *this = std::move(v); }
-
 public:
-    template <typename T, std::enable_if_t< !IsJsonValue<T>::value && IsConvertible<T>::value, int > = 0>
+    // undefined
+
+    void assign(Tag_undefined) noexcept;
+
+    // null
+
+    void assign(Tag_null) noexcept { assign(null_t, Null{}); }
+    void assign(Tag_null, Null) noexcept;
+
+    // boolean
+
+    bool& assign(Tag_boolean) noexcept { return assign(boolean_t, false); }
+    bool& assign(Tag_boolean, bool value) noexcept;
+
+    // number
+
+    double& assign(Tag_number) noexcept { return assign(number_t, 0.0); }
+    double& assign(Tag_number, double value) noexcept;
+
+    // string
+
+    String& assign(Tag_string);
+    String& assign(Tag_string, String const& value);
+    String& assign(Tag_string, String&& value);
+
+    // array
+
+    Array& assign(Tag_array);
+    Array& assign(Tag_array, Array const& value);
+    Array& assign(Tag_array, Array&& value);
+    Array& assign(Tag_array, std::initializer_list<Array::value_type> value);
+
+    // object
+
+    Object& assign(Tag_object);
+    Object& assign(Tag_object, Object const& value);
+    Object& assign(Tag_object, Object&& value);
+    Object& assign(Tag_object, std::initializer_list<Object::value_type> value);
+
+    // assignment operators
+
+    template <typename T,
+        std::enable_if_t< !IsValue<T>::value
+                          && !IsValue< SourceTypeFor<T> >::value
+                          && std::is_convertible< SourceTypeFor<T>, TargetTypeFor<T> >::value, int> = 0>
     Value& operator=(T&& v)
     {
-        _assign_from(TagFor<T>{}, TraitsFor<T>::to_json(std::forward<T>(v)));
+        assign(TagFor<T>{}, TraitsFor<T>::to_json(std::forward<T>(v)));
         return *this;
     }
+
+    template <typename T,
+        std::enable_if_t< !IsValue<T>::value
+                          && IsValue< SourceTypeFor<T> >::value, int> = 1>
+    Value& operator=(T&& v)
+    {
+        return *this = TraitsFor<T>::to_json(std::forward<T>(v));
+    }
+
+    template <Type Ty>
+    Value& operator=(Type_const<Ty> tag)
+    {
+        assign(tag);
+        return *this;
+    }
+
+private:
+    void _clear();
+    template <typename T> String& _assign_string(T&& value);
+    template <typename T> Array&  _assign_array (T&& value);
+    template <typename T> Object& _assign_object(T&& value);
 
 public:
     // Returns the type of the actual value stored in this JSON object.
@@ -672,27 +694,6 @@ public:
         assert(is_object());
         return std::move(*data_.object);
     }
-
-    // assign_X assigns a value of type X to this JSON object.
-    // POST: is_X() == true
-    //
-    // If this JSON object already contains a value of type X, the copy/move
-    // assignment operator is used. Otherwise the copy/move constructor will be
-    // used to construct a new X.
-
-    void    assign_undefined() noexcept;
-    void    assign_null     () noexcept;
-    bool&   assign_boolean  (bool          v) noexcept;
-    double& assign_number   (double        v) noexcept;
-    String& assign_string   ();
-    String& assign_string   (String const& v);
-    String& assign_string   (String&&      v);
-    Array&  assign_array    ();
-    Array&  assign_array    (Array const&  v);
-    Array&  assign_array    (Array&&       v);
-    Object& assign_object   ();
-    Object& assign_object   (Object const& v);
-    Object& assign_object   (Object&&      v);
 
     // as<T> uses Traits::from_json to convert this JSON value into an object
     // of type T.

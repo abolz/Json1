@@ -647,7 +647,7 @@ namespace json
         static Value to_json(V&& in) // V = std::optional<T> [const][&]
         {
             if (!in.has_value())
-                return Tag_undefined{};
+                return json::undefined_t;
 
             return TraitsFor<T>::to_json(std::forward<V>(in).value());
         }
@@ -683,6 +683,15 @@ TEST_CASE("optional")
         json::Value j1 = oi1;
         CHECK(j1.is_number());
         CHECK(j1.get_number() == 123);
+
+        json::Value j2;
+        j2 = oi0;
+        CHECK(j2.is_undefined());
+
+        json::Value j3;
+        j3 = oi1;
+        CHECK(j3.is_number());
+        CHECK(j3.get_number() == 123);
     }
 
     SECTION("Value -> optional")
@@ -2117,7 +2126,7 @@ TEST_CASE("undefined")
 
     SECTION("array 2")
     {
-        const json::Value j = json::Value(json::Tag_array{});
+        const json::Value j = json::Value(json::array_tag{});
         CHECK(j.is_array());
         CHECK(j.empty());
         const auto& x1 = j[100];
@@ -2128,7 +2137,7 @@ TEST_CASE("undefined")
 
     SECTION("array 3")
     {
-        const json::Value j = json::Value(json::Tag_array{}, size_t(101), json::Value(999));
+        const json::Value j = json::Value(json::array_tag{}, size_t(101), json::Value(999));
         CHECK(j.is_array());
         CHECK(j.size() == 101);
         const auto& x1 = j[100];
