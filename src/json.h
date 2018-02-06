@@ -115,7 +115,9 @@ JSON_INLINE_VARIABLE constexpr Tag_array     const array_tag{};
 JSON_INLINE_VARIABLE constexpr Tag_object    const object_tag{};
 #endif
 
-template <Type> struct TargetType;
+namespace impl {
+
+template <Type> struct TargetType {};
 template <>     struct TargetType<Type::undefined> { using type = void;    };
 template <>     struct TargetType<Type::null     > { using type = Null;    };
 template <>     struct TargetType<Type::boolean  > { using type = bool;    };
@@ -123,6 +125,8 @@ template <>     struct TargetType<Type::number   > { using type = double;  };
 template <>     struct TargetType<Type::string   > { using type = String;  };
 template <>     struct TargetType<Type::array    > { using type = Array;   };
 template <>     struct TargetType<Type::object   > { using type = Object;  };
+
+} // namespace impl
 
 namespace impl {
 
@@ -312,7 +316,7 @@ template <typename T>
 using TagFor = typename TraitsFor<T>::tag;
 
 template <typename T>
-using TargetTypeFor = typename TargetType<TagFor<T>::value>::type;
+using TargetTypeFor = typename impl::TargetType<TagFor<T>::value>::type;
 
 template <typename T>
 using ToJsonResultTypeFor = decltype(( TraitsFor<T>::to_json(std::declval<T>()) ));
