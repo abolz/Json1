@@ -315,7 +315,7 @@ template <typename T>
 using TargetTypeFor = typename TargetType<TagFor<T>::value>::type;
 
 template <typename T>
-using SourceTypeFor = decltype(( TraitsFor<T>::to_json(std::declval<T>()) ));
+using ToJsonResultTypeFor = decltype(( TraitsFor<T>::to_json(std::declval<T>()) ));
 
 //------------------------------------------------------------------------------
 //
@@ -436,8 +436,9 @@ public:
 
     template <typename T,
         std::enable_if_t< !IsValue<T>::value
-                          && !IsValue< SourceTypeFor<T> >::value
-                          && std::is_convertible< SourceTypeFor<T>, TargetTypeFor<T> >::value, int> = 0>
+                          && !IsValue<ToJsonResultTypeFor<T>>::value
+                          && std::is_convertible<ToJsonResultTypeFor<T>, TargetTypeFor<T>>::value
+        , int> = 0>
     Value(T&& v)
         : Value(TagFor<T>{}, TraitsFor<T>::to_json(std::forward<T>(v)))
     {
@@ -445,9 +446,10 @@ public:
 
     template <typename T,
         std::enable_if_t< !IsValue<T>::value
-                          && !IsValue< SourceTypeFor<T> >::value
-                          && !std::is_convertible< SourceTypeFor<T>, TargetTypeFor<T> >::value
-                          && std::is_constructible< TargetTypeFor<T>, SourceTypeFor<T> >::value, int> = 1>
+                          && !IsValue<ToJsonResultTypeFor<T>>::value
+                          && !std::is_convertible<ToJsonResultTypeFor<T>, TargetTypeFor<T>>::value
+                          && std::is_constructible<TargetTypeFor<T>, ToJsonResultTypeFor<T>>::value
+        , int> = 1>
     explicit Value(T&& v)
         : Value(TagFor<T>{}, static_cast<TargetTypeFor<T>>( TraitsFor<T>::to_json(std::forward<T>(v)) ))
     {
@@ -455,7 +457,8 @@ public:
 
     template <typename T,
         std::enable_if_t< !IsValue<T>::value
-                          && IsValue< SourceTypeFor<T> >::value, int> = 2>
+                          && IsValue<ToJsonResultTypeFor<T>>::value
+        , int> = 2>
     Value(T&& v)
         : Value(TraitsFor<T>::to_json(std::forward<T>(v)))
     {
@@ -510,8 +513,9 @@ public:
 
     template <typename T,
         std::enable_if_t< !IsValue<T>::value
-                          && !IsValue< SourceTypeFor<T> >::value
-                          && std::is_convertible< SourceTypeFor<T>, TargetTypeFor<T> >::value, int> = 0>
+                          && !IsValue<ToJsonResultTypeFor<T>>::value
+                          && std::is_convertible<ToJsonResultTypeFor<T>, TargetTypeFor<T>>::value
+        , int> = 0>
     Value& operator=(T&& v)
     {
         assign(TagFor<T>{}, TraitsFor<T>::to_json(std::forward<T>(v)));
@@ -520,7 +524,8 @@ public:
 
     template <typename T,
         std::enable_if_t< !IsValue<T>::value
-                          && IsValue< SourceTypeFor<T> >::value, int> = 1>
+                          && IsValue<ToJsonResultTypeFor<T>>::value
+        , int> = 1>
     Value& operator=(T&& v)
     {
         return *this = TraitsFor<T>::to_json(std::forward<T>(v));
