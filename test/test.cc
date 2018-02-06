@@ -2550,3 +2550,199 @@ TEST_CASE("DOubles 2")
     check_double(  1.2345e+21,   "1.2344999999999999e+21" ); // Grisu2 "fails"
     check_double(  1.2345e+22,   "1.2345e+22"             );
 }
+
+TEST_CASE("number conversions")
+{
+    static const double Infinity = std::numeric_limits<double>::infinity();
+    static const double NaN = std::numeric_limits<double>::quiet_NaN();
+    static const double numbers[] = {
+         0.0,
+         127.0,
+         127.5,
+         128.0,
+         128.5,
+         129.0,
+         255.0,
+         255.5,
+         256.0,
+         256.5,
+         257.0,
+         32767.0,
+         32767.5,
+         32768.0,
+         32768.5,
+         32769.0,
+         65535.0,
+         65535.5,
+         65536.0,
+         65536.5,
+         65537.0,
+         2147483647.0,
+         2147483647.5,
+         2147483648.0,
+         2147483648.5,
+         2147483649.0,
+         4294967295.0,
+         4294967295.5,
+         4294967296.0,
+         4294967296.5,
+         4294967297.0,
+        -0.0,
+        -127.0,
+        -127.5,
+        -128.0,
+        -128.5,
+        -129.0,
+        -255.0,
+        -255.5,
+        -256.0,
+        -256.5,
+        -257.0,
+        -32767.0,
+        -32767.5,
+        -32768.0,
+        -32768.5,
+        -32769.0,
+        -65535.0,
+        -65535.5,
+        -65536.0,
+        -65536.5,
+        -65537.0,
+        -2147483647.0,
+        -2147483647.5,
+        -2147483648.0,
+        -2147483648.5,
+        -2147483649.0,
+        -4294967295.0,
+        -4294967295.5,
+        -4294967296.0,
+        -4294967296.5,
+        -4294967297.0,
+         Infinity,
+        -Infinity,
+    };
+    static const size_t num_numbers = sizeof(numbers) / sizeof(numbers[0]);
+
+    SECTION("ToInt32")
+    {
+        static const double expected[] = {
+            0.0, 127.0, 127.0, 128.0, 128.0, 129.0, 255.0, 255.0, 256.0, 256.0, 257.0, 32767.0, 32767.0, 32768.0, 32768.0, 32769.0,
+            65535.0, 65535.0, 65536.0, 65536.0, 65537.0, 2147483647.0, 2147483647.0, -2147483648.0, -2147483648.0, -2147483647.0, -1.0,
+            -1.0, 0.0, 0.0, 1.0, 0.0, -127.0, -127.0, -128.0, -128.0, -129.0, -255.0, -255.0, -256.0, -256.0, -257.0, -32767.0, -32767.0,
+            -32768.0, -32768.0, -32769.0, -65535.0, -65535.0, -65536.0, -65536.0, -65537.0, -2147483647.0, -2147483647.0, -2147483648.0,
+            -2147483648.0, 2147483647.0, 1.0, 1.0, 0.0, 0.0, -1.0, 0.0, 0.0,
+        };
+        static const size_t num_expected = sizeof(expected) / sizeof(expected[0]);
+        static_assert(num_numbers == num_expected, "ouch");
+        for (size_t i = 0; i < num_numbers; ++i) {
+            CAPTURE(numbers[i]);
+            CAPTURE(expected[i]);
+            json::Value j = numbers[i];
+            CHECK(static_cast<double>(j.to_int32()) == expected[i]);
+        }
+    }
+
+    SECTION("ToUint32")
+    {
+        static const double expected[] = {
+            0.0, 127.0, 127.0, 128.0, 128.0, 129.0, 255.0, 255.0, 256.0, 256.0, 257.0, 32767.0, 32767.0, 32768.0, 32768.0,
+            32769.0, 65535.0, 65535.0, 65536.0, 65536.0, 65537.0, 2147483647.0, 2147483647.0, 2147483648.0, 2147483648.0, 2147483649.0, 4294967295.0,
+            4294967295.0, 0.0, 0.0, 1.0, 0.0, 4294967169.0, 4294967169.0, 4294967168.0, 4294967168.0, 4294967167.0, 4294967041.0,
+            4294967041.0, 4294967040.0, 4294967040.0, 4294967039.0, 4294934529.0, 4294934529.0, 4294934528.0, 4294934528.0,
+            4294934527.0, 4294901761.0, 4294901761.0, 4294901760.0, 4294901760.0, 4294901759.0, 2147483649.0, 2147483649.0,
+            2147483648.0, 2147483648.0, 2147483647.0, 1.0, 1.0, 0.0, 0.0, 4294967295.0, 0.0, 0.0,
+        };
+        static const size_t num_expected = sizeof(expected) / sizeof(expected[0]);
+        static_assert(num_numbers == num_expected, "ouch");
+        for (size_t i = 0; i < num_numbers; ++i) {
+            CAPTURE(numbers[i]);
+            CAPTURE(expected[i]);
+            json::Value j = numbers[i];
+            CHECK(static_cast<double>(j.to_uint32()) == expected[i]);
+        }
+    }
+
+    SECTION("ToInt16")
+    {
+        static const double expected[] = {
+            0, 127, 127, 128, 128, 129, 255, 255, 256, 256, 257, 32767, 32767, -32768, -32768, -32767, -1, -1, 0, 0, 1, -1, -1, 0,
+            0, 1, -1, -1, 0, 0, 1, 0, -127, -127, -128, -128, -129, -255, -255, -256, -256, -257, -32767, -32767, -32768, -32768, 32767,
+            1, 1, 0, 0, -1, 1, 1, 0, 0, -1, 1, 1, 0, 0, -1, 0, 0,
+        };
+        static const size_t num_expected = sizeof(expected) / sizeof(expected[0]);
+        static_assert(num_numbers == num_expected, "ouch");
+        for (size_t i = 0; i < num_numbers; ++i) {
+            CAPTURE(numbers[i]);
+            CAPTURE(expected[i]);
+            json::Value j = numbers[i];
+            CHECK(static_cast<double>(j.to_int16()) == expected[i]);
+        }
+    }
+
+    SECTION("ToUint16")
+    {
+        static const double expected[] = {
+            0, 127, 127, 128, 128, 129, 255, 255, 256, 256, 257, 32767, 32767, 32768, 32768, 32769, 65535, 65535, 0, 0,
+            1, 65535, 65535, 0, 0, 1, 65535, 65535, 0, 0, 1, 0, 65409, 65409, 65408, 65408, 65407, 65281, 65281, 65280, 65280, 65279,
+            32769, 32769, 32768, 32768, 32767, 1, 1, 0, 0, 65535, 1, 1, 0, 0, 65535, 1, 1, 0, 0, 65535, 0, 0,
+        };
+        static const size_t num_expected = sizeof(expected) / sizeof(expected[0]);
+        static_assert(num_numbers == num_expected, "ouch");
+        for (size_t i = 0; i < num_numbers; ++i) {
+            CAPTURE(numbers[i]);
+            CAPTURE(expected[i]);
+            json::Value j = numbers[i];
+            CHECK(static_cast<double>(j.to_uint16()) == expected[i]);
+        }
+    }
+
+    SECTION("ToInt8")
+    {
+        static const double expected[] = {
+            0, 127, 127, -128, -128, -127, -1, -1, 0, 0, 1, -1, -1, 0, 0, 1, -1, -1, 0, 0, 1, -1, -1, 0, 0, 1, -1, -1, 0, 0, 1, 0,
+            -127, -127, -128, -128, 127, 1, 1, 0, 0, -1, 1, 1, 0, 0, -1, 1, 1, 0, 0, -1, 1, 1, 0, 0, -1, 1, 1, 0, 0, -1, 0, 0,
+        };
+        static const size_t num_expected = sizeof(expected) / sizeof(expected[0]);
+        static_assert(num_numbers == num_expected, "ouch");
+        for (size_t i = 0; i < num_numbers; ++i) {
+            CAPTURE(numbers[i]);
+            CAPTURE(expected[i]);
+            json::Value j = numbers[i];
+            CHECK(static_cast<double>(j.to_int8()) == expected[i]);
+        }
+    }
+
+    SECTION("ToUint8")
+    {
+        static const double expected[] = {
+            0, 127, 127, 128, 128, 129, 255, 255, 0, 0, 1, 255, 255, 0, 0, 1, 255, 255, 0, 0, 1, 255, 255, 0, 0, 1, 255, 255, 0,
+            0, 1, 0, 129, 129, 128, 128, 127, 1, 1, 0, 0, 255, 1, 1, 0, 0, 255, 1, 1, 0, 0, 255, 1, 1, 0, 0, 255, 1, 1, 0, 0, 255,
+            0, 0,
+        };
+        static const size_t num_expected = sizeof(expected) / sizeof(expected[0]);
+        static_assert(num_numbers == num_expected, "ouch");
+        for (size_t i = 0; i < num_numbers; ++i) {
+            CAPTURE(numbers[i]);
+            CAPTURE(expected[i]);
+            json::Value j = numbers[i];
+            CHECK(static_cast<double>(j.to_uint8()) == expected[i]);
+        }
+    }
+
+    SECTION("ToUint8Clamped")
+    {
+        static const double expected[] = {
+            0, 127, 128, 128, 128, 129, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+            255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 255, 0,
+        };
+        static const size_t num_expected = sizeof(expected) / sizeof(expected[0]);
+        static_assert(num_numbers == num_expected, "ouch");
+        for (size_t i = 0; i < num_numbers; ++i) {
+            CAPTURE(numbers[i]);
+            CAPTURE(expected[i]);
+            json::Value j = numbers[i];
+            CHECK(static_cast<double>(j.to_uint8_clamped()) == expected[i]);
+        }
+    }
+}
