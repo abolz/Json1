@@ -2342,6 +2342,7 @@ Value& Value::operator[](size_t index)
 Value const& Value::operator[](size_t index) const noexcept
 {
 #if JSON_VALUE_ALLOW_UNDEFINED_ACCESS
+    assert(is_undefined() || is_array());
     if (is_array())
 #endif
     {

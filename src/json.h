@@ -55,6 +55,7 @@ class Value;
 using Null    = std::nullptr_t;
 using String  = std::string;
 using Array   = std::vector<Value>;
+//using Object  = std::map<String, Value>;
 using Object  = std::map<String, Value, std::less</*transparent*/>>;
 
 enum class Type : int {
@@ -197,15 +198,11 @@ struct DefaultTraits<char const*>
 {
     using tag = Tag_string;
     template <typename V> static decltype(auto) to_json(V&& in) { return std::forward<V>(in); }
-#if 1
-    template <typename V> static decltype(auto) from_json(V&&) = delete;
-#else
     template <typename V> static decltype(auto) from_json(V&& in)
     {
         static_assert(std::is_lvalue_reference<V>::value, "Dangling pointer");
         return in.get_string().c_str();
     }
-#endif
 };
 
 template <>
@@ -213,40 +210,12 @@ struct DefaultTraits<char*>
 {
     using tag = Tag_string;
     template <typename V> static decltype(auto) to_json(V&& in) { return std::forward<V>(in); }
-#if 1
-    template <typename V> static decltype(auto) from_json(V&&) = delete;
-#else
     template <typename V> static decltype(auto) from_json(V&& in)
     {
-#if __cplusplus >= 201703 || (_MSC_VER >= 1910 && _HAS_CXX17)
-        static_assert(std::is_lvalue_reference<V>::value, "Dangling pointer");
-        return in.get_string().data(); // works since C++17
-#else
-#if 0
         static_assert(std::is_lvalue_reference<V>::value, "Dangling pointer");
         return in.get_string().empty() ? static_cast<char*>(nullptr) : &in.get_string()[0];
-#else
-        static_assert(AlwaysFalse<V>::value, "Unsupported conversion");
-        return static_cast<char*>(nullptr);
-#endif
-#endif
-    }
-#endif
-};
-
-#if 0
-template <>
-struct DefaultTraits<cxx::string_view>
-{
-    using tag = Tag_string;
-    template <typename V> static decltype(auto) to_json(V&& in) { return String(in); }
-    template <typename V> static decltype(auto) from_json(V&& in)
-    {
-        static_assert(std::is_lvalue_reference<V>::value, "Dangling pointer");
-        return cxx::string_view(in.get_string());
     }
 };
-#endif
 
 #if 1
 template <typename T>
@@ -341,7 +310,7 @@ class Value final
     static Value const kUndefined;
 
     template <typename T>
-    using IsValue = std::integral_constant<bool, std::is_same< Value, std::decay_t<T> >::value>;
+    using IsValue = std::is_same<Value, std::decay_t<T>>;
 
 public:
     Value() noexcept = default;
@@ -441,8 +410,8 @@ public:
     template <typename T,
         std::enable_if_t< !IsValue<T>::value
                           && !IsValue<ToJsonResultTypeFor<T>>::value
-                          && std::is_convertible<ToJsonResultTypeFor<T>, TargetTypeFor<T>>::value
-        , int> = 0>
+                          && std::is_convertible<ToJsonResultTypeFor<T>, TargetTypeFor<T>>::value,
+        int> = 0>
     Value(T&& v)
         : Value(TagFor<T>{}, TraitsFor<T>::to_json(std::forward<T>(v)))
     {
@@ -452,8 +421,8 @@ public:
         std::enable_if_t< !IsValue<T>::value
                           && !IsValue<ToJsonResultTypeFor<T>>::value
                           && !std::is_convertible<ToJsonResultTypeFor<T>, TargetTypeFor<T>>::value
-                          && std::is_constructible<TargetTypeFor<T>, ToJsonResultTypeFor<T>>::value
-        , int> = 1>
+                          && std::is_constructible<TargetTypeFor<T>, ToJsonResultTypeFor<T>>::value,
+        int> = 1>
     explicit Value(T&& v)
         : Value(TagFor<T>{}, static_cast<TargetTypeFor<T>>( TraitsFor<T>::to_json(std::forward<T>(v)) ))
     {
@@ -461,8 +430,8 @@ public:
 
     template <typename T,
         std::enable_if_t< !IsValue<T>::value
-                          && IsValue<ToJsonResultTypeFor<T>>::value
-        , int> = 2>
+                          && IsValue<ToJsonResultTypeFor<T>>::value,
+        int> = 2>
     Value(T&& v)
         : Value(TraitsFor<T>::to_json(std::forward<T>(v)))
     {
@@ -482,18 +451,15 @@ public:
 
     // null
 
-    void assign(Tag_null) noexcept { assign(null_tag, {}); }
-    void assign(Tag_null, Null) noexcept;
+    void assign(Tag_null, Null /*value*/ = {}) noexcept;
 
     // boolean
 
-    bool& assign(Tag_boolean) noexcept { return assign(boolean_tag, {}); }
-    bool& assign(Tag_boolean, bool value) noexcept;
+    bool& assign(Tag_boolean, bool value = {}) noexcept;
 
     // number
 
-    double& assign(Tag_number) noexcept { return assign(number_tag, {}); }
-    double& assign(Tag_number, double value) noexcept;
+    double& assign(Tag_number, double value = {}) noexcept;
 
     // string
 
@@ -518,8 +484,8 @@ public:
     template <typename T,
         std::enable_if_t< !IsValue<T>::value
                           && !IsValue<ToJsonResultTypeFor<T>>::value
-                          && std::is_convertible<ToJsonResultTypeFor<T>, TargetTypeFor<T>>::value
-        , int> = 0>
+                          && std::is_convertible<ToJsonResultTypeFor<T>, TargetTypeFor<T>>::value,
+        int> = 0>
     Value& operator=(T&& v)
     {
         assign(TagFor<T>{}, TraitsFor<T>::to_json(std::forward<T>(v)));
@@ -528,8 +494,8 @@ public:
 
     template <typename T,
         std::enable_if_t< !IsValue<T>::value
-                          && IsValue<ToJsonResultTypeFor<T>>::value
-        , int> = 1>
+                          && IsValue<ToJsonResultTypeFor<T>>::value,
+        int> = 1>
     Value& operator=(T&& v)
     {
         return *this = TraitsFor<T>::to_json(std::forward<T>(v));
@@ -770,10 +736,18 @@ public:
 
 private:
     template <typename T>
-    using EnableIfIsKey = std::enable_if_t<
-        !std::is_integral<T>::value // disallow literal '0': String might be convertible from nullptr...
-        && !std::is_convertible< T, Object::const_iterator >::value
-        && std::is_convertible< decltype(std::declval<Object const&>().find(std::declval<T>())), typename Object::const_iterator >::value>;
+    using IsObjectKeyType = std::is_same<Object::key_type, std::decay_t<T>>;
+
+    template <typename T>
+    using IsTransparentKey = std::integral_constant<bool,
+        // Integral "keys" are used to index arrays.
+        // Disallow literal '0': String might be convertible from nullptr...
+        !std::is_integral<std::decay_t<T>>::value
+        // Check if the values of type 'T' can be looked up.
+        && std::is_convertible< decltype(( std::declval<Object const&>().find(std::declval<T>()) )),
+                                typename Object::const_iterator
+                                >::value
+        >;
 
     Object& _get_or_assign_object();
 
@@ -901,34 +875,36 @@ public:
 
     // Convert this value into an object and return a reference to the value with the given key.
     // PRE: is_undefined() or is_object()
-    template <typename T, typename = EnableIfIsKey<T>>
+    template <typename T, std::enable_if_t< !IsObjectKeyType<T>::value && IsTransparentKey<T>::value, int > = 0>
     Value& operator[](T&& key)
     {
-        auto&& obj = _get_or_assign_object();
+        auto& obj = _get_or_assign_object();
 #if 1
+        // map::operator[] does not work for transparent keys.
+        // map::find() does.
+        // Optimize slightly for the case that an element with the given key already exists.
+
         auto const it = obj.find(key);
         if (it != obj.end()) {
             return it->second;
         }
-//      return obj[key];
-        return obj.emplace_hint(it, Object::value_type(key, {}))->second;
-#else
-        return obj[key];
 #endif
+        return obj[std::forward<T>(key)];
     }
 
     // Returns a reference to the value with the given key.
     // Or a reference to an 'undefined' value if an element for 'key' does not exist.
     // PRE: is_object()
-    template <typename T, typename = EnableIfIsKey<T>>
+    template <typename T, std::enable_if_t< IsTransparentKey<T>::value, int > = 0>
     Value const& operator[](T&& key) const noexcept
     {
 #if JSON_VALUE_ALLOW_UNDEFINED_ACCESS
+        assert(is_undefined() || is_object());
         if (is_object())
 #endif
         {
-            auto&& obj = get_object();
-            auto it = obj.find(std::forward<T>(key));
+            auto& obj = get_object();
+            auto const it = obj.find(std::forward<T>(key));
             if (it != obj.end()) {
                 return it->second;
             }
@@ -938,12 +914,13 @@ public:
 
     // Returns a pointer to the value with the given key.
     // Or nullptr if no such key exists, or this value is not an object.
-    template <typename T, typename = EnableIfIsKey<T>>
+    template <typename T, std::enable_if_t< IsTransparentKey<T>::value, int > = 0>
     Value* get_ptr(T&& key)
     {
-        if (is_object()) {
-            auto&& obj = get_object();
-            auto it = obj.find(std::forward<T>(key));
+        if (is_object())
+        {
+            auto& obj = get_object();
+            auto const it = obj.find(std::forward<T>(key));
             if (it != obj.end()) {
                 return &it->second;
             }
@@ -953,12 +930,13 @@ public:
 
     // Returns a pointer to the value with the given key.
     // Or nullptr if no such key exists, or this value is not an object.
-    template <typename T, typename = EnableIfIsKey<T>>
+    template <typename T, std::enable_if_t< IsTransparentKey<T>::value, int > = 0>
     Value const* get_ptr(T&& key) const
     {
-        if (is_object()) {
-            auto&& obj = get_object();
-            auto it = obj.find(std::forward<T>(key));
+        if (is_object())
+        {
+            auto& obj = get_object();
+            auto const it = obj.find(std::forward<T>(key));
             if (it != obj.end()) {
                 return &it->second;
             }
@@ -967,7 +945,7 @@ public:
     }
 
     // Returns whether a value with the given key exists.
-    template <typename T, typename = EnableIfIsKey<T>>
+    template <typename T, std::enable_if_t< IsTransparentKey<T>::value, int > = 0>
     bool has_member(T&& key) const
     {
         return get_ptr(std::forward<T>(key)) != nullptr;
@@ -988,7 +966,7 @@ public:
 
     // Erase the the given key.
     // PRE: is_object()
-    template <typename T, typename = EnableIfIsKey<T>>
+    template <typename T, std::enable_if_t< IsTransparentKey<T>::value && !std::is_convertible<T, const_item_iterator>::value, int > = 0>
     size_t erase(T&& key)
     {
         return get_object().erase(std::forward<T>(key));

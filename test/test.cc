@@ -126,11 +126,7 @@ TEST_CASE("Value - implicit constructors")
         CHECK(j0.get_string() == "hello");
 #if 0
         // Should not compile!
-        auto s0 = std::move(j1).cast<char const*>();
-#endif
-#if 0
-        // Should not compile!
-        auto s0 = std::move(j1).cast<cxx::string_view>();
+        auto s0 = std::move(j0).as<char const*>();
 #endif
 
         json::Value j1 = "hello";
