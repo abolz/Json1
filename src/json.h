@@ -127,10 +127,6 @@ template <>     struct TargetType<Type::string   > { using type = String;  };
 template <>     struct TargetType<Type::array    > { using type = Array;   };
 template <>     struct TargetType<Type::object   > { using type = Object;  };
 
-} // namespace impl
-
-namespace impl {
-
 template <typename T>
 struct AlwaysFalse { static constexpr bool value = false; };
 
@@ -245,6 +241,22 @@ template <typename T, typename Alloc> struct DefaultTraits<std::vector<T, Alloc>
 //template <typename T, typename Alloc> struct DefaultTraits<std::deque<T, Alloc>>        : DefaultTraits_any_array<std::deque<T, Alloc>> {};
 //template <typename T, typename Alloc> struct DefaultTraits<std::forward_list<T, Alloc>> : DefaultTraits_any_array<std::forward_list<T, Alloc>> {};
 //template <typename T, typename Alloc> struct DefaultTraits<std::list<T, Alloc>>         : DefaultTraits_any_array<std::list<T, Alloc>> {};
+#endif
+
+#if 0
+// NB:
+// bool and char-types are not integral...
+template <typename T> struct IsIntegral : std::false_type {};
+template <>           struct IsIntegral<signed char       > : std::true_type {};
+template <>           struct IsIntegral<signed short      > : std::true_type {};
+template <>           struct IsIntegral<signed int        > : std::true_type {};
+template <>           struct IsIntegral<signed long       > : std::true_type {};
+template <>           struct IsIntegral<signed long long  > : std::true_type {};
+template <>           struct IsIntegral<unsigned char     > : std::true_type {};
+template <>           struct IsIntegral<unsigned short    > : std::true_type {};
+template <>           struct IsIntegral<unsigned int      > : std::true_type {};
+template <>           struct IsIntegral<unsigned long     > : std::true_type {};
+template <>           struct IsIntegral<unsigned long long> : std::true_type {};
 #endif
 
 } // namespace impl
@@ -1062,26 +1074,26 @@ inline bool operator<=(Value const& lhs, Value const& rhs) noexcept
 
 namespace impl
 {
-    template <typename T> bool CmpEQ(Value const& lhs, T const&,     Tag_null   ) noexcept { return lhs.is_null(); }
-    template <typename T> bool CmpEQ(Value const& lhs, T const& rhs, Tag_boolean) noexcept { return lhs.type() == Type::boolean && lhs.get_boolean() == rhs; }
-    template <typename T> bool CmpEQ(Value const& lhs, T const& rhs, Tag_number ) noexcept { return lhs.type() == Type::number  && lhs.get_number () == rhs; }
-    template <typename T> bool CmpEQ(Value const& lhs, T const& rhs, Tag_string ) noexcept { return lhs.type() == Type::string  && lhs.get_string () == rhs; }
-    template <typename T> bool CmpEQ(Value const& lhs, T const& rhs, Tag_array  ) noexcept { return lhs.type() == Type::array   && lhs.get_array  () == rhs; }
-    template <typename T> bool CmpEQ(Value const& lhs, T const& rhs, Tag_object ) noexcept { return lhs.type() == Type::object  && lhs.get_object () == rhs; }
+    template <typename T> bool cmp_eq(Value const& lhs, T const&,     Tag_null   ) noexcept { return lhs.is_null(); }
+    template <typename T> bool cmp_eq(Value const& lhs, T const& rhs, Tag_boolean) noexcept { return lhs.type() == Type::boolean && lhs.get_boolean() == rhs; }
+    template <typename T> bool cmp_eq(Value const& lhs, T const& rhs, Tag_number ) noexcept { return lhs.type() == Type::number  && lhs.get_number () == rhs; }
+    template <typename T> bool cmp_eq(Value const& lhs, T const& rhs, Tag_string ) noexcept { return lhs.type() == Type::string  && lhs.get_string () == rhs; }
+    template <typename T> bool cmp_eq(Value const& lhs, T const& rhs, Tag_array  ) noexcept { return lhs.type() == Type::array   && lhs.get_array  () == rhs; }
+    template <typename T> bool cmp_eq(Value const& lhs, T const& rhs, Tag_object ) noexcept { return lhs.type() == Type::object  && lhs.get_object () == rhs; }
 
-    template <typename T> bool CmpLT(Value const& lhs, T const&,     Tag_null   ) noexcept { return lhs.type() < Type::null; } // type < null || (type == null && nullptr < nullptr)
-    template <typename T> bool CmpLT(Value const& lhs, T const& rhs, Tag_boolean) noexcept { return lhs.type() < Type::boolean || (lhs.type() == Type::boolean && lhs.get_boolean() < rhs); }
-    template <typename T> bool CmpLT(Value const& lhs, T const& rhs, Tag_number ) noexcept { return lhs.type() < Type::number  || (lhs.type() == Type::number  && lhs.get_number () < rhs); }
-    template <typename T> bool CmpLT(Value const& lhs, T const& rhs, Tag_string ) noexcept { return lhs.type() < Type::string  || (lhs.type() == Type::string  && lhs.get_string () < rhs); }
-    template <typename T> bool CmpLT(Value const& lhs, T const& rhs, Tag_array  ) noexcept { return lhs.type() < Type::array   || (lhs.type() == Type::array   && lhs.get_array  () < rhs); }
-    template <typename T> bool CmpLT(Value const& lhs, T const& rhs, Tag_object ) noexcept { return lhs.type() < Type::object  || (lhs.type() == Type::object  && lhs.get_object () < rhs); }
+    template <typename T> bool cmp_lt(Value const& lhs, T const&,     Tag_null   ) noexcept { return lhs.type() < Type::null; } // type < null || (type == null && nullptr < nullptr)
+    template <typename T> bool cmp_lt(Value const& lhs, T const& rhs, Tag_boolean) noexcept { return lhs.type() < Type::boolean || (lhs.type() == Type::boolean && lhs.get_boolean() < rhs); }
+    template <typename T> bool cmp_lt(Value const& lhs, T const& rhs, Tag_number ) noexcept { return lhs.type() < Type::number  || (lhs.type() == Type::number  && lhs.get_number () < rhs); }
+    template <typename T> bool cmp_lt(Value const& lhs, T const& rhs, Tag_string ) noexcept { return lhs.type() < Type::string  || (lhs.type() == Type::string  && lhs.get_string () < rhs); }
+    template <typename T> bool cmp_lt(Value const& lhs, T const& rhs, Tag_array  ) noexcept { return lhs.type() < Type::array   || (lhs.type() == Type::array   && lhs.get_array  () < rhs); }
+    template <typename T> bool cmp_lt(Value const& lhs, T const& rhs, Tag_object ) noexcept { return lhs.type() < Type::object  || (lhs.type() == Type::object  && lhs.get_object () < rhs); }
 
-    template <typename T> bool CmpGT(Value const& lhs, T const&,     Tag_null   ) noexcept { return Type::null      < lhs.type(); } // null < type || (null == type && nullptr < nullptr)
-    template <typename T> bool CmpGT(Value const& lhs, T const& rhs, Tag_boolean) noexcept { return Type::boolean   < lhs.type() || (Type::boolean == lhs.type() && rhs < lhs.get_boolean()); }
-    template <typename T> bool CmpGT(Value const& lhs, T const& rhs, Tag_number ) noexcept { return Type::number    < lhs.type() || (Type::number  == lhs.type() && rhs < lhs.get_number ()); }
-    template <typename T> bool CmpGT(Value const& lhs, T const& rhs, Tag_string ) noexcept { return Type::string    < lhs.type() || (Type::string  == lhs.type() && rhs < lhs.get_string ()); }
-    template <typename T> bool CmpGT(Value const& lhs, T const& rhs, Tag_array  ) noexcept { return Type::array     < lhs.type() || (Type::array   == lhs.type() && rhs < lhs.get_array  ()); }
-    template <typename T> bool CmpGT(Value const& lhs, T const& rhs, Tag_object ) noexcept { return Type::object    < lhs.type() || (Type::object  == lhs.type() && rhs < lhs.get_object ()); }
+    template <typename T> bool cmp_gt(Value const& lhs, T const&,     Tag_null   ) noexcept { return Type::null    < lhs.type(); } // null < type || (null == type && nullptr < nullptr)
+    template <typename T> bool cmp_gt(Value const& lhs, T const& rhs, Tag_boolean) noexcept { return Type::boolean < lhs.type() || (Type::boolean == lhs.type() && rhs < lhs.get_boolean()); }
+    template <typename T> bool cmp_gt(Value const& lhs, T const& rhs, Tag_number ) noexcept { return Type::number  < lhs.type() || (Type::number  == lhs.type() && rhs < lhs.get_number ()); }
+    template <typename T> bool cmp_gt(Value const& lhs, T const& rhs, Tag_string ) noexcept { return Type::string  < lhs.type() || (Type::string  == lhs.type() && rhs < lhs.get_string ()); }
+    template <typename T> bool cmp_gt(Value const& lhs, T const& rhs, Tag_array  ) noexcept { return Type::array   < lhs.type() || (Type::array   == lhs.type() && rhs < lhs.get_array  ()); }
+    template <typename T> bool cmp_gt(Value const& lhs, T const& rhs, Tag_object ) noexcept { return Type::object  < lhs.type() || (Type::object  == lhs.type() && rhs < lhs.get_object ()); }
 }
 
 // Value == T
@@ -1093,7 +1105,7 @@ bool operator==(L const& lhs, R const& rhs) noexcept
         return false;
 #endif
 
-    return impl::CmpEQ(lhs, rhs, TagFor<R>{});
+    return impl::cmp_eq(lhs, rhs, TagFor<R>{});
 }
 
 // T == Value
@@ -1105,7 +1117,7 @@ bool operator==(L const& lhs, R const& rhs) noexcept
         return false;
 #endif
 
-    return impl::CmpEQ(rhs, lhs, TagFor<L>{});
+    return impl::cmp_eq(rhs, lhs, TagFor<L>{});
 }
 
 // Value != T
@@ -1141,7 +1153,7 @@ bool operator<(L const& lhs, R const& rhs) noexcept
         return false;
 #endif
 
-    return impl::CmpLT(lhs, rhs, TagFor<R>{});
+    return impl::cmp_lt(lhs, rhs, TagFor<R>{});
 }
 
 // T < Value
@@ -1153,7 +1165,7 @@ bool operator<(L const& lhs, R const& rhs) noexcept
         return false;
 #endif
 
-    return impl::CmpGT(rhs, lhs, TagFor<L>{});
+    return impl::cmp_gt(rhs, lhs, TagFor<L>{});
 }
 
 // Value >= T
