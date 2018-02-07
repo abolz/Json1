@@ -327,7 +327,7 @@ namespace json
     {
         using tag = Tag_array;
         template <typename V> static decltype(auto) to_json(V&& in) { return Array(in.begin(), in.end()); }
-        template <typename V> static decltype(auto) from_json(V&& in) = delete;
+        //template <typename V> static decltype(auto) from_json(V&& in) = delete;
     };
 
     template <typename T, typename Compare, typename Alloc>
@@ -360,6 +360,7 @@ TEST_CASE("arrays")
     SECTION("std::list")
     {
         std::list<json::Value> a {1, "two", 3.3, true};
+        json::TestConversionToJson<decltype(a)>{};
         json::Value j = a;//Value::from_array(a);
         REQUIRE(j.is_array());
         REQUIRE(j.size() == 4);

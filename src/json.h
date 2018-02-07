@@ -339,6 +339,81 @@ using TargetTypeFor = typename impl::TargetType<TagFor<T>::value>::type;
 template <typename T>
 using ToJsonResultTypeFor = decltype(( TraitsFor<T>::to_json(std::declval<T>()) ));
 
+#if 1
+namespace impl {
+
+template <typename T, typename = void>
+struct CheckHasTag : std::false_type
+{
+    static_assert(AlwaysFalse<T>::value, R"(
+
+Invalid (or missing) json::Traits<> specialization:
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A specialization of json::Traits<T> must exist and must have a member type named 'tag',
+
+    which must be one of {Tag_null, Tag_boolean, Tag_number, Tag_string, Tag_array, Tag_object}.
+
+)");
+};
+
+template <typename T>
+struct CheckHasTag<T,
+    std::enable_if_t< std::is_same<TagFor<T>, Tag_null>::value
+                      || std::is_same<TagFor<T>, Tag_boolean>::value
+                      || std::is_same<TagFor<T>, Tag_number>::value
+                      || std::is_same<TagFor<T>, Tag_string>::value
+                      || std::is_same<TagFor<T>, Tag_array>::value
+                      || std::is_same<TagFor<T>, Tag_object>::value
+                      >>
+    : std::true_type
+{
+};
+
+template <typename T, typename = void>
+struct CheckHasToJson : std::false_type
+{
+    static_assert(AlwaysFalse<T>::value, R"(
+
+Invalid (or missing) json::Traits<> specialization:
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+json::Traits<T> must have a static member function 'to_json',
+
+    which must be callable with an argument of type 'T',
+
+    and must return a json::Value
+             or the result must be convertible to TargetType<T>
+             or TargetType<T> must be explicitly constructible from the result (in this case one needs to call 'json::Value's explicit constructor).
+
+)");
+};
+
+template <typename T>
+struct CheckHasToJson<T,
+    std::enable_if_t< std::is_same<Value, std::decay_t<ToJsonResultTypeFor<T>>>::value
+                      || std::is_constructible<TargetTypeFor<T>, ToJsonResultTypeFor<T>>::value
+                      >>
+    : std::true_type
+{
+};
+
+} // namespace impl
+
+// In case you get an error like
+//      error: conversion from 'T' to non-scalar type 'json::Value' requested
+// or
+//      error C2440: 'initializing': cannot convert from 'T' to 'json::Value'
+// you can try to instantiate CheckToJsonTraits<T> to get a more detailed error message.
+template <typename T>
+struct TestConversionToJson
+    : std::integral_constant<bool, impl::CheckHasTag<T>::value
+                                   && impl::CheckHasToJson<T>::value
+                                   >
+{
+};
+#endif
+
 //------------------------------------------------------------------------------
 //
 //------------------------------------------------------------------------------
