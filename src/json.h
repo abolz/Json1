@@ -213,35 +213,72 @@ struct DefaultTraits<char*>
     }
 };
 
-#if 1
+template <typename It>
+inline decltype(auto) safe_make_move_iterator(It it, std::true_type /*dont_move*/)
+{
+    return it;
+}
+
+template <typename It>
+inline decltype(auto) safe_make_move_iterator(It it, std::false_type /*dont_move*/)
+{
+    return std::make_move_iterator(it);
+}
+
+// Don't accidentally create move_iterator's from a mutable 'Container&'
+template <typename Container, typename It>
+inline decltype(auto) safe_make_move_iterator(It it)
+{
+#if 0
+    using dont_move = std::integral_constant<bool,
+        !std::is_rvalue_reference<Container>::value
+        >;
+#else
+    using dont_move = std::integral_constant<bool,
+        std::is_lvalue_reference<Container>::value
+        || std::is_const<Container /*std::remove_reference_t<Container>*/>::value
+        >;
+#endif
+
+    return json::impl::safe_make_move_iterator(it, dont_move{});
+}
+
 template <typename T>
 struct DefaultTraits_any_array
 {
     using tag = Tag_array;
 
     template <typename V>
-    static decltype(auto) to_json(V&& in) { return Array(in.begin(), in.end()); }
+    static decltype(auto) to_json(V&& in)
+    {
+        auto I = json::impl::safe_make_move_iterator<V>(in.begin());
+        auto E = json::impl::safe_make_move_iterator<V>(in.end());
+
+        return Array(I, E);
+    }
 
     template <typename V>
     static decltype(auto) from_json(V&& in)
     {
+        auto&& arr = in.get_array();
+        auto I = json::impl::safe_make_move_iterator<V>(arr.begin());
+        auto E = json::impl::safe_make_move_iterator<V>(arr.end());
+
         T out;
-
-        out.reserve(in.get_array().size());
-
-        for (auto&& p : in.get_array()) {
-            out.emplace_back(p.template as<typename T::value_type>());
+        out.reserve(arr.size());
+        for ( ; I != E; ++I)
+        {
+            out.emplace_back(I->template as<typename T::value_type>());
         }
 
         return out;
     }
 };
 
-template <typename T, typename Alloc> struct DefaultTraits<std::vector<T, Alloc>>       : DefaultTraits_any_array<std::vector<T, Alloc>> {};
-//template <typename T, typename Alloc> struct DefaultTraits<std::deque<T, Alloc>>        : DefaultTraits_any_array<std::deque<T, Alloc>> {};
-//template <typename T, typename Alloc> struct DefaultTraits<std::forward_list<T, Alloc>> : DefaultTraits_any_array<std::forward_list<T, Alloc>> {};
-//template <typename T, typename Alloc> struct DefaultTraits<std::list<T, Alloc>>         : DefaultTraits_any_array<std::list<T, Alloc>> {};
-#endif
+template <typename T, typename Alloc>
+struct DefaultTraits<std::vector<T, Alloc>> : DefaultTraits_any_array<std::vector<T, Alloc>>
+{
+};
 
 #if 0
 // NB:
