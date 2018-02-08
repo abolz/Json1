@@ -55,7 +55,6 @@ class Value;
 using Null    = std::nullptr_t;
 using String  = std::string;
 using Array   = std::vector<Value>;
-//using Object  = std::map<String, Value>;
 using Object  = std::map<String, Value, std::less</*transparent*/>>;
 
 enum class Type : int {
@@ -68,19 +67,23 @@ enum class Type : int {
     object,
 };
 
-inline constexpr bool operator<(Type lhs, Type rhs) {
+inline constexpr bool operator<(Type lhs, Type rhs)
+{
     return static_cast<std::underlying_type_t<Type>>(lhs) < static_cast<std::underlying_type_t<Type>>(rhs);
 }
 
-inline constexpr bool operator>(Type lhs, Type rhs) {
+inline constexpr bool operator>(Type lhs, Type rhs)
+{
     return rhs < lhs;
 }
 
-inline constexpr bool operator<=(Type lhs, Type rhs) {
+inline constexpr bool operator<=(Type lhs, Type rhs)
+{
     return !(rhs < lhs);
 }
 
-inline constexpr bool operator>=(Type lhs, Type rhs) {
+inline constexpr bool operator>=(Type lhs, Type rhs)
+{
     return !(lhs < rhs);
 }
 
@@ -89,9 +92,8 @@ template <Type K>
 struct Type_const
 {
     static constexpr Type value = K;
-
     // NB:
-    // No "operator Type() const" here!
+    // No _implicit_ "operator Type() const" here!
 };
 #else
 template <Type K>
@@ -106,7 +108,6 @@ using Tag_string    = Type_const<Type::string >;
 using Tag_array     = Type_const<Type::array  >;
 using Tag_object    = Type_const<Type::object >;
 
-#if 1
 JSON_INLINE_VARIABLE constexpr Tag_undefined const undefined_tag{};
 JSON_INLINE_VARIABLE constexpr Tag_null      const null_tag{};
 JSON_INLINE_VARIABLE constexpr Tag_boolean   const boolean_tag{};
@@ -114,7 +115,6 @@ JSON_INLINE_VARIABLE constexpr Tag_number    const number_tag{};
 JSON_INLINE_VARIABLE constexpr Tag_string    const string_tag{};
 JSON_INLINE_VARIABLE constexpr Tag_array     const array_tag{};
 JSON_INLINE_VARIABLE constexpr Tag_object    const object_tag{};
-#endif
 
 namespace impl {
 
@@ -166,7 +166,7 @@ struct DefaultTraits_object {
     template <typename V> static decltype(auto) from_json(V&& in) { return std::forward<V>(in).get_object(); }
 };
 
-template <typename T>
+template <typename T, typename /*Enable*/ = void>
 struct DefaultTraits
 {
 };
@@ -280,22 +280,6 @@ struct DefaultTraits<std::vector<T, Alloc>> : DefaultTraits_any_array<std::vecto
 {
 };
 
-#if 0
-// NB:
-// bool and char-types are not integral...
-template <typename T> struct IsIntegral : std::false_type {};
-template <>           struct IsIntegral<signed char       > : std::true_type {};
-template <>           struct IsIntegral<signed short      > : std::true_type {};
-template <>           struct IsIntegral<signed int        > : std::true_type {};
-template <>           struct IsIntegral<signed long       > : std::true_type {};
-template <>           struct IsIntegral<signed long long  > : std::true_type {};
-template <>           struct IsIntegral<unsigned char     > : std::true_type {};
-template <>           struct IsIntegral<unsigned short    > : std::true_type {};
-template <>           struct IsIntegral<unsigned int      > : std::true_type {};
-template <>           struct IsIntegral<unsigned long     > : std::true_type {};
-template <>           struct IsIntegral<unsigned long long> : std::true_type {};
-#endif
-
 } // namespace impl
 
 template <typename T, typename /*Enable*/ = void>
@@ -339,10 +323,9 @@ using TargetTypeFor = typename impl::TargetType<TagFor<T>::value>::type;
 template <typename T>
 using ToJsonResultTypeFor = decltype(( TraitsFor<T>::to_json(std::declval<T>()) ));
 
-#if 1
 namespace impl {
 
-template <typename T, typename = void>
+template <typename T, typename /*Enable*/ = void>
 struct CheckHasTag : std::false_type
 {
     static_assert(AlwaysFalse<T>::value, R"(
@@ -365,12 +348,13 @@ struct CheckHasTag<T,
                       || std::is_same<TagFor<T>, Tag_string>::value
                       || std::is_same<TagFor<T>, Tag_array>::value
                       || std::is_same<TagFor<T>, Tag_object>::value
-                      >>
+                      >
+    >
     : std::true_type
 {
 };
 
-template <typename T, typename = void>
+template <typename T, typename /*Enable*/ = void>
 struct CheckHasToJson : std::false_type
 {
     static_assert(AlwaysFalse<T>::value, R"(
@@ -393,7 +377,8 @@ template <typename T>
 struct CheckHasToJson<T,
     std::enable_if_t< std::is_same<Value, std::decay_t<ToJsonResultTypeFor<T>>>::value
                       || std::is_constructible<TargetTypeFor<T>, ToJsonResultTypeFor<T>>::value
-                      >>
+                      >
+    >
     : std::true_type
 {
 };
@@ -412,7 +397,6 @@ struct TestConversionToJson
                                    >
 {
 };
-#endif
 
 //------------------------------------------------------------------------------
 //
@@ -1122,7 +1106,6 @@ public:
     int8_t   to_int8() const noexcept;
     uint8_t  to_uint8() const noexcept;
     uint8_t  to_uint8_clamped() const noexcept;
-    int64_t  to_length() const noexcept;
     String   to_string() const;
 };
 

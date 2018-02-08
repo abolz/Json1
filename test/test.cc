@@ -320,6 +320,11 @@ TEST_CASE("Parse")
 #include <list>
 #include <set>
 
+//namespace xxx {
+//    struct S {};
+//    template <> struct ::json::Traits<S> {};
+//};
+
 namespace json
 {
     template <typename T, typename Alloc>

@@ -1756,7 +1756,7 @@ Value::Value(Type t)
         data_.object = new Object{};
         break;
     default:
-        assert(false && "invalid type");
+        assert(false && "invalid type"); // LCOV_EXCL_LINE
         t = Type::undefined;
         break;
     }
@@ -1800,42 +1800,7 @@ double& Value::assign(Tag_number, double v) noexcept
 
 String& Value::assign(Tag_string)
 {
-    switch (type_)
-    {
-    case Type::undefined:
-    case Type::null:
-    case Type::boolean:
-    case Type::number:
-        data_.string = new String();
-        type_ = Type::string;
-        break;
-    case Type::string:
-        *data_.string = {};
-        break;
-    case Type::array:
-        {
-            auto p = new String();
-            // noexcept ->
-            delete data_.array;
-            data_.string = p;
-            type_ = Type::string;
-        }
-        break;
-    case Type::object:
-        {
-            auto p = new String();
-            // noexcept ->
-            delete data_.object;
-            data_.string = p;
-            type_ = Type::string;
-        }
-        break;
-    default:
-        assert(false && "invalid type");
-        break;
-    }
-
-    return get_string();
+    return _assign_string(String{});
 }
 
 String& Value::assign(Tag_string, String const& v)
@@ -1850,42 +1815,7 @@ String& Value::assign(Tag_string, String&& v)
 
 Array& Value::assign(Tag_array)
 {
-    switch (type_)
-    {
-    case Type::undefined:
-    case Type::null:
-    case Type::boolean:
-    case Type::number:
-        data_.array = new Array();
-        type_ = Type::array;
-        break;
-    case Type::string:
-        {
-            auto p = new Array();
-            // noexcept ->
-            delete data_.string;
-            data_.array = p;
-            type_ = Type::array;
-        }
-        break;
-    case Type::array:
-        *data_.array = {};
-        break;
-    case Type::object:
-        {
-            auto p = new Array();
-            // noexcept ->
-            delete data_.object;
-            data_.array = p;
-            type_ = Type::array;
-        }
-        break;
-    default:
-        assert(false && "invalid type");
-        break;
-    }
-
-    return get_array();
+    return _assign_array(Array{});
 }
 
 Array& Value::assign(Tag_array, Array const& v)
@@ -1900,42 +1830,7 @@ Array& Value::assign(Tag_array, Array&& v)
 
 Object& Value::assign(Tag_object)
 {
-    switch (type_)
-    {
-    case Type::undefined:
-    case Type::null:
-    case Type::boolean:
-    case Type::number:
-        data_.object = new Object();
-        type_ = Type::object;
-        break;
-    case Type::string:
-        {
-            auto p = new Object();
-            // noexcept ->
-            delete data_.string;
-            data_.object = p;
-            type_ = Type::object;
-        }
-        break;
-    case Type::array:
-        {
-            auto p = new Object();
-            // noexcept ->
-            delete data_.array;
-            data_.object = p;
-            type_ = Type::object;
-        }
-        break;
-    case Type::object:
-        *data_.object = {};
-        break;
-    default:
-        assert(false && "invalid type");
-        break;
-    }
-
-    return get_object();
+    return _assign_object(Object{});
 }
 
 Object& Value::assign(Tag_object, Object const& v)
@@ -1965,9 +1860,6 @@ void Value::_clear()
         break;
     case Type::object:
         delete data_.object;
-        break;
-    default:
-        assert(false && "invalid type");
         break;
     }
 
@@ -2007,9 +1899,6 @@ String& Value::_assign_string(T&& value)
             type_ = Type::string;
         }
         break;
-    default:
-        assert(false && "invalid type");
-        break;
     }
 
     return get_string();
@@ -2047,9 +1936,6 @@ Array& Value::_assign_array(T&& value)
             data_.array = p;
             type_ = Type::array;
         }
-        break;
-    default:
-        assert(false && "invalid type");
         break;
     }
 
@@ -2089,9 +1975,6 @@ Object& Value::_assign_object(T&& value)
     case Type::object:
         *data_.object = std::forward<T>(value);
         break;
-    default:
-        assert(false && "invalid type");
-        break;
     }
 
     return get_object();
@@ -2127,7 +2010,7 @@ bool Value::equal_to(Value const& rhs) const noexcept
     case Type::object:
         return get_object() == rhs.get_object();
     default:
-        assert(false && "invalid type");
+        assert(false && "invalid type"); // LCOV_EXCL_LINE
         return {};
     }
 }
@@ -2164,7 +2047,7 @@ bool Value::less_than(Value const& rhs) const noexcept
     case Type::object:
         return get_object() < rhs.get_object();
     default:
-        assert(false && "invalid type");
+        assert(false && "invalid type"); // LCOV_EXCL_LINE
         return {};
     }
 }
@@ -2212,55 +2095,15 @@ size_t Value::hash() const noexcept
             return h;
         }
     default:
-        assert(false && "invalid type");
+        assert(false && "invalid type"); // LCOV_EXCL_LINE
         return {};
     }
 }
 
 void Value::swap(Value& rhs) noexcept
 {
-#if 0
-    auto& lhs = *this;
-
-    if (lhs.type() == rhs.type())
-    {
-        using std::swap;
-
-        switch (type())
-        {
-        case Type::undefined:
-        case Type::null:
-            break;
-        case Type::boolean:
-            swap(lhs.data_.boolean, rhs.data_.boolean);
-            break;
-        case Type::number:
-            swap(lhs.data_.number, rhs.data_.number);
-            break;
-        case Type::string:
-            swap(*lhs.data_.string, *rhs.data_.string);
-            break;
-        case Type::array:
-            swap(*lhs.data_.array, *rhs.data_.array);
-            break;
-        case Type::object:
-            swap(*lhs.data_.object, *rhs.data_.object);
-            break;
-        default:
-            assert(false && "invalid index");
-            break;
-        }
-    }
-    else
-    {
-        auto tmp = std::move(lhs);
-        lhs = std::move(rhs);
-        rhs = std::move(tmp);
-    }
-#else
     std::swap(data_, rhs.data_);
     std::swap(type_, rhs.type_);
-#endif
 }
 
 size_t Value::size() const noexcept
@@ -2268,16 +2111,10 @@ size_t Value::size() const noexcept
     switch (type())
     {
     case Type::undefined:
-        assert(false && "cannot read property 'size' of 'undefined'");
-        return 0;
     case Type::null:
-        assert(false && "cannot read property 'size' of 'null'");
-        return 0;
     case Type::boolean:
-        assert(false && "cannot read property 'size' of 'boolean'");
-        return 0;
     case Type::number:
-        assert(false && "cannot read property 'size' of 'number'");
+        assert(false && "cannot read property 'size' of undefined, null, boolean or number"); // LCOV_EXCL_LINE
         return 0;
     case Type::string:
         return get_string().size();
@@ -2286,7 +2123,7 @@ size_t Value::size() const noexcept
     case Type::object:
         return get_object().size();
     default:
-        assert(false && "invalid type");
+        assert(false && "invalid type"); // LCOV_EXCL_LINE
         return {};
     }
 }
@@ -2296,16 +2133,10 @@ bool Value::empty() const noexcept
     switch (type())
     {
     case Type::undefined:
-        assert(false && "cannot read property 'empty' of 'undefined'");
-        return true; // i.e. size() == 0
     case Type::null:
-        assert(false && "cannot read property 'empty' of 'null'");
-        return true; // i.e. size() == 0
     case Type::boolean:
-        assert(false && "cannot read property 'empty' of 'boolean'");
-        return true; // i.e. size() == 0
     case Type::number:
-        assert(false && "cannot read property 'empty' of 'number'");
+        assert(false && "cannot read property 'empty' of undefined, null, boolean or number"); // LCOV_EXCL_LINE
         return true; // i.e. size() == 0
     case Type::string:
         return get_string().empty();
@@ -2314,7 +2145,7 @@ bool Value::empty() const noexcept
     case Type::object:
         return get_object().empty();
     default:
-        assert(false && "invalid type");
+        assert(false && "invalid type"); // LCOV_EXCL_LINE
         return {};
     }
 }
@@ -2440,10 +2271,10 @@ bool Value::to_boolean() const noexcept
         return !get_string().empty();
     case Type::array:
     case Type::object:
-        assert(false && "to_boolean must not be called for arrays or objects");
+        assert(false && "to_boolean must not be called for arrays or objects"); // LCOV_EXCL_LINE
         return {};
     default:
-        assert(false && "invalid type");
+        assert(false && "invalid type"); // LCOV_EXCL_LINE
         return {};
     }
 }
@@ -2471,10 +2302,10 @@ double Value::to_number() const noexcept
         }
     case Type::array:
     case Type::object:
-        assert(false && "to_number must not be called for arrays or objects");
+        assert(false && "to_number must not be called for arrays or objects"); // LCOV_EXCL_LINE
         return {};
     default:
-        assert(false && "invalid type");
+        assert(false && "invalid type"); // LCOV_EXCL_LINE
         return {};
     }
 }
@@ -2643,18 +2474,6 @@ uint8_t Value::to_uint8_clamped() const noexcept
     return static_cast<uint8_t>(f);
 }
 
-int64_t Value::to_length() const noexcept
-{
-    constexpr double kTwo53m1 = 9007199254740991.0;
-
-    auto v = to_integer();
-    if (v <= 0.0) { // NB: -0 => +0
-        return 0;
-    }
-
-    return static_cast<int64_t>(std::min(v, kTwo53m1)); // NB: inf => 2^53-1
-}
-
 String Value::to_string() const
 {
     switch (type())
@@ -2676,10 +2495,10 @@ String Value::to_string() const
         return get_string();
     case Type::array:
     case Type::object:
-        assert(false && "to_string must not be called for arrays or objects");
+        assert(false && "to_string must not be called for arrays or objects"); // LCOV_EXCL_LINE
         return {};
     default:
-        assert(false && "invalid type");
+        assert(false && "invalid type"); // LCOV_EXCL_LINE
         return {};
     }
 }
