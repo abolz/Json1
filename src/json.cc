@@ -1256,7 +1256,7 @@ static char* AppendExponent(char* buf, int e)
 // Otherwise it will be printed in exponential notation.
 // PRE: min_exp < 0
 // PRE: max_exp > 0
-static char* FormatBuffer(char* buf, int len, int decimal_exponent, int min_exp, int max_exp)
+static char* FormatBuffer(char* buf, int len, int decimal_exponent, int min_exp, int max_exp, bool emit_trailing_dot_zero)
 {
     assert(min_exp < 0);
     assert(max_exp > 0);
@@ -1273,8 +1273,10 @@ static char* FormatBuffer(char* buf, int len, int decimal_exponent, int min_exp,
         // len <= max_exp
 
         std::memset(buf + k, '0', static_cast<size_t>(n - k));
-        buf[n++] = '.';
-        buf[n++] = '0';
+        if (emit_trailing_dot_zero) {
+            buf[n++] = '.';
+            buf[n++] = '0';
+        }
         return buf + n;
     }
 
@@ -1331,12 +1333,17 @@ static char* FormatBuffer(char* buf, int len, int decimal_exponent, int min_exp,
 //
 // The result is _not_ null-terminated.
 template <typename FloatType>
-static char* DtoaShort(char* first, char* last, FloatType value)
+static char* DtoaShort(char* first, char* last, FloatType value, bool emit_trailing_dot_zero)
 {
     static_assert(DiyFp::kPrecision >= std::numeric_limits<FloatType>::digits + 3, "Not enough precision");
-
     static_cast<void>(last); // maybe unused - fix warning
-    assert(std::isfinite(value));
+
+    if (std::isnan(value))
+    {
+        size_t const len = strlen(kNaNString);
+        std::memcpy(first, kNaNString, len);
+        return first + len;
+    }
 
     // Use signbit(value) instead of (value < 0) since signbit works for -0.
     if (std::signbit(value))
@@ -1345,11 +1352,20 @@ static char* DtoaShort(char* first, char* last, FloatType value)
         *first++ = '-';
     }
 
+    if (std::isinf(value))
+    {
+        size_t const len = strlen(kInfString);
+        std::memcpy(first, kInfString, len);
+        return first + len;
+    }
+
     if (value == 0)
     {
         *first++ = '0';
-        *first++ = '.';
-        *first++ = '0';
+        if (emit_trailing_dot_zero) {
+            *first++ = '.';
+            *first++ = '0';
+        }
         return first;
     }
 
@@ -1372,14 +1388,37 @@ static char* DtoaShort(char* first, char* last, FloatType value)
     assert(last - first >= 2 + (-kMinExp - 1) + std::numeric_limits<FloatType>::max_digits10);
     assert(last - first >= std::numeric_limits<FloatType>::max_digits10 + 6);
 
-    return FormatBuffer(first, len, decimal_exponent, kMinExp, kMaxExp);
+    return FormatBuffer(first, len, decimal_exponent, kMinExp, kMaxExp, emit_trailing_dot_zero);
 }
 
 } // namespace dconv
 
-static char* Dtoa(char* next, char* last, double value)
+static char* Dtoa(char* next, char* last, double value, bool emit_trailing_dot_zero = true)
 {
-    return dconv::DtoaShort(next, last, value);
+    constexpr double kMinInteger = -9007199254740992.0; // -2^53
+    constexpr double kMaxInteger =  9007199254740992.0; //  2^53
+
+    // Print integers in the range [-2^53, +2^53] as integers (without a trailing ".0").
+    // These integers are exactly representable as 'double's.
+    //
+    // NB:
+    // These tests for work correctly for NaN's and Infinity's (i.e. the DtoaShort branch is taken).
+
+    if (emit_trailing_dot_zero && value == 0.0 && std::signbit(value))
+    {
+        std::memcpy(next, "-0.0", 4);
+        return next + 4;
+    }
+    else if (/*!emit_trailing_dot_zero &&*/ value >= kMinInteger && value <= kMaxInteger)
+    {
+        const int64_t i = static_cast<int64_t>(value);
+        if (static_cast<double>(i) == value)
+        {
+            return iconv::S64toa(next, i);
+        }
+    }
+
+    return dconv::DtoaShort(next, last, value, emit_trailing_dot_zero);
 }
 
 //==================================================================================================
@@ -2488,7 +2527,7 @@ String Value::to_string() const
         {
             char buf[32];
             char* first = &buf[0];
-            char* last = Dtoa(first, first + 32, get_number());
+            char* last = Dtoa(first, first + 32, get_number(), /*emit_trailing_dot_zero*/ false);
             return String(first, last);
         }
     case Type::string:
@@ -3720,19 +3759,6 @@ static bool StringifyNumber(std::string& str, double value, StringifyOptions con
         else
             str += '0';
         return true;
-    }
-
-    // The test for |value| <= 2^53 is not strictly required, but ensures that a number
-    // is only printed as an integer if it is exactly representable as double.
-    if (value >= -9007199254740992.0 && value <= 9007199254740992.0)
-    {
-        const int64_t i = static_cast<int64_t>(value);
-        if (static_cast<double>(i) == value)
-        {
-            char* end = iconv::S64toa(buf, i);
-            str.append(buf, end);
-            return true;
-        }
     }
 
     char* end = Dtoa(buf, buf + 32, value);

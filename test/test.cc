@@ -552,6 +552,13 @@ TEST_CASE("Value - custom")
         CHECK(j["y"] == 2.0);
     }
 
+    //SECTION("array_x")
+    //{
+    //    std::vector<int*> v;
+    //    json::TestConversionToJson<decltype(v)>{};
+    //    json::Value j = v;
+    //}
+
     SECTION("array")
     {
         std::vector<Point> points = {
@@ -590,43 +597,44 @@ TEST_CASE("Value - custom")
         CHECK(pts[1].y == 4.0);
     }
 
-    // Needs Traits<std::map<...>>
-    //SECTION("object")
-    //{
-    //    std::map<int, Point> points{
-    //        {1, {1.0, 2.0}},
-    //        {2, {3.0, 4.0}},
-    //    };
-    //    json::Value j = points;
-    //    CHECK(j.is_object());
-    //    CHECK(j.size() == 2);
-    //    CHECK(j.has_member("1"));
-    //    CHECK(j["1"].is_object());
-    //    CHECK(j["1"].has_member("x"));
-    //    CHECK(j["1"]["x"] == 1.0);
-    //    CHECK(j["1"]["y"] == 2.0);
-    //    CHECK(j.has_member("2"));
-    //    CHECK(j["2"].is_object());
-    //    CHECK(j["2"].has_member("x"));
-    //    CHECK(j["2"]["x"] == 3.0);
-    //    CHECK(j["2"]["y"] == 4.0);
-    //    //auto pts = j.cast<std::map<json::Value, json::Value>>();
-    //    //CHECK(pts.size() == 2);
-    //    //CHECK(pts["1"].is_object());
-    //    //CHECK(pts["1"].has_member("x"));
-    //    //CHECK(pts["1"]["x"] == 1.0);
-    //    //CHECK(pts["1"]["y"] == 2.0);
-    //    //CHECK(pts["2"].is_object());
-    //    //CHECK(pts["2"].has_member("x"));
-    //    //CHECK(pts["2"]["x"] == 3.0);
-    //    //CHECK(pts["2"]["y"] == 4.0);
-    //    auto pt2 = j.cast<std::map<int, Point>>();
-    //    CHECK(pt2.size() == 2);
-    //    CHECK(pt2[1].x == 1.0);
-    //    CHECK(pt2[1].y == 2.0);
-    //    CHECK(pt2[2].x == 3.0);
-    //    CHECK(pt2[2].y == 4.0);
-    //}
+#if 0
+    SECTION("object")
+    {
+        std::map<int, Point> points{
+            {1, {1.0, 2.0}},
+            {2, {3.0, 4.0}},
+        };
+        json::Value j = points;
+        CHECK(j.is_object());
+        CHECK(j.size() == 2);
+        CHECK(j.has_member("1"));
+        CHECK(j["1"].is_object());
+        CHECK(j["1"].has_member("x"));
+        CHECK(j["1"]["x"] == 1.0);
+        CHECK(j["1"]["y"] == 2.0);
+        CHECK(j.has_member("2"));
+        CHECK(j["2"].is_object());
+        CHECK(j["2"].has_member("x"));
+        CHECK(j["2"]["x"] == 3.0);
+        CHECK(j["2"]["y"] == 4.0);
+        auto pts = j.as<std::map<json::Value, json::Value>>();
+        CHECK(pts.size() == 2);
+        CHECK(pts["1"].is_object());
+        CHECK(pts["1"].has_member("x"));
+        CHECK(pts["1"]["x"] == 1.0);
+        CHECK(pts["1"]["y"] == 2.0);
+        CHECK(pts["2"].is_object());
+        CHECK(pts["2"].has_member("x"));
+        CHECK(pts["2"]["x"] == 3.0);
+        CHECK(pts["2"]["y"] == 4.0);
+        auto pt2 = j.as<std::map<int, Point>>();
+        CHECK(pt2.size() == 2);
+        CHECK(pt2[1].x == 1.0);
+        CHECK(pt2[1].y == 2.0);
+        CHECK(pt2[2].x == 3.0);
+        CHECK(pt2[2].y == 4.0);
+    }
+#endif
 }
 
 //------------------------------------------------------------------------------
@@ -1528,11 +1536,11 @@ TEST_CASE("Conversion")
         CHECK(copy >= j2);
 
         json::Value j3(json::Type::number);
-        CHECK("0.0" == j3.to_string());
+        CHECK("0" == j3.to_string());
         j3 = 1.0;
-        CHECK("1.0" == j3.to_string());
+        CHECK("1" == j3.to_string());
         j3 = j3.to_string();
-        CHECK("1.0" == j3.get_string());
+        CHECK("1" == j3.get_string());
         copy = j3;
         CHECK(copy == j3);
         CHECK(!(copy != j3));

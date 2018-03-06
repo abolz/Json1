@@ -130,6 +130,9 @@ template <>     struct TargetType<Type::object   > { using type = Object;  };
 template <typename T>
 struct AlwaysFalse { static constexpr bool value = false; };
 
+template <typename T>
+struct AlwaysTrue { static constexpr bool value = true; };
+
 struct DefaultTraits_null {
     using tag = Tag_null;
     template <typename V> static decltype(auto) to_json(V&&) { return nullptr; }
@@ -170,6 +173,16 @@ template <typename T, typename /*Enable*/ = void>
 struct DefaultTraits
 {
 };
+
+#if 0
+template <>
+struct DefaultTraits<Value>
+{
+    using tag = void;
+    template <typename V> static decltype(auto) to_json(V&&) = delete;
+    template <typename V> static decltype(auto) from_json(V&& in) { return std::forward<V>(in); }
+};
+#endif
 
 template <> struct DefaultTraits<std::nullptr_t    > : DefaultTraits_null    {};
 template <> struct DefaultTraits<bool              > : DefaultTraits_boolean {};
@@ -243,8 +256,21 @@ inline decltype(auto) safe_make_move_iterator(It it)
     return json::impl::safe_make_move_iterator(it, dont_move{});
 }
 
+#if 1
+// DefaultTraits for 'array'-like types
 template <typename T>
-struct DefaultTraits_any_array
+struct DefaultTraits<T,
+    std::enable_if_t< // to_json:
+                      std::is_constructible<Array::value_type, decltype(*std::declval<T const&>().begin())>::value
+                      && std::is_constructible<Array, decltype(std::declval<T const&>().begin()), decltype(std::declval<T const&>().end())>::value
+#if 1
+                      // from_json:
+                      && std::is_convertible< decltype(std::declval<T&>().size()), size_t >::value
+                      && AlwaysTrue< decltype(std::declval<T&>().reserve( std::declval<size_t>() )) >::value
+                      && AlwaysTrue< decltype(std::declval<T&>().emplace_back( std::declval<typename T::value_type>() )) >::value
+#endif
+                      >
+    >
 {
     using tag = Tag_array;
 
@@ -257,6 +283,7 @@ struct DefaultTraits_any_array
         return Array(I, E);
     }
 
+#if 1
     template <typename V>
     static decltype(auto) from_json(V&& in)
     {
@@ -273,12 +300,60 @@ struct DefaultTraits_any_array
 
         return out;
     }
+#endif
 };
+#endif
 
-template <typename T, typename Alloc>
-struct DefaultTraits<std::vector<T, Alloc>> : DefaultTraits_any_array<std::vector<T, Alloc>>
+#if 0
+// DefaultTraits for 'object'-like types
+template <typename T>
+struct DefaultTraits<T,
+    std::enable_if_t< // to_json:
+                      std::is_constructible<Object::value_type, String, decltype(std::declval<T const&>().begin()->second)>::value
+                      && std::is_constructible<Object, decltype(std::declval<T const&>().begin()), decltype(std::declval<T const&>().end())>::value
+                      // from_json:
+                      // ...
+                      >
+    >
 {
+    using tag = Tag_object;
+
+    template <typename V>
+    static decltype(auto) to_json(V&& in)
+    {
+        auto I = json::impl::safe_make_move_iterator<V>(in.begin());
+        auto E = json::impl::safe_make_move_iterator<V>(in.end());
+
+        Object out;
+        for ( ; I != E; ++I)
+        {
+            out[Value(I->first).to_string()] = I->second;
+        }
+
+        return out;
+    }
+
+    template <typename V>
+    static decltype(auto) from_json(V&& in)
+    {
+        auto&& obj = in.get_object();
+        auto I = json::impl::safe_make_move_iterator<V>(obj.begin());
+        auto E = json::impl::safe_make_move_iterator<V>(obj.end());
+
+        T out;
+        for ( ; I != E; ++I)
+        {
+#if 0
+            out[Value(I->first).template as<typename T::key_type>()] = I->second.template as<typename T::mapped_type>();
+#else
+            out[Value(I->first).template to<typename T::key_type>()] = I->second.template as<typename T::mapped_type>();
+#endif
+        }
+
+        return out;
+    }
 };
+#endif
 
 } // namespace impl
 
@@ -1107,6 +1182,33 @@ public:
     uint8_t  to_uint8() const noexcept;
     uint8_t  to_uint8_clamped() const noexcept;
     String   to_string() const;
+
+#if 0
+private:
+    template <typename T> auto to(Tag_boolean, T*) const noexcept { return to_boolean(); }
+    template <typename T> auto to(Tag_number,  T*) const noexcept { return to_number();  }
+    template <typename T> auto to(Tag_string,  T*) const          { return to_string();  }
+
+    inline auto to(Tag_number, int32_t* ) const noexcept { return to_int32();  }
+    inline auto to(Tag_number, uint32_t*) const noexcept { return to_uint32(); }
+    inline auto to(Tag_number, int16_t* ) const noexcept { return to_int16();  }
+    inline auto to(Tag_number, uint16_t*) const noexcept { return to_uint16(); }
+    inline auto to(Tag_number, int8_t*  ) const noexcept { return to_int8();   }
+    inline auto to(Tag_number, uint8_t* ) const noexcept { return to_uint8();  }
+
+public:
+    template <typename T>
+    auto to() const noexcept(noexcept(to(TagFor<T>{}, static_cast<T*>(nullptr))))
+    {
+        return to(TagFor<T>{}, static_cast<T*>(nullptr));
+    }
+
+    template <>
+    auto to<Value>() const noexcept
+    {
+        return *this;
+    }
+#endif
 };
 
 template <typename T> inline T cast(Value const& val) { return val.template as<T>(); }
