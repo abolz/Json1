@@ -20,7 +20,7 @@
 template <typename T> void Unused(T&& /*unused*/) {}
 
 namespace json {
-    inline std::ostream& operator<<(std::ostream& os, ErrorCode ec) {
+    inline std::ostream& operator<<(std::ostream& os, ParseStatus ec) {
         return os << static_cast<int>(ec);
     }
 }
@@ -876,10 +876,10 @@ TEST_CASE("JSON_checker")
 
             json::Value val;
             auto const res = json::parse(val, inp.data(), inp.data() + inp.size());
-            CHECK(res.ec == json::ErrorCode::success);
+            CHECK(res.ec == json::ParseStatus::success);
 
             std::string s;
-            json::StringifyOptions options;
+            json::Options options;
             //options.indent_width = INT8_MIN;
             //options.indent_width = INT8_MAX;
             options.indent_width = 4;
@@ -890,7 +890,7 @@ TEST_CASE("JSON_checker")
 
             json::Value val2;
             auto const res2 = json::parse(val2, s.data(), s.data() + s.size());
-            CHECK(res2.ec == json::ErrorCode::success);
+            CHECK(res2.ec == json::ParseStatus::success);
 
             CHECK(val == val2);
         }
@@ -904,7 +904,7 @@ TEST_CASE("JSON_checker")
 
             json::Value val;
             auto const res = json::parse(val, inp.data(), inp.data() + inp.size());
-            CHECK(res.ec != json::ErrorCode::success);
+            CHECK(res.ec != json::ParseStatus::success);
         }
     }
 }
@@ -1234,7 +1234,7 @@ TEST_CASE("JSONTestSuite")
 
             json::Value val;
             auto const res = json::parse(val, test.input.data(), test.input.data() + test.input.size());
-            CHECK(res.ec == json::ErrorCode::success);
+            CHECK(res.ec == json::ParseStatus::success);
 
             std::string str;
             auto const ok = json::stringify(str, val);
@@ -1242,7 +1242,7 @@ TEST_CASE("JSONTestSuite")
 
             json::Value val2;
             auto const res2 = json::parse(val2, str.data(), str.data() + str.size());
-            CHECK(res2.ec == json::ErrorCode::success);
+            CHECK(res2.ec == json::ParseStatus::success);
 
             CHECK(val == val2);
             CHECK(!(val != val2));
@@ -1259,12 +1259,12 @@ TEST_CASE("JSONTestSuite")
         {
             CAPTURE(test.name);
 
-            json::ParseOptions options;
+            json::Options options;
             //options.allow_comments = true;
 
             json::Value val;
             auto const res = json::parse(val, test.input.data(), test.input.data() + test.input.size(), options);
-            CHECK(res.ec != json::ErrorCode::success);
+            CHECK(res.ec != json::ParseStatus::success);
         }
     }
 }
@@ -1297,7 +1297,7 @@ TEST_CASE("Parse_string")
     {
         json::Value val1;
         auto const res1 = json::parse(val1, test.inp.data(), test.inp.data() + test.inp.size());
-        CHECK(res1.ec == json::ErrorCode::success);
+        CHECK(res1.ec == json::ParseStatus::success);
         CHECK(val1.is_array());
         CHECK(val1.get_array().size() == 1);
         CHECK(val1[0].is_string());
@@ -1309,7 +1309,7 @@ TEST_CASE("Parse_string")
 
         json::Value val2;
         auto const res2 = json::parse(val2, s.data(), s.data() + s.size());
-        CHECK(res2.ec == json::ErrorCode::success);
+        CHECK(res2.ec == json::ParseStatus::success);
         CHECK(val2.is_array());
         CHECK(val2.get_array().size() == 1);
         CHECK(val2[0].is_string());
@@ -1339,7 +1339,7 @@ TEST_CASE("Stringify")
     json::Value val;
     json::parse(val, input.data(), input.data() + input.size());
 
-    json::StringifyOptions options;
+    json::Options options;
     options.indent_width = 4;
 
     std::string str;
@@ -1364,14 +1364,14 @@ here */
         "/*empty object*/" : { /**/ },
     })";
 
-    json::ParseOptions options;
+    json::Options options;
     options.allow_comments = true;
     options.allow_trailing_comma = true;
 
     json::Value val;
     auto const res = json::parse(val, inp.data(), inp.data() + inp.size(), options);
     //printf("|%.*s|\n", static_cast<int>(res.end - res.ptr), res.ptr);
-    REQUIRE(res.ec == json::ErrorCode::success);
+    REQUIRE(res.ec == json::ParseStatus::success);
 
     CHECK(val.is_object());
     CHECK(val.size() == 2);
@@ -1381,6 +1381,37 @@ here */
     CHECK(val.has_member("/*empty object*/"));
     CHECK(val["/*empty object*/"].is_object());
     CHECK(val["/*empty object*/"].empty());
+}
+
+TEST_CASE("Invalid block comments")
+{
+    std::vector<std::string> inputs = {
+        "/*",
+        "/* ",
+        "/*/",
+        "/**",
+        "/*\n/",
+        "/*\n*",
+        "/*/\n",
+        "/**\n",
+        "/*\r\n/",
+        "/*\r\n*",
+        "/*\r/\n",
+        "/*\r*\n",
+        "/**\n/",
+        "/**\r\n/",
+        "/** /",
+        "/*/**/",
+    };
+
+    for (auto const& inp : inputs)
+    {
+        json::Options options;
+        options.allow_comments = true;
+        json::Value val;
+        auto const res = json::parse(val, inp.data(), inp.data() + inp.size(), options);
+        CHECK(res.ec != json::ParseStatus::success);
+    }
 }
 
 TEST_CASE("Conversion")
@@ -1664,19 +1695,23 @@ TEST_CASE("Invalid UTF-8")
 // 3.1  Unexpected continuation bytes
 // Each unexpected continuation byte should be separately signalled as a
 // malformed sequence of its own.
+//
+// XXX: The UTF decoder in namespace cl handles all contiguous sequences of trail bytes as a
+//      single invalid UTF-8 sequence
+//
         {"\x80", 1},                          // 3.1.1  First continuation byte 0x80
         {"\xBF", 1},                          // 3.1.2  Last continuation byte 0xbf
-        {"\x80\xBF", 2},                      // 3.1.3  2 continuation bytes
-        {"\x80\xBF\x80", 3},                  // 3.1.4  3 continuation bytes
-        {"\x80\xBF\x80\xBF", 4},              // 3.1.5  4 continuation bytes
-        {"\x80\xBF\x80\xBF\x80", 5},          // 3.1.6  5 continuation bytes
-        {"\x80\xBF\x80\xBF\x80\xBF", 6},      // 3.1.7  6 continuation bytes
-        {"\x80\xBF\x80\xBF\x80\xBF\x80", 7},  // 3.1.8  7 continuation bytes
+        {"\x80\xBF", 1},                      // 3.1.3  2 continuation bytes
+        {"\x80\xBF\x80", 1},                  // 3.1.4  3 continuation bytes
+        {"\x80\xBF\x80\xBF", 1},              // 3.1.5  4 continuation bytes
+        {"\x80\xBF\x80\xBF\x80", 1},          // 3.1.6  5 continuation bytes
+        {"\x80\xBF\x80\xBF\x80\xBF", 1},      // 3.1.7  6 continuation bytes
+        {"\x80\xBF\x80\xBF\x80\xBF\x80", 1},  // 3.1.8  7 continuation bytes
         // 3.1.9  Sequence of all 64 possible continuation bytes (0x80-0xbf)
         {"\x80\x81\x82\x83\x84\x85\x86\x87\x88\x89\x8A\x8B\x8C\x8D\x8E\x8F"
          "\x90\x91\x92\x93\x94\x95\x96\x97\x98\x99\x9A\x9B\x9C\x9D\x9E\x9F"
          "\xA0\xA1\xA2\xA3\xA4\xA5\xA6\xA7\xA8\xA9\xAA\xAB\xAC\xAD\xAE\xAF"
-         "\xB0\xB1\xB2\xB3\xB4\xB5\xB6\xB7\xB8\xB9\xBA\xBB\xBC\xBD\xBE\xBF", 64},
+         "\xB0\xB1\xB2\xB3\xB4\xB5\xB6\xB7\xB8\xB9\xBA\xBB\xBC\xBD\xBE\xBF", 1},
 
 // 3.2  Lonely start characters
         // 3.2.1  All 32 first bytes of 2-byte sequences (0xc0-0xdf)
@@ -1738,35 +1773,51 @@ TEST_CASE("Invalid UTF-8")
         {"\xF5", 1},
         {"\xF6", 1},
         {"\xF7", 1},
-///        // 3.2.4  All 4 first bytes of 5-byte sequences (0xf8-0xfb)
-///        {"\xF8", 1},
-///        {"\xF9", 1},
-///        {"\xFA", 1},
-///        {"\xFB", 1},
-///        // 3.2.5  All 2 first bytes of 6-byte sequences (0xfc-0xfd)
-///        {"\xFC", 1},
-///        {"\xFD", 1},
+        // 3.2.4  All 4 first bytes of 5-byte sequences (0xf8-0xfb)
+        {"\xF8", 1},
+        {"\xF9", 1},
+        {"\xFA", 1},
+        {"\xFB", 1},
+        // 3.2.5  All 2 first bytes of 6-byte sequences (0xfc-0xfd)
+        {"\xFC", 1},
+        {"\xFD", 1},
 
 // 3.3  Sequences with last continuation byte missing
 // All bytes of an incomplete sequence should be signalled as a single
 // malformed sequence, i.e., you should see only a single replacement
 // character in each of the next 10 tests.
         {"\xC0", 1},                 // 2-byte sequence with last byte missing (U+0000)
-        {"\xE0\x80", 0},             // 3-byte sequence with last byte missing (U+0000)
-        {"\xF0\x80\x80", 0},         // 4-byte sequence with last byte missing (U+0000)
-///        {"\xF8\x80\x80\x80", 0},     // 5-byte sequence with last byte missing (U+0000)
-///        {"\xFC\x80\x80\x80\x80", 0}, // 6-byte sequence with last byte missing (U+0000)
+        {"\xE0\x80", 1},             // 3-byte sequence with last byte missing (U+0000)
+        {"\xF0\x80\x80", 1},         // 4-byte sequence with last byte missing (U+0000)
+        {"\xF8\x80\x80\x80", 1},     // 5-byte sequence with last byte missing (U+0000)
+        {"\xFC\x80\x80\x80\x80", 1}, // 6-byte sequence with last byte missing (U+0000)
         {"\xDF", 1},                 // 2-byte sequence with last byte missing (U-000007FF)
-        {"\xEF\xBF", 0},             // 3-byte sequence with last byte missing (U-0000FFFF)
-        {"\xF7\xBF\xBF", 0},         // 4-byte sequence with last byte missing (U-001FFFFF)
-///        {"\xFB\xBF\xBF\xBF", 0},     // 5-byte sequence with last byte missing (U-03FFFFFF)
-///        {"\xFD\xBF\xBF\xBF\xBF", 0}, // 6-byte sequence with last byte missing (U-7FFFFFFF)
+        {"\xEF\xBF", 1},             // 3-byte sequence with last byte missing (U-0000FFFF)
+        {"\xF7\xBF\xBF", 1},         // 4-byte sequence with last byte missing (U-001FFFFF)
+        {"\xFB\xBF\xBF\xBF", 1},     // 5-byte sequence with last byte missing (U-03FFFFFF)
+        {"\xFD\xBF\xBF\xBF\xBF", 1}, // 6-byte sequence with last byte missing (U-7FFFFFFF)
 
 // 3.4  Concatenation of incomplete sequences
 // All the 10 sequences of 3.3 concatenated, you should see 10 malformed
 // sequences being signalled
-        {"\xC0\xE0\x80\xF0\x80\x80\xDF\xEF\xBF\xF7\xBF\xBF", 0},
-///        {"\xC0\xE0\x80\xF0\x80\x80\xFC\x80\x80\x80\x80\xDF\xEF\xBF\xF7\xBF\xBF\xFB\xBF\xBF\xBF\xFD\xBF\xBF\xBF\xBF", 0},
+#if 0
+        {"\xC0"
+         "\xE0\x80"
+         "\xF0\x80\x80"
+         "\xDF"
+         "\xEF\xBF"
+         "\xF7\xBF\xBF", 6},
+        {"\xC0"
+         "\xE0\x80"
+         "\xF0\x80\x80"
+         "\xF8\x80\x80\x80"
+         "\xFC\x80\x80\x80\x80"
+         "\xDF"
+         "\xEF\xBF"
+         "\xF7\xBF\xBF"
+         "\xFB\xBF\xBF\xBF"
+         "\xFD\xBF\xBF\xBF\xBF", 10},
+#endif
 
 // 3.5  Impossible bytes
         {"\xFE", 1},
@@ -1777,22 +1828,22 @@ TEST_CASE("Invalid UTF-8")
         {"\xC0\xAF", 1},                 // U+002F
         {"\xE0\x80\xAF", 1},             // U+002F
         {"\xF0\x80\x80\xAF", 1},         // U+002F
-///        {"\xF8\x80\x80\x80\xAF", 1},     // U+002F
-///        {"\xFC\x80\x80\x80\x80\xAF", 1}, // U+002F
+        {"\xF8\x80\x80\x80\xAF", 1},     // U+002F
+        {"\xFC\x80\x80\x80\x80\xAF", 1}, // U+002F
 
 // 4.2  Maximum overlong sequences
         {"\xC1\xBF", 1},                 // U-0000007F
         {"\xE0\x9F\xBF", 1},             // U-000007FF
         {"\xF0\x8F\xBF\xBF", 1},         // U-0000FFFF
-///        {"\xF8\x87\xBF\xBF\xBF", 1},     // U-001FFFFF
-///        {"\xFC\x83\xBF\xBF\xBF\xBF", 1}, // U-03FFFFFF
+        {"\xF8\x87\xBF\xBF\xBF", 1},     // U-001FFFFF
+        {"\xFC\x83\xBF\xBF\xBF\xBF", 1}, // U-03FFFFFF
 
 // 4.3  Overlong representation of the NUL character
         {"\xC0\x80", 1},                 // U+0000
         {"\xE0\x80\x80", 1},             // U+0000
         {"\xF0\x80\x80\x80", 1},         // U+0000
-///        {"\xF8\x80\x80\x80\x80", 1},     // U+0000
-///        {"\xFC\x80\x80\x80\x80\x80", 1}, // U+0000
+        {"\xF8\x80\x80\x80\x80", 1},     // U+0000
+        {"\xFC\x80\x80\x80\x80\x80", 1}, // U+0000
 
 // 5.1 Single UTF-16 surrogates
         {"\xED\xA0\x80", 1}, // U+D800
@@ -1818,7 +1869,7 @@ TEST_CASE("Invalid UTF-8")
     {
         json::Value j;
         auto const ec = json::parse(j, "\"" + test.input + "\"");
-        CHECK(ec != json::ErrorCode::success);
+        CHECK(ec != json::ParseStatus::success);
 
         j = test.input;
         CHECK(j.is_string());
@@ -1834,17 +1885,17 @@ TEST_CASE("Invalid UTF-8")
     {
         CAPTURE(HexEscapeString(test.input));
 
-        json::ParseOptions popts;
+        json::Options popts;
         popts.allow_invalid_unicode = true;
 
         json::Value j;
         auto const ec = json::parse(j, "\"" + test.input + "\"", popts);
-        CHECK(ec == json::ErrorCode::success);
+        CHECK(ec == json::ParseStatus::success);
 
         j = test.input;
         CHECK(j.is_string());
 
-        json::StringifyOptions sopts;
+        json::Options sopts;
         sopts.allow_invalid_unicode = true;
 
         std::string out;

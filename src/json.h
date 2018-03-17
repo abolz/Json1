@@ -20,6 +20,8 @@
 
 #pragma once
 
+#include "json_parse.h"
+
 #include <cassert>
 #include <cstdint>
 #include <functional>
@@ -28,10 +30,6 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
-
-//==================================================================================================
-// Value
-//==================================================================================================
 
 #define JSON_VALUE_HAS_EXPLICIT_OPERATOR_T                      0
 #define JSON_VALUE_HAS_IMPLICIT_INITIALIZER_LIST_CONSTRUCTOR    0
@@ -46,9 +44,9 @@
 
 namespace json {
 
-//------------------------------------------------------------------------------
-//
-//------------------------------------------------------------------------------
+//==================================================================================================
+// Value
+//==================================================================================================
 
 class Value;
 
@@ -472,10 +470,6 @@ struct TestConversionToJson
                                    >
 {
 };
-
-//------------------------------------------------------------------------------
-//
-//------------------------------------------------------------------------------
 
 class Value final
 {
@@ -1437,7 +1431,31 @@ bool operator<=(L const& lhs, R const& rhs) noexcept
     return !(rhs < lhs);
 }
 
+//==================================================================================================
+// parse
+//==================================================================================================
+
+// Parse the JSON value stored in [NEXT, LAST).
+ParseResult parse(Value& value, char const* next, char const* last, Options const& options = {});
+
+// Parse the JSON value stored in STR.
+ParseStatus parse(Value& value, std::string const& str, Options const& options = {});
+
+//==================================================================================================
+// stringify
+//==================================================================================================
+
+// Write a stringified version of the given value to str.
+// Returns true if successful.
+// Returns false only if the JSON value contains invalid UTF-8 strings and
+// options.allow_invalid_unicode is false.
+bool stringify(std::string& str, Value const& value, Options const& options = {});
+
 } // namespace json
+
+//==================================================================================================
+//
+//==================================================================================================
 
 namespace std
 {
@@ -1449,141 +1467,3 @@ namespace std
         }
     };
 }
-
-//==================================================================================================
-// parse
-//==================================================================================================
-
-namespace json {
-
-enum class ErrorCode {
-    success = 0,
-    duplicate_key_in_object,
-    expected_colon_after_key,
-    expected_comma_or_closing_brace,
-    expected_comma_or_closing_bracket,
-    expected_eof,
-    expected_key,
-    invalid_escaped_character_in_string,
-    invalid_numeric_literal,
-    invalid_unicode_sequence_in_string,
-    max_depth_reached,
-    number_out_of_range,
-    unescaped_control_character_in_string,
-    unexpected_end_of_string,
-    unexpected_token,
-    unrecognized_identifier,
-};
-
-struct ParseResult
-{
-    ErrorCode ec;
-    // On return, PTR denotes the position after the parsed value, or if an
-    // error occurred, denotes the position of the offending token.
-    char const* ptr;
-    // If an error occurred, END denotes the position after the offending
-    // token. This field is unused on success.
-    char const* end;
-};
-
-struct ParseOptions
-{
-    // If true, skip UTF-8 byte order mark - if any.
-    // Default is true.
-    bool skip_bom = true;
-
-    // If true, replace invalid unicode sequences with a
-    // replacement char (U+FFFD).
-    // Default is false.
-    bool allow_invalid_unicode = false;
-
-    // If true, allows trailing commas in arrays or objects.
-    // Default is false.
-    bool allow_trailing_comma = false;
-
-    // If true, allows strings be quoted with a single quote, like 'hello'.
-    // Default is false.
-    bool allow_single_quoted_strings = false;
-
-    // If true, allows unquoted strings as object keys: "{hello: 123}".
-    // These unquoted strings must be valid JavaScript identifiers.
-    // Default is false.
-    bool allow_unquoted_keys = false;
-
-    // If true, parse numbers as raw strings.
-    // Default is false.
-    bool parse_numbers_as_strings = false;
-
-    // If true, parses "NaN" and "Infinity" (without the quotes) as numbers.
-    // Default is true.
-    bool allow_nan_inf = true;
-
-    // If true, allows a leading '+' in numbers.
-    // Default is false.
-    bool allow_leading_plus = false;
-
-    // If true, allow leading '.' in numbers (no leading 0 required).
-    // Default is false.
-    bool allow_leading_dot = false;
-
-    // If true, skip line comments (introduced with "//") and block
-    // comments like "/* hello */".
-    // Default is false.
-    bool allow_comments = false;
-
-    // If true, allow characters after value.
-    // Might be used to parse strings like "[1,2,3]{"hello":"world"}" into
-    // different values by repeatedly calling parse.
-    // Default is false.
-    bool allow_trailing_characters = false;
-
-    // If true, issue an error if an objects contains a duplicate key.
-    // Otherwise, older keys will be overwritten by the following key.
-    // Default is false.
-    bool reject_duplicate_keys = false;
-};
-
-// Parse the JSON value stored in [NEXT, LAST).
-ParseResult parse(Value& value, char const* next, char const* last, ParseOptions const& options = {});
-
-// Parse the JSON value stored in STR.
-ErrorCode parse(Value& value, std::string const& str, ParseOptions const& options = {});
-
-} // namespace json
-
-//==================================================================================================
-// stringify
-//==================================================================================================
-
-namespace json {
-
-struct StringifyOptions
-{
-    // If >= 0, pretty-print the JSON.
-    // Default is < 0, that is the JSON is rendered as the shortest string possible.
-    int8_t indent_width = -1;
-
-    // If true, replaces each invalid UTF-8 sequence in strings with a single
-    // replacement character (U+FFFD). Otherwise rendering fails for invalid
-    // UTF-8 strings.
-    // Default is false.
-    bool allow_invalid_unicode = false;
-
-    // If true, converts the special numbers NaN and infinity to nan_string and
-    // inf_string, resp. Otherwise they are converted to "null".
-    // Default is false.
-    bool allow_nan_inf = false;
-
-    // If true, escapes '/' in strings. This allows the JSON string to be
-    // embedded in HTML.
-    // Default is true.
-    bool escape_slash = true;
-};
-
-// Write a stringified version of the given value to str.
-// Returns true if successful.
-// Returns false only if the JSON value contains invalid UTF-8 strings and
-// options.allow_invalid_unicode is false.
-bool stringify(std::string& str, Value const& value, StringifyOptions const& options = {});
-
-} // namespace json
