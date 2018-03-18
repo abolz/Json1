@@ -493,7 +493,9 @@ public:
     Value() noexcept = default;
    ~Value() noexcept
     {
-       assign(undefined_tag);
+        if (!is_undefined()) {
+            assign(undefined_tag);
+        }
     }
 
     Value(Value const& rhs);
@@ -699,14 +701,15 @@ public:
     }
 
     // is_X returns whether the actual value stored in this JSON object is of type X.
-    bool is_undefined() const noexcept { return type() == Type::undefined; }
-    bool is_null()      const noexcept { return type() == Type::null;      }
-    bool is_boolean()   const noexcept { return type() == Type::boolean;   }
-    bool is_number()    const noexcept { return type() == Type::number;    }
-    bool is_string()    const noexcept { return type() == Type::string;    }
-    bool is_array()     const noexcept { return type() == Type::array;     }
-    bool is_object()    const noexcept { return type() == Type::object;    }
-    bool is_primitive() const noexcept { return Type::null <= type() && type() <= Type::string; }
+    bool is_undefined()  const noexcept { return type() == Type::undefined; }
+    bool is_null()       const noexcept { return type() == Type::null;      }
+    bool is_boolean()    const noexcept { return type() == Type::boolean;   }
+    bool is_number()     const noexcept { return type() == Type::number;    }
+    bool is_string()     const noexcept { return type() == Type::string;    }
+    bool is_array()      const noexcept { return type() == Type::array;     }
+    bool is_object()     const noexcept { return type() == Type::object;    }
+    bool is_primitive()  const noexcept { return Type::null <= type() && type() <= Type::string; }
+    bool is_structured() const noexcept { return is_array() || is_object(); }
 
     bool is(Type t) const noexcept { return type() == t; }
 
