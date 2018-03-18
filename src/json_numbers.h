@@ -26,6 +26,11 @@
 namespace json {
 namespace numbers {
 
+// Convert the double-precision number `value` to a decimal floating-point
+// number.
+// The buffer must be large enough!
+char* NumberToString(char* next, char* last, double value, bool emit_trailing_dot_zero = true);
+
 double Strtod(char const* str, int len, char** end = nullptr);
 double Strtod(char const* str, char** end = nullptr);
 
@@ -33,11 +38,6 @@ double Strtod(char const* str, char** end = nullptr);
 // The string must be valid according to the JSON grammar and match the number
 // class defined by `nc` (which must not be `NumberClass::invalid`).
 double StringToNumber(char const* first, char const* last, NumberClass nc);
-
-// Convert the double-precision number `value` to a decimal floating-point
-// number.
-// The buffer must be large enough!
-char* NumberToString(char* next, char* last, double value, bool emit_trailing_dot_zero = true);
 
 } // namespace numbers
 } // namespace json

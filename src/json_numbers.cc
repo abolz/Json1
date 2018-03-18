@@ -53,194 +53,6 @@ using namespace json::numbers;
 static constexpr char const* const kNaNString = "NaN";
 static constexpr char const* const kInfString = "Infinity";
 
-//--------------------------------------------------------------------------------------------------
-// StringToNumber
-//--------------------------------------------------------------------------------------------------
-
-#if JSON_HAS_DOUBLE_CONVERSION
-
-#include <double-conversion/double-conversion.h>
-
-double json::numbers::Strtod(char const* str, int len, char** end)
-{
-    using double_conversion::StringToDoubleConverter;
-
-    StringToDoubleConverter conv(
-        StringToDoubleConverter::ALLOW_LEADING_SPACES |
-        StringToDoubleConverter::ALLOW_TRAILING_SPACES,
-        0.0,                                        // empty_string_value
-        std::numeric_limits<double>::quiet_NaN(),   // junk_string_value,
-        kInfString,                                 // infinity_symbol,
-        kNaNString);                                // nan_symbol
-
-    int processed = 0;
-    double const value = conv.StringToDouble(str, len, &processed);
-    if (end != nullptr)
-    {
-        *end = const_cast<char*>(str) + processed;
-    }
-
-    return value;
-}
-
-double json::numbers::Strtod(char const* str, char** end)
-{
-    assert(str != nullptr);
-    auto const len = ::strlen(str);
-
-    assert(len <= INT_MAX);
-
-    return json::numbers::Strtod(str, static_cast<int>(len), end);
-}
-
-#elif defined(_MSC_VER)
-
-#include <clocale>
-#include <cstdio>
-
-namespace
-{
-    struct ClassicLocale {
-        const ::_locale_t loc;
-        ClassicLocale() noexcept : loc(::_create_locale(LC_ALL, "C")) {}
-       ~ClassicLocale() noexcept { ::_free_locale(loc); }
-    };
-}
-static const ClassicLocale s_clocale;
-
-static double StrtodImpl(char const* c_str, char** end)
-{
-    return ::_strtod_l(c_str, end, s_clocale.loc);
-}
-
-#elif 0 // JSON_HAS_STRTOD_L // not tested...
-
-#include <clocale>
-#include <cstdio>
-
-namespace
-{
-    struct ClassicLocale {
-        const ::locale_t loc;
-        ClassicLocale() noexcept : loc(::newlocale(LC_ALL, "C", 0)) {}
-       ~ClassicLocale() noexcept { ::freelocale(loc); }
-    };
-}
-static const ClassicLocale s_clocale;
-
-static double StrtodImpl(char const* c_str, char** end)
-{
-    return ::strtod_l(c_str, end, s_clocale.loc);
-}
-
-#else
-
-#include <cstdio>
-
-// FIXME!
-static double StrtodImpl(char const* c_str, char** end)
-{
-    return ::strtod(c_str, end);
-}
-
-#endif
-
-#if !JSON_HAS_DOUBLE_CONVERSION
-
-double json::numbers::Strtod(char const* str, int len, char** end)
-{
-    static constexpr int const kBufSize = 200;
-
-    assert(str != nullptr);
-    assert(len >= 0);
-
-    if (len < kBufSize)
-    {
-        char buf[kBufSize];
-        std::memcpy(buf, str, static_cast<size_t>(len));
-        buf[len] = '\0';
-
-        return StrtodImpl(buf, end);
-    }
-
-    std::vector<char> buf(str, str + len);
-    buf.push_back('\0');
-
-    return StrtodImpl(buf.data(), end);
-}
-
-double json::numbers::Strtod(char const* str, char** end)
-{
-    assert(str != nullptr);
-
-    return StrtodImpl(str, end);
-}
-
-#endif
-
-// 2^53 = 9007199254740992 is the largest integer which can be represented
-// without loss of precision in an IEEE double. That's 16 digits, so an integer
-// with at most 15 digits always can be converted to double without loss of
-// precision.
-static constexpr int const kSmallIntDigits10 = 15;
-
-static int64_t ParseSmallInteger(char const* f, char const* l)
-{
-    assert(l - f > 0); // internal error
-    assert(l - f <= kSmallIntDigits10); // internal error
-
-    int64_t val = 0;
-    for ( ; f != l; ++f)
-    {
-        assert(*f >= '0'); // internal error
-        assert(*f <= '9'); // internal error
-        val = val * 10 + (*f - '0');
-    }
-
-    return val;
-}
-
-double json::numbers::StringToNumber(char const* first, char const* last, NumberClass nc)
-{
-    assert(nc != NumberClass::invalid);
-
-    // Use a _slightly_ faster method for parsing integers which will fit into a
-    // double-precision number without loss of precision. Larger numbers will be
-    // handled by strtod.
-    bool const is_pos_int = (nc == NumberClass::pos_integer) && (last - first) <= kSmallIntDigits10;
-    bool const is_neg_int = (nc == NumberClass::neg_integer) && (last - first) <= kSmallIntDigits10 + 1/*minus sign*/;
-
-    if (is_pos_int)
-    {
-        return static_cast<double>(ParseSmallInteger(first, last));
-    }
-
-    if (is_neg_int)
-    {
-        assert(last - first >= 1); // internal error
-        assert(first[0] == '-'); // internal error
-
-        // NB:
-        // Works for signed zeros.
-        return -static_cast<double>(ParseSmallInteger(first + 1, last));
-    }
-
-    if (nc == NumberClass::neg_nan) {
-        return -std::numeric_limits<double>::quiet_NaN();
-    }
-    if (nc == NumberClass::pos_nan) {
-        return +std::numeric_limits<double>::quiet_NaN();
-    }
-    if (nc == NumberClass::neg_infinity) {
-        return -std::numeric_limits<double>::infinity();
-    }
-    if (nc == NumberClass::pos_infinity) {
-        return +std::numeric_limits<double>::infinity();
-    }
-
-    return Strtod(first, static_cast<int>(last - first));
-}
-
 //==================================================================================================
 // NumberToString
 //==================================================================================================
@@ -1535,6 +1347,193 @@ char* json::numbers::NumberToString(char* next, char* last, double value, bool e
     return DoubleToString(next, last, value, emit_trailing_dot_zero, kNaNString, kInfString);
 }
 
+//==================================================================================================
+// StringToNumber
+//==================================================================================================
+
+#if JSON_HAS_DOUBLE_CONVERSION
+
+#include <double-conversion/double-conversion.h>
+
+double json::numbers::Strtod(char const* str, int len, char** end)
+{
+    using double_conversion::StringToDoubleConverter;
+
+    StringToDoubleConverter conv(
+        StringToDoubleConverter::ALLOW_LEADING_SPACES |
+        StringToDoubleConverter::ALLOW_TRAILING_SPACES,
+        0.0,                                        // empty_string_value
+        std::numeric_limits<double>::quiet_NaN(),   // junk_string_value,
+        kInfString,                                 // infinity_symbol,
+        kNaNString);                                // nan_symbol
+
+    int processed = 0;
+    double const value = conv.StringToDouble(str, len, &processed);
+    if (end != nullptr)
+    {
+        *end = const_cast<char*>(str) + processed;
+    }
+
+    return value;
+}
+
+double json::numbers::Strtod(char const* str, char** end)
+{
+    assert(str != nullptr);
+    auto const len = ::strlen(str);
+
+    assert(len <= INT_MAX);
+
+    return json::numbers::Strtod(str, static_cast<int>(len), end);
+}
+
+#elif defined(_MSC_VER)
+
+#include <clocale>
+#include <cstdio>
+
+namespace
+{
+    struct ClassicLocale {
+        const ::_locale_t loc;
+        ClassicLocale() noexcept : loc(::_create_locale(LC_ALL, "C")) {}
+       ~ClassicLocale() noexcept { ::_free_locale(loc); }
+    };
+}
+static const ClassicLocale s_clocale;
+
+static double StrtodImpl(char const* c_str, char** end)
+{
+    return ::_strtod_l(c_str, end, s_clocale.loc);
+}
+
+#elif 0 // JSON_HAS_STRTOD_L // not tested...
+
+#include <clocale>
+#include <cstdio>
+
+namespace
+{
+    struct ClassicLocale {
+        const ::locale_t loc;
+        ClassicLocale() noexcept : loc(::newlocale(LC_ALL, "C", 0)) {}
+       ~ClassicLocale() noexcept { ::freelocale(loc); }
+    };
+}
+static const ClassicLocale s_clocale;
+
+static double StrtodImpl(char const* c_str, char** end)
+{
+    return ::strtod_l(c_str, end, s_clocale.loc);
+}
+
+#else
+
+#include <cstdio>
+
+// FIXME!
+static double StrtodImpl(char const* c_str, char** end)
+{
+    return ::strtod(c_str, end);
+}
+
+#endif
+
+#if !JSON_HAS_DOUBLE_CONVERSION
+
+double json::numbers::Strtod(char const* str, int len, char** end)
+{
+    static constexpr int const kBufSize = 200;
+
+    assert(str != nullptr);
+    assert(len >= 0);
+
+    if (len < kBufSize)
+    {
+        char buf[kBufSize];
+        std::memcpy(buf, str, static_cast<size_t>(len));
+        buf[len] = '\0';
+
+        return StrtodImpl(buf, end);
+    }
+
+    std::vector<char> buf(str, str + len);
+    buf.push_back('\0');
+
+    return StrtodImpl(buf.data(), end);
+}
+
+double json::numbers::Strtod(char const* str, char** end)
+{
+    assert(str != nullptr);
+
+    return StrtodImpl(str, end);
+}
+
+#endif
+
+// 2^53 = 9007199254740992 is the largest integer which can be represented
+// without loss of precision in an IEEE double. That's 16 digits, so an integer
+// with at most 15 digits always can be converted to double without loss of
+// precision.
+static constexpr int const kSmallIntDigits10 = 15;
+
+static int64_t ParseSmallInteger(char const* f, char const* l)
+{
+    assert(l - f > 0); // internal error
+    assert(l - f <= kSmallIntDigits10); // internal error
+
+    int64_t val = 0;
+    for ( ; f != l; ++f)
+    {
+        assert(*f >= '0'); // internal error
+        assert(*f <= '9'); // internal error
+        val = val * 10 + (*f - '0');
+    }
+
+    return val;
+}
+
+double json::numbers::StringToNumber(char const* first, char const* last, NumberClass nc)
+{
+    assert(nc != NumberClass::invalid);
+
+    // Use a _slightly_ faster method for parsing integers which will fit into a
+    // double-precision number without loss of precision. Larger numbers will be
+    // handled by strtod.
+    bool const is_pos_int = (nc == NumberClass::pos_integer) && (last - first) <= kSmallIntDigits10;
+    bool const is_neg_int = (nc == NumberClass::neg_integer) && (last - first) <= kSmallIntDigits10 + 1/*minus sign*/;
+
+    if (is_pos_int)
+    {
+        return static_cast<double>(ParseSmallInteger(first, last));
+    }
+
+    if (is_neg_int)
+    {
+        assert(last - first >= 1); // internal error
+        assert(first[0] == '-'); // internal error
+
+        // NB:
+        // Works for signed zeros.
+        return -static_cast<double>(ParseSmallInteger(first + 1, last));
+    }
+
+    if (nc == NumberClass::neg_nan) {
+        return -std::numeric_limits<double>::quiet_NaN();
+    }
+    if (nc == NumberClass::pos_nan) {
+        return +std::numeric_limits<double>::quiet_NaN();
+    }
+    if (nc == NumberClass::neg_infinity) {
+        return -std::numeric_limits<double>::infinity();
+    }
+    if (nc == NumberClass::pos_infinity) {
+        return +std::numeric_limits<double>::infinity();
+    }
+
+    return Strtod(first, static_cast<int>(last - first));
+}
 
 /*
 Copyright (c) 2009 Florian Loitsch
