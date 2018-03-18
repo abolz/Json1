@@ -869,10 +869,11 @@ String Value::to_string() const
 
 struct DOMParserCallbacks final : ParseCallbacks
 {
-    std::vector<Value> stack;
-
     static constexpr int kMaxElements = 120;
-    static constexpr int kMaxMembers = 60;
+    static constexpr int kMaxMembers = 120;
+
+    std::vector<Value> stack;
+    std::vector<String> keys;
 
     ParseStatus HandleNull(Options const& /*options*/) override
     {
@@ -886,9 +887,13 @@ struct DOMParserCallbacks final : ParseCallbacks
         return {};
     }
 
-    ParseStatus HandleNumber(char const* first, char const* last, NumberClass nc, Options const& /*options*/) override
+    ParseStatus HandleNumber(char const* first, char const* last, NumberClass nc, Options const& options) override
     {
-        stack.emplace_back(numbers::StringToNumber(first, last, nc));
+        if (options.parse_numbers_as_strings)
+            stack.emplace_back(json::string_tag, first, last);
+        else
+            stack.emplace_back(numbers::StringToNumber(first, last, nc));
+
         return {};
     }
 
@@ -943,22 +948,40 @@ struct DOMParserCallbacks final : ParseCallbacks
         return {};
     }
 
-    ParseStatus HandleEndObject(size_t count, Options const& /*options*/) override
+    ParseStatus HandleEndObject(size_t count, Options const& options) override
     {
-        PopMembers(count);
+        PopMembers(count, options.reject_duplicate_keys);
         return {};
     }
 
     ParseStatus HandleKey(char const* first, char const* last, bool needs_cleaning, Options const& options) override
     {
-        return HandleString(first, last, needs_cleaning, options);
+        keys.emplace_back();
+
+        auto& str = keys.back();
+        if (needs_cleaning)
+        {
+            auto const res = strings::UnescapeString(first, last, options, [&](char ch) {
+                str.push_back(ch);
+            });
+
+            if (!res.ok) {
+                return ParseStatus::invalid_string;
+            }
+        }
+        else
+        {
+            str.assign(first, last);
+        }
+
+        return {};
     }
 
-    ParseStatus HandleEndMember(size_t& count, Options const& /*options*/) override
+    ParseStatus HandleEndMember(size_t& count, Options const& options) override
     {
         if (count >= kMaxMembers)
         {
-            PopMembers(count);
+            PopMembers(count, options.reject_duplicate_keys);
             count = 0;
         }
         return {};
@@ -984,29 +1007,34 @@ private:
         return {};
     }
 
-    ParseStatus PopMembers(size_t num_members)
+    ParseStatus PopMembers(size_t num_members, bool reject_duplicate_keys)
     {
-        //
-        // XXX:
-        // options.reject_duplicate_keys...
-        //
-
-        assert(num_members <= SIZE_MAX / 2 - 1);
+        assert(num_members <= keys.size());
+        assert(num_members <= SIZE_MAX - 1);
         assert(num_members <= PTRDIFF_MAX);
-        assert(stack.size() >= 1 + 2 * num_members);
+        assert(stack.size() >= 1 + num_members);
+        assert(keys.size() >= num_members);
 
         auto const count = static_cast<std::ptrdiff_t>(num_members);
 
-        auto const I = stack.end() - 2 * count;
-        auto const E = stack.end();
+        auto const Iv = stack.end() - count;
+        auto const Ik = keys.end() - count;
 
-        auto& obj = I[-1].get_object();
+        auto& obj = Iv[-1].get_object();
         for (std::ptrdiff_t i = 0; i != count; ++i)
         {
-            obj[std::move(I[2 * i]).get_string()] = std::move(I[2 * i + 1]);
+            auto& K = Ik[i];
+            auto& V = Iv[i];
+
+            auto const it = obj.find(K);
+            if (reject_duplicate_keys && it != obj.end()) {
+                return ParseStatus::duplicate_key;
+            }
+            obj.emplace_hint(it, std::move(K), std::move(V));
         }
 
-        stack.erase(I, E);
+        stack.resize(stack.size() - num_members);
+        keys.resize(keys.size() - num_members);
 
         return {};
     }
