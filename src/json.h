@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Alexander Bolz
+// Copyright 2018 Alexander Bolz
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -34,7 +34,7 @@
 #define JSON_VALUE_HAS_EXPLICIT_OPERATOR_T                      0
 #define JSON_VALUE_HAS_IMPLICIT_INITIALIZER_LIST_CONSTRUCTOR    0
 #define JSON_VALUE_UNDEFINED_IS_UNORDERED                       0 // undefined OP x ==> false, undefined != x ==> true
-#define JSON_VALUE_ALLOW_UNDEFINED_ACCESS                       1
+#define JSON_VALUE_ALLOW_UNDEFINED_ACCESS                       0
 
 #if __cplusplus >= 201703 || __cpp_inline_variables >= 201606
 #define JSON_INLINE_VARIABLE inline
@@ -493,9 +493,9 @@ public:
     Value() noexcept = default;
    ~Value() noexcept
     {
-        if (!is_undefined()) {
-            assign(undefined_tag);
-        }
+       if (!is_undefined()) {
+           assign(undefined_tag);
+       }
     }
 
     Value(Value const& rhs);
@@ -909,6 +909,14 @@ public:
     // PRE: is_array()
     // PRE: index < size()
     element_iterator erase(size_t index);
+
+    // Erase the element at the given position.
+    // PRE: is_array()
+    element_iterator erase(const_element_iterator pos);
+
+    // Erase all items in [first, last).
+    // PRE: is_array()
+    element_iterator erase(const_element_iterator first, const_element_iterator last);
 
     //--------------------------------------------------------------------------
     // Object helper:

@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Alexander Bolz
+// Copyright 2018 Alexander Bolz
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -27,11 +27,6 @@
 #include <cstdlib>
 #include <cstring>
 #include <algorithm>
-#include <memory>
-
-#ifdef _MSC_VER
-#include <intrin.h>
-#endif
 
 using namespace json;
 
@@ -588,6 +583,18 @@ Value::element_iterator Value::erase(size_t index)
     return arr.erase(arr.begin() + static_cast<intptr_t>(index));
 }
 
+Value::element_iterator Value::erase(const_element_iterator pos)
+{
+    auto& arr = get_array();
+    return arr.erase(pos);
+}
+
+Value::element_iterator Value::erase(const_element_iterator first, const_element_iterator last)
+{
+    auto& arr = get_array();
+    return arr.erase(first, last);
+}
+
 Object& Value::_get_or_assign_object()
 {
     assert(is_undefined() || is_object());
@@ -990,6 +997,9 @@ struct DOMParserCallbacks final : ParseCallbacks
 private:
     ParseStatus PopElements(size_t num_elements)
     {
+        if (num_elements == 0)
+            return {};
+
         assert(num_elements <= SIZE_MAX - 1);
         assert(num_elements <= PTRDIFF_MAX);
         assert(stack.size() >= 1 + num_elements);
@@ -1009,6 +1019,9 @@ private:
 
     ParseStatus PopMembers(size_t num_members, bool reject_duplicate_keys)
     {
+        if (num_members == 0)
+            return {};
+
         assert(num_members <= keys.size());
         assert(num_members <= SIZE_MAX - 1);
         assert(num_members <= PTRDIFF_MAX);
@@ -1021,6 +1034,9 @@ private:
         auto const Ik = keys.end() - count;
 
         auto& obj = Iv[-1].get_object();
+
+        //obj.reserve(obj.size() + num_members);
+
         for (std::ptrdiff_t i = 0; i != count; ++i)
         {
             auto& K = Ik[i];
@@ -1033,8 +1049,8 @@ private:
             obj.emplace_hint(it, std::move(K), std::move(V));
         }
 
-        stack.resize(stack.size() - num_members);
-        keys.resize(keys.size() - num_members);
+        stack.erase(Iv, stack.end());
+        keys.erase(Ik, keys.end());
 
         return {};
     }
@@ -1048,7 +1064,7 @@ ParseResult json::parse(Value& value, char const* next, char const* last, Option
     if (res.ec == ParseStatus::success)
     {
         assert(cb.stack.size() == 1);
-        value = std::move(cb.stack[0]);
+        value = std::move(cb.stack.back());
     }
 
     return res;
@@ -1094,13 +1110,12 @@ static bool StringifyNumber(std::string& str, double value, Options const& optio
             str += '-';
 
         if (std::isnan(value))
-            str += "NaN";
+            str += "NaN";       // XXX: kNaNString
         else
-            str += "Infinity";
+            str += "Infinity";  // XXX: kInfString
+
         return true;
     }
-
-    char buf[32];
 
     // Handle +-0.
     // Interpret -0 as a floating-point number and +0 as an integer.
@@ -1110,11 +1125,14 @@ static bool StringifyNumber(std::string& str, double value, Options const& optio
             str += "-0.0";
         else
             str += '0';
+
         return true;
     }
 
-    char* end = numbers::NumberToString(buf, buf + 32, value);
+    char buf[32];
+    char* end = numbers::NumberToString(buf, buf + 32, value, /*emit_trailing_dot_zero*/ true);
     str.append(buf, end);
+
     return true;
 }
 
@@ -1123,9 +1141,9 @@ static bool StringifyString(std::string& str, String const& value, Options const
     char const* const first = value.data();
     char const* const last  = value.data() + value.size();
 
-    auto const res = strings::EscapeString(first, last, options, [&](char ch) {
-        str.push_back(ch);
-    });
+    str += '"';
+    auto const res = strings::EscapeString(first, last, options, [&](char ch) { str += ch; });
+    str += '"';
 
     return res.ok;
 }

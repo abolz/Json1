@@ -20,10 +20,6 @@
 
 #include "json_numbers.h"
 
-#ifndef JSON_HAS_DOUBLE_CONVERSION
-#define JSON_HAS_DOUBLE_CONVERSION 0
-#endif
-
 #include <cassert>
 #include <climits>
 #include <cmath>
@@ -39,8 +35,15 @@
 #ifndef JSON_HAS_DOUBLE_CONVERSION
 #define JSON_HAS_DOUBLE_CONVERSION 0
 #endif
+#ifndef JSON_USE_GRISU2
+#define JSON_USE_GRISU2 1
+#endif
 #ifndef JSON_HAS_STRTOD_L
 #define JSON_HAS_STRTOD_L 0
+#endif
+
+#if JSON_HAS_DOUBLE_CONVERSION
+#include <double-conversion/double-conversion.h>
 #endif
 
 using namespace json;
@@ -61,7 +64,9 @@ static constexpr char const* const kInfString = "Infinity";
 // Int -> String
 //--------------------------------------------------------------------------------------------------
 
-inline char* Itoa100(char* buf, uint32_t digits)
+namespace {
+
+char* Itoa100(char* buf, uint32_t digits)
 {
     static constexpr char const* const kDigits100 =
         "00010203040506070809"
@@ -80,7 +85,7 @@ inline char* Itoa100(char* buf, uint32_t digits)
     return buf + 2;
 }
 
-inline char* U32ToString(char* buf, uint32_t n)
+char* U32ToString(char* buf, uint32_t n)
 {
     uint32_t q;
 
@@ -160,7 +165,7 @@ L_3_digits:
     }
 }
 
-inline char* U32ToString_n(char* buf, uint32_t n, int num_digits)
+char* U32ToString_n(char* buf, uint32_t n, int num_digits)
 {
     uint32_t q;
     switch (num_digits)
@@ -228,7 +233,7 @@ inline char* U32ToString_n(char* buf, uint32_t n, int num_digits)
     return buf;
 }
 
-inline char* U64ToString(char* buf, uint64_t n)
+char* U64ToString(char* buf, uint64_t n)
 {
     if (n <= UINT32_MAX)
         return U32ToString(buf, static_cast<uint32_t>(n));
@@ -255,7 +260,7 @@ inline char* U64ToString(char* buf, uint64_t n)
     return U32ToString_n(buf, static_cast<uint32_t>(lo), 9);
 }
 
-inline char* I64ToString(char* buf, int64_t i)
+char* I64ToString(char* buf, int64_t i)
 {
     auto n = static_cast<uint64_t>(i);
     if (i < 0)
@@ -268,17 +273,23 @@ inline char* I64ToString(char* buf, int64_t i)
     return U64ToString(buf, n);
 }
 
+} // namespace
+
 //--------------------------------------------------------------------------------------------------
 // Double -> String
 //--------------------------------------------------------------------------------------------------
 
+#if !JSON_HAS_DOUBLE_CONVERSION || JSON_USE_GRISU2
+
+namespace {
+
 template <typename Target, typename Source>
-inline Target ReinterpretBits(Source source)
+Target ReinterpretBits(Source source)
 {
     static_assert(sizeof(Target) == sizeof(Source), "Size mismatch");
 
     Target target;
-    memcpy(&target, &source, sizeof(Source));
+    std::memcpy(&target, &source, sizeof(Source));
     return target;
 }
 
@@ -309,7 +320,7 @@ struct DiyFp // f * 2^e
     static DiyFp normalize_to(DiyFp x, int e);
 };
 
-inline DiyFp DiyFp::sub(DiyFp x, DiyFp y)
+DiyFp DiyFp::sub(DiyFp x, DiyFp y)
 {
     assert(x.e == y.e);
     assert(x.f >= y.f);
@@ -317,7 +328,7 @@ inline DiyFp DiyFp::sub(DiyFp x, DiyFp y)
     return DiyFp(x.f - y.f, x.e);
 }
 
-inline DiyFp DiyFp::mul(DiyFp x, DiyFp y)
+DiyFp DiyFp::mul(DiyFp x, DiyFp y)
 {
     // Computes:
     //  f = round((x.f * y.f) / 2^q)
@@ -400,7 +411,7 @@ inline DiyFp DiyFp::mul(DiyFp x, DiyFp y)
 #endif
 }
 
-inline DiyFp DiyFp::normalize(DiyFp x)
+DiyFp DiyFp::normalize(DiyFp x)
 {
     assert(x.f != 0);
 
@@ -426,7 +437,7 @@ inline DiyFp DiyFp::normalize(DiyFp x)
 #endif
 }
 
-inline DiyFp DiyFp::normalize_to(DiyFp x, int target_exponent)
+DiyFp DiyFp::normalize_to(DiyFp x, int target_exponent)
 {
     auto const delta = x.e - target_exponent;
 
@@ -445,7 +456,7 @@ struct Boundaries {
 // Compute the (normalized) DiyFp representing the input number 'value' and its boundaries.
 // PRE: value must be finite and positive
 template <typename FloatType>
-inline Boundaries ComputeBoundaries(FloatType value)
+Boundaries ComputeBoundaries(FloatType value)
 {
     assert(std::isfinite(value));
     assert(value > 0);
@@ -571,13 +582,155 @@ inline Boundaries ComputeBoundaries(FloatType value)
 //
 //      -e <= 60   or   e >= -60 := alpha
 
-constexpr int kAlpha = -60;
-constexpr int kGamma = -32;
+static constexpr int kAlpha = -60;
+static constexpr int kGamma = -32;
+
+// Now
+//
+//      alpha <= e_c + e + q <= gamma                                        (1)
+//      ==> f_c * 2^alpha <= c * 2^e * 2^q
+//
+// and since the c's are normalized, 2^(q-1) <= f_c,
+//
+//      ==> 2^(q - 1 + alpha) <= c * 2^(e + q)
+//      ==> 2^(alpha - e - 1) <= c
+//
+// If c were an exakt power of ten, i.e. c = 10^k, one may determine k as
+//
+//      k = ceil( log_10( 2^(alpha - e - 1) ) )
+//        = ceil( (alpha - e - 1) * log_10(2) )
+//
+// From the paper:
+// "In theory the result of the procedure could be wrong since c is rounded, and
+//  the computation itself is approximated [...]. In practice, however, this
+//  simple function is sufficient."
+//
+// For IEEE double precision floating-point numbers converted into normalized
+// DiyFp's w = f * 2^e, with q = 64,
+//
+//      e >= -1022      (min IEEE exponent)
+//           -52        (p - 1)
+//           -52        (p - 1, possibly normalize denormal IEEE numbers)
+//           -11        (normalize the DiyFp)
+//         = -1137
+//
+// and
+//
+//      e <= +1023      (max IEEE exponent)
+//           -52        (p - 1)
+//           -11        (normalize the DiyFp)
+//         = 960
+//
+// This binary exponent range [-1137,960] results in a decimal exponent range
+// [-307,324]. One does not need to store a cached power for each k in this
+// range. For each such k it suffices to find a cached power such that the
+// exponent of the product lies in [alpha,gamma].
+// This implies that the difference of the decimal exponents of adjacent table
+// entries must be less than or equal to
+//
+//      floor( (gamma - alpha) * log_10(2) ) = 8.
+//
+// (A smaller distance gamma-alpha would require a larger table.)
+
+static constexpr int kCachedPowersSize         =   87;
+static constexpr int kCachedPowersMinDecExp    = -348;
+static constexpr int kCachedPowersMaxDecExp    =  340;
+static constexpr int kCachedPowersDecExpStep   =    8;
 
 struct CachedPower { // c = f * 2^e ~= 10^k
     uint64_t f;
     int e;
     int k;
+};
+
+static constexpr CachedPower kCachedPowers[] = {
+    { 0xFA8FD5A0081C0288, -1220, -348 }, //*
+    { 0xBAAEE17FA23EBF76, -1193, -340 }, //*
+    { 0x8B16FB203055AC76, -1166, -332 }, //*
+    { 0xCF42894A5DCE35EA, -1140, -324 }, //*
+    { 0x9A6BB0AA55653B2D, -1113, -316 }, //*
+    { 0xE61ACF033D1A45DF, -1087, -308 }, //*
+    { 0xAB70FE17C79AC6CA, -1060, -300 },
+    { 0xFF77B1FCBEBCDC4F, -1034, -292 },
+    { 0xBE5691EF416BD60C, -1007, -284 },
+    { 0x8DD01FAD907FFC3C,  -980, -276 },
+    { 0xD3515C2831559A83,  -954, -268 },
+    { 0x9D71AC8FADA6C9B5,  -927, -260 },
+    { 0xEA9C227723EE8BCB,  -901, -252 },
+    { 0xAECC49914078536D,  -874, -244 },
+    { 0x823C12795DB6CE57,  -847, -236 },
+    { 0xC21094364DFB5637,  -821, -228 },
+    { 0x9096EA6F3848984F,  -794, -220 },
+    { 0xD77485CB25823AC7,  -768, -212 },
+    { 0xA086CFCD97BF97F4,  -741, -204 },
+    { 0xEF340A98172AACE5,  -715, -196 },
+    { 0xB23867FB2A35B28E,  -688, -188 },
+    { 0x84C8D4DFD2C63F3B,  -661, -180 },
+    { 0xC5DD44271AD3CDBA,  -635, -172 },
+    { 0x936B9FCEBB25C996,  -608, -164 },
+    { 0xDBAC6C247D62A584,  -582, -156 },
+    { 0xA3AB66580D5FDAF6,  -555, -148 },
+    { 0xF3E2F893DEC3F126,  -529, -140 },
+    { 0xB5B5ADA8AAFF80B8,  -502, -132 },
+    { 0x87625F056C7C4A8B,  -475, -124 },
+    { 0xC9BCFF6034C13053,  -449, -116 },
+    { 0x964E858C91BA2655,  -422, -108 },
+    { 0xDFF9772470297EBD,  -396, -100 },
+    { 0xA6DFBD9FB8E5B88F,  -369,  -92 },
+    { 0xF8A95FCF88747D94,  -343,  -84 },
+    { 0xB94470938FA89BCF,  -316,  -76 },
+    { 0x8A08F0F8BF0F156B,  -289,  -68 },
+    { 0xCDB02555653131B6,  -263,  -60 },
+    { 0x993FE2C6D07B7FAC,  -236,  -52 },
+    { 0xE45C10C42A2B3B06,  -210,  -44 },
+    { 0xAA242499697392D3,  -183,  -36 },
+    { 0xFD87B5F28300CA0E,  -157,  -28 },
+    { 0xBCE5086492111AEB,  -130,  -20 },
+    { 0x8CBCCC096F5088CC,  -103,  -12 },
+    { 0xD1B71758E219652C,   -77,   -4 },
+    { 0x9C40000000000000,   -50,    4 },
+    { 0xE8D4A51000000000,   -24,   12 },
+    { 0xAD78EBC5AC620000,     3,   20 },
+    { 0x813F3978F8940984,    30,   28 },
+    { 0xC097CE7BC90715B3,    56,   36 },
+    { 0x8F7E32CE7BEA5C70,    83,   44 },
+    { 0xD5D238A4ABE98068,   109,   52 },
+    { 0x9F4F2726179A2245,   136,   60 },
+    { 0xED63A231D4C4FB27,   162,   68 },
+    { 0xB0DE65388CC8ADA8,   189,   76 },
+    { 0x83C7088E1AAB65DB,   216,   84 },
+    { 0xC45D1DF942711D9A,   242,   92 },
+    { 0x924D692CA61BE758,   269,  100 },
+    { 0xDA01EE641A708DEA,   295,  108 },
+    { 0xA26DA3999AEF774A,   322,  116 },
+    { 0xF209787BB47D6B85,   348,  124 },
+    { 0xB454E4A179DD1877,   375,  132 },
+    { 0x865B86925B9BC5C2,   402,  140 },
+    { 0xC83553C5C8965D3D,   428,  148 },
+    { 0x952AB45CFA97A0B3,   455,  156 },
+    { 0xDE469FBD99A05FE3,   481,  164 },
+    { 0xA59BC234DB398C25,   508,  172 },
+    { 0xF6C69A72A3989F5C,   534,  180 },
+    { 0xB7DCBF5354E9BECE,   561,  188 },
+    { 0x88FCF317F22241E2,   588,  196 },
+    { 0xCC20CE9BD35C78A5,   614,  204 },
+    { 0x98165AF37B2153DF,   641,  212 },
+    { 0xE2A0B5DC971F303A,   667,  220 },
+    { 0xA8D9D1535CE3B396,   694,  228 },
+    { 0xFB9B7CD9A4A7443C,   720,  236 },
+    { 0xBB764C4CA7A44410,   747,  244 },
+    { 0x8BAB8EEFB6409C1A,   774,  252 },
+    { 0xD01FEF10A657842C,   800,  260 },
+    { 0x9B10A4E5E9913129,   827,  268 },
+    { 0xE7109BFBA19C0C9D,   853,  276 },
+    { 0xAC2820D9623BF429,   880,  284 },
+    { 0x80444B5E7AA7CF85,   907,  292 },
+    { 0xBF21E44003ACDD2D,   933,  300 },
+    { 0x8E679C2F5E44FF8F,   960,  308 },
+    { 0xD433179D9C8CB841,   986,  316 },
+    { 0x9E19DB92B4E31BA9,  1013,  324 },
+    { 0xEB96BF6EBADF77D9,  1039,  332 }, //*
+    { 0xAF87023B9BF0EE6B,  1066,  340 }, //*
 };
 
 // For a normalized DiyFp w = f * 2^e, this function returns a (normalized)
@@ -586,143 +739,10 @@ struct CachedPower { // c = f * 2^e ~= 10^k
 //
 //      alpha <= e_c + e + q <= gamma.
 //
-inline CachedPower GetCachedPowerForBinaryExponent(int e)
+CachedPower GetCachedPowerForBinaryExponent(int e)
 {
-    // Now
-    //
-    //      alpha <= e_c + e + q <= gamma                                    (1)
-    //      ==> f_c * 2^alpha <= c * 2^e * 2^q
-    //
-    // and since the c's are normalized, 2^(q-1) <= f_c,
-    //
-    //      ==> 2^(q - 1 + alpha) <= c * 2^(e + q)
-    //      ==> 2^(alpha - e - 1) <= c
-    //
-    // If c were an exakt power of ten, i.e. c = 10^k, one may determine k as
-    //
-    //      k = ceil( log_10( 2^(alpha - e - 1) ) )
-    //        = ceil( (alpha - e - 1) * log_10(2) )
-    //
-    // From the paper:
-    // "In theory the result of the procedure could be wrong since c is rounded,
-    //  and the computation itself is approximated [...]. In practice, however,
-    //  this simple function is sufficient."
-    //
-    // For IEEE double precision floating-point numbers converted into
-    // normalized DiyFp's w = f * 2^e, with q = 64,
-    //
-    //      e >= -1022      (min IEEE exponent)
-    //           -52        (p - 1)
-    //           -52        (p - 1, possibly normalize denormal IEEE numbers)
-    //           -11        (normalize the DiyFp)
-    //         = -1137
-    //
-    // and
-    //
-    //      e <= +1023      (max IEEE exponent)
-    //           -52        (p - 1)
-    //           -11        (normalize the DiyFp)
-    //         = 960
-    //
-    // This binary exponent range [-1137,960] results in a decimal exponent
-    // range [-307,324]. One does not need to store a cached power for each
-    // k in this range. For each such k it suffices to find a cached power
-    // such that the exponent of the product lies in [alpha,gamma].
-    // This implies that the difference of the decimal exponents of adjacent
-    // table entries must be less than or equal to
-    //
-    //      floor( (gamma - alpha) * log_10(2) ) = 8.
-    //
-    // (A smaller distance gamma-alpha would require a larger table.)
-
     // NB:
     // Actually this function returns c, such that -60 <= e_c + e + 64 <= -34.
-
-    static constexpr int kCachedPowersSize         =   79;
-    static constexpr int kCachedPowersMinDecExp    = -300;
-    static constexpr int kCachedPowersDecExpStep   =    8;
-
-    static constexpr CachedPower kCachedPowers[] = {
-        { 0xAB70FE17C79AC6CA, -1060, -300 },
-        { 0xFF77B1FCBEBCDC4F, -1034, -292 },
-        { 0xBE5691EF416BD60C, -1007, -284 },
-        { 0x8DD01FAD907FFC3C,  -980, -276 },
-        { 0xD3515C2831559A83,  -954, -268 },
-        { 0x9D71AC8FADA6C9B5,  -927, -260 },
-        { 0xEA9C227723EE8BCB,  -901, -252 },
-        { 0xAECC49914078536D,  -874, -244 },
-        { 0x823C12795DB6CE57,  -847, -236 },
-        { 0xC21094364DFB5637,  -821, -228 },
-        { 0x9096EA6F3848984F,  -794, -220 },
-        { 0xD77485CB25823AC7,  -768, -212 },
-        { 0xA086CFCD97BF97F4,  -741, -204 },
-        { 0xEF340A98172AACE5,  -715, -196 },
-        { 0xB23867FB2A35B28E,  -688, -188 },
-        { 0x84C8D4DFD2C63F3B,  -661, -180 },
-        { 0xC5DD44271AD3CDBA,  -635, -172 },
-        { 0x936B9FCEBB25C996,  -608, -164 },
-        { 0xDBAC6C247D62A584,  -582, -156 },
-        { 0xA3AB66580D5FDAF6,  -555, -148 },
-        { 0xF3E2F893DEC3F126,  -529, -140 },
-        { 0xB5B5ADA8AAFF80B8,  -502, -132 },
-        { 0x87625F056C7C4A8B,  -475, -124 },
-        { 0xC9BCFF6034C13053,  -449, -116 },
-        { 0x964E858C91BA2655,  -422, -108 },
-        { 0xDFF9772470297EBD,  -396, -100 },
-        { 0xA6DFBD9FB8E5B88F,  -369,  -92 },
-        { 0xF8A95FCF88747D94,  -343,  -84 },
-        { 0xB94470938FA89BCF,  -316,  -76 },
-        { 0x8A08F0F8BF0F156B,  -289,  -68 },
-        { 0xCDB02555653131B6,  -263,  -60 },
-        { 0x993FE2C6D07B7FAC,  -236,  -52 },
-        { 0xE45C10C42A2B3B06,  -210,  -44 },
-        { 0xAA242499697392D3,  -183,  -36 },
-        { 0xFD87B5F28300CA0E,  -157,  -28 },
-        { 0xBCE5086492111AEB,  -130,  -20 },
-        { 0x8CBCCC096F5088CC,  -103,  -12 },
-        { 0xD1B71758E219652C,   -77,   -4 },
-        { 0x9C40000000000000,   -50,    4 },
-        { 0xE8D4A51000000000,   -24,   12 },
-        { 0xAD78EBC5AC620000,     3,   20 },
-        { 0x813F3978F8940984,    30,   28 },
-        { 0xC097CE7BC90715B3,    56,   36 },
-        { 0x8F7E32CE7BEA5C70,    83,   44 },
-        { 0xD5D238A4ABE98068,   109,   52 },
-        { 0x9F4F2726179A2245,   136,   60 },
-        { 0xED63A231D4C4FB27,   162,   68 },
-        { 0xB0DE65388CC8ADA8,   189,   76 },
-        { 0x83C7088E1AAB65DB,   216,   84 },
-        { 0xC45D1DF942711D9A,   242,   92 },
-        { 0x924D692CA61BE758,   269,  100 },
-        { 0xDA01EE641A708DEA,   295,  108 },
-        { 0xA26DA3999AEF774A,   322,  116 },
-        { 0xF209787BB47D6B85,   348,  124 },
-        { 0xB454E4A179DD1877,   375,  132 },
-        { 0x865B86925B9BC5C2,   402,  140 },
-        { 0xC83553C5C8965D3D,   428,  148 },
-        { 0x952AB45CFA97A0B3,   455,  156 },
-        { 0xDE469FBD99A05FE3,   481,  164 },
-        { 0xA59BC234DB398C25,   508,  172 },
-        { 0xF6C69A72A3989F5C,   534,  180 },
-        { 0xB7DCBF5354E9BECE,   561,  188 },
-        { 0x88FCF317F22241E2,   588,  196 },
-        { 0xCC20CE9BD35C78A5,   614,  204 },
-        { 0x98165AF37B2153DF,   641,  212 },
-        { 0xE2A0B5DC971F303A,   667,  220 },
-        { 0xA8D9D1535CE3B396,   694,  228 },
-        { 0xFB9B7CD9A4A7443C,   720,  236 },
-        { 0xBB764C4CA7A44410,   747,  244 },
-        { 0x8BAB8EEFB6409C1A,   774,  252 },
-        { 0xD01FEF10A657842C,   800,  260 },
-        { 0x9B10A4E5E9913129,   827,  268 },
-        { 0xE7109BFBA19C0C9D,   853,  276 },
-        { 0xAC2820D9623BF429,   880,  284 },
-        { 0x80444B5E7AA7CF85,   907,  292 },
-        { 0xBF21E44003ACDD2D,   933,  300 },
-        { 0x8E679C2F5E44FF8F,   960,  308 },
-        { 0xD433179D9C8CB841,   986,  316 },
-        { 0x9E19DB92B4E31BA9,  1013,  324 },
-    };
 
     // This computation gives exactly the same results for k as
     //      k = ceil((kAlpha - e - 1) * 0.30102999566398114)
@@ -745,7 +765,7 @@ inline CachedPower GetCachedPowerForBinaryExponent(int e)
     return cached;
 }
 
-inline void Grisu2Round(char* buf, int len, uint64_t dist, uint64_t delta, uint64_t rest, uint64_t ten_k)
+void Grisu2Round(char* buf, int len, uint64_t dist, uint64_t delta, uint64_t rest, uint64_t ten_k)
 {
     assert(len >= 1);
     assert(dist <= delta);
@@ -783,7 +803,7 @@ inline void Grisu2Round(char* buf, int len, uint64_t dist, uint64_t delta, uint6
 
 // Generates V = buffer * 10^decimal_exponent, such that M- <= V <= M+.
 // M- and M+ must be normalized and share the same exponent -60 <= e <= -32.
-inline void Grisu2DigitGen(char* buffer, int& length, int& decimal_exponent, DiyFp M_minus, DiyFp w, DiyFp M_plus)
+void Grisu2DigitGen(char* buffer, int& length, int& decimal_exponent, DiyFp M_minus, DiyFp w, DiyFp M_plus)
 {
     static_assert(DiyFp::kPrecision == 64, "invalid config");
     static_assert(kAlpha >= -60, "invalid config");
@@ -1032,7 +1052,7 @@ inline void Grisu2DigitGen(char* buffer, int& length, int& decimal_exponent, Diy
 // v = buf * 10^decimal_exponent
 // len is the length of the buffer (number of decimal digits)
 // The buffer must be large enough, i.e. >= max_digits10.
-inline void Grisu2(char* buf, int& len, int& decimal_exponent, DiyFp m_minus, DiyFp v, DiyFp m_plus)
+void Grisu2(char* buf, int& len, int& decimal_exponent, DiyFp m_minus, DiyFp v, DiyFp m_plus)
 {
     assert(m_plus.e == m_minus.e);
     assert(m_plus.e == v.e);
@@ -1088,7 +1108,7 @@ inline void Grisu2(char* buf, int& len, int& decimal_exponent, DiyFp m_minus, Di
 // len is the length of the buffer (number of decimal digits)
 // The buffer must be large enough, i.e. >= max_digits10.
 template <typename FloatType>
-inline void Grisu2(char* buf, int& len, int& decimal_exponent, FloatType value)
+void Grisu2(char* buf, int& len, int& decimal_exponent, FloatType value)
 {
     assert(std::isfinite(value));
     assert(value > 0);
@@ -1113,7 +1133,7 @@ inline void Grisu2(char* buf, int& len, int& decimal_exponent, FloatType value)
 // Appends a decimal representation of e to buf.
 // Returns a pointer to the element following the exponent.
 // PRE: -1000 < e < 1000
-inline char* AppendExponent(char* buf, int e)
+char* AppendExponent(char* buf, int e)
 {
     assert(e > -1000);
     assert(e <  1000);
@@ -1154,7 +1174,7 @@ inline char* AppendExponent(char* buf, int e)
 // Otherwise it will be printed in exponential notation.
 // PRE: min_exp < 0
 // PRE: max_exp > 0
-inline char* FormatBuffer(char* buf, int len, int decimal_exponent, int min_exp, int max_exp, bool emit_trailing_dot_zero)
+char* FormatBuffer(char* buf, int len, int decimal_exponent, int min_exp, int max_exp, bool emit_trailing_dot_zero)
 {
     assert(min_exp < 0);
     assert(max_exp > 0);
@@ -1170,7 +1190,7 @@ inline char* FormatBuffer(char* buf, int len, int decimal_exponent, int min_exp,
         // digits[000]
         // len <= max_exp
 
-        memset(buf + k, '0', static_cast<size_t>(n - k));
+        std::memset(buf + k, '0', static_cast<size_t>(n - k));
         if (emit_trailing_dot_zero)
         {
             buf[n++] = '.';
@@ -1186,7 +1206,7 @@ inline char* FormatBuffer(char* buf, int len, int decimal_exponent, int min_exp,
 
         assert(k > n);
 
-        memmove(buf + (n + 1), buf + n, static_cast<size_t>(k - n));
+        std::memmove(buf + (n + 1), buf + n, static_cast<size_t>(k - n));
         buf[n] = '.';
         return buf + (k + 1);
     }
@@ -1196,10 +1216,10 @@ inline char* FormatBuffer(char* buf, int len, int decimal_exponent, int min_exp,
         // 0.[000]digits
         // len <= 2 + (-min_exp - 1) + max_digits10
 
-        memmove(buf + (2 + -n), buf, static_cast<size_t>(k));
+        std::memmove(buf + (2 + -n), buf, static_cast<size_t>(k));
         buf[0] = '0';
         buf[1] = '.';
-        memset(buf + 2, '0', static_cast<size_t>(-n));
+        std::memset(buf + 2, '0', static_cast<size_t>(-n));
         return buf + (2 + (-n) + k);
     }
 
@@ -1215,7 +1235,7 @@ inline char* FormatBuffer(char* buf, int len, int decimal_exponent, int min_exp,
         // d.igitsE+123
         // len <= max_digits10 + 1 + 5
 
-        memmove(buf + 2, buf + 1, static_cast<size_t>(k - 1));
+        std::memmove(buf + 2, buf + 1, static_cast<size_t>(k - 1));
         buf[1] = '.';
         buf += 1 + k;
     }
@@ -1224,7 +1244,7 @@ inline char* FormatBuffer(char* buf, int len, int decimal_exponent, int min_exp,
     return AppendExponent(buf, n - 1);
 }
 
-inline char* StrCopy(char* first, char const* last, char const* source)
+char* StrCopy(char* first, char const* last, char const* source)
 {
     assert(source != nullptr);
 
@@ -1233,7 +1253,7 @@ inline char* StrCopy(char* first, char const* last, char const* source)
     assert(static_cast<size_t>(last - first) >= len);
     static_cast<void>(last);
 
-    memcpy(first, source, len);
+    std::memcpy(first, source, len);
     return first + len;
 }
 
@@ -1243,7 +1263,7 @@ inline char* StrCopy(char* first, char const* last, char const* source)
 // Note: The buffer must be large enough.
 // Note: The result is _not_ null-terminated.
 template <typename FloatType>
-inline char* DtoaShort(char* first, char* last, FloatType value, bool emit_trailing_dot_zero, char const* nan_string, char const* inf_string)
+char* DtoaShort(char* first, char* last, FloatType value, bool emit_trailing_dot_zero, char const* nan_string, char const* inf_string)
 {
     static_assert(DiyFp::kPrecision >= std::numeric_limits<FloatType>::digits + 3, "Not enough precision");
     static_cast<void>(last); // maybe unused - fix warning
@@ -1303,7 +1323,7 @@ inline char* DtoaShort(char* first, char* last, FloatType value, bool emit_trail
 //
 // Note: The buffer must be large enough.
 // Note: The result is _not_ null-terminated.
-inline char* DoubleToString(
+char* DoubleToString(
         char*       first,
         char*       last,
         double      value,
@@ -1313,6 +1333,10 @@ inline char* DoubleToString(
 {
     return DtoaShort(first, last, value, emit_trailing_dot_zero, nan_string, inf_string);
 }
+
+} // namespace
+
+#endif // !JSON_HAS_DOUBLE_CONVERSION || JSON_USE_GRISU2
 
 //--------------------------------------------------------------------------------------------------
 //
@@ -1344,7 +1368,37 @@ char* json::numbers::NumberToString(char* next, char* last, double value, bool e
         }
     }
 
+#if JSON_HAS_DOUBLE_CONVERSION && !JSON_USE_GRISU2
+    using double_conversion::DoubleToStringConverter;
+    using double_conversion::StringBuilder;
+
+    int flags = DoubleToStringConverter::EMIT_POSITIVE_EXPONENT_SIGN;
+    if (emit_trailing_dot_zero)
+    {
+        flags |= DoubleToStringConverter::EMIT_TRAILING_DECIMAL_POINT;
+        flags |= DoubleToStringConverter::EMIT_TRAILING_ZERO_AFTER_POINT;
+    }
+
+    DoubleToStringConverter conv(
+        flags,
+        kInfString, // infinity_symbol
+        kNaNString, // nan_symbol
+        'e',        // exponent_character
+        -6,         // decimal_in_shortest_low
+        21,         // decimal_in_shortest_high
+        0,          // max_leading_padding_zeroes_in_precision_mode
+        0);         // max_trailing_padding_zeroes_in_precision_mode
+
+
+    assert(last - next <= INT_MAX);
+    StringBuilder builder(next, static_cast<int>(last - next));
+
+    conv.ToShortest(value, &builder);
+
+    return next + builder.position();
+#else
     return DoubleToString(next, last, value, emit_trailing_dot_zero, kNaNString, kInfString);
+#endif
 }
 
 //==================================================================================================
@@ -1352,8 +1406,6 @@ char* json::numbers::NumberToString(char* next, char* last, double value, bool e
 //==================================================================================================
 
 #if JSON_HAS_DOUBLE_CONVERSION
-
-#include <double-conversion/double-conversion.h>
 
 double json::numbers::Strtod(char const* str, int len, char** end)
 {
@@ -1392,50 +1444,56 @@ double json::numbers::Strtod(char const* str, char** end)
 #include <clocale>
 #include <cstdio>
 
-namespace
-{
-    struct ClassicLocale {
-        const ::_locale_t loc;
-        ClassicLocale() noexcept : loc(::_create_locale(LC_ALL, "C")) {}
-       ~ClassicLocale() noexcept { ::_free_locale(loc); }
-    };
-}
+namespace {
+
+struct ClassicLocale {
+    const ::_locale_t loc;
+    ClassicLocale() noexcept : loc(::_create_locale(LC_ALL, "C")) {}
+    ~ClassicLocale() noexcept { ::_free_locale(loc); }
+};
 static const ClassicLocale s_clocale;
 
-static double StrtodImpl(char const* c_str, char** end)
+double StrtodImpl(char const* c_str, char** end)
 {
     return ::_strtod_l(c_str, end, s_clocale.loc);
 }
+
+} // namespace
 
 #elif 0 // JSON_HAS_STRTOD_L // not tested...
 
 #include <clocale>
 #include <cstdio>
 
-namespace
-{
-    struct ClassicLocale {
-        const ::locale_t loc;
-        ClassicLocale() noexcept : loc(::newlocale(LC_ALL, "C", 0)) {}
-       ~ClassicLocale() noexcept { ::freelocale(loc); }
-    };
-}
+namespace {
+
+struct ClassicLocale {
+    const ::locale_t loc;
+    ClassicLocale() noexcept : loc(::newlocale(LC_ALL, "C", 0)) {}
+    ~ClassicLocale() noexcept { ::freelocale(loc); }
+};
 static const ClassicLocale s_clocale;
 
-static double StrtodImpl(char const* c_str, char** end)
+double StrtodImpl(char const* c_str, char** end)
 {
     return ::strtod_l(c_str, end, s_clocale.loc);
 }
 
+} // namespace
+
 #else
 
 #include <cstdio>
+
+namespace {
 
 // FIXME!
 static double StrtodImpl(char const* c_str, char** end)
 {
     return ::strtod(c_str, end);
 }
+
+} // namespace
 
 #endif
 
@@ -1472,13 +1530,15 @@ double json::numbers::Strtod(char const* str, char** end)
 
 #endif
 
+namespace {
+
 // 2^53 = 9007199254740992 is the largest integer which can be represented
 // without loss of precision in an IEEE double. That's 16 digits, so an integer
 // with at most 15 digits always can be converted to double without loss of
 // precision.
 static constexpr int const kSmallIntDigits10 = 15;
 
-static int64_t ParseSmallInteger(char const* f, char const* l)
+int64_t ParseSmallInteger(char const* f, char const* l)
 {
     assert(l - f > 0); // internal error
     assert(l - f <= kSmallIntDigits10); // internal error
@@ -1493,6 +1553,8 @@ static int64_t ParseSmallInteger(char const* f, char const* l)
 
     return val;
 }
+
+} // namespace
 
 double json::numbers::StringToNumber(char const* first, char const* last, NumberClass nc)
 {

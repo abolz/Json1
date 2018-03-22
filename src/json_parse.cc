@@ -26,9 +26,13 @@
 
 using namespace json;
 
+#define JSON_PARSE_ITERATIVE 0
+
 //--------------------------------------------------------------------------------------------------
 //
 //--------------------------------------------------------------------------------------------------
+
+namespace {
 
 #define W 0x01  // whitespace  : ' ', '\n', '\r', '\t'
 #define D 0x02  // digit       : '0'...'9'
@@ -66,10 +70,12 @@ static constexpr uint8_t const kCharClass[256] = {
     0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
 };
 
-inline bool IsWhitespace     (char ch) { return (kCharClass[static_cast<unsigned char>(ch)] & W) != 0; }
-inline bool IsDigit          (char ch) { return (kCharClass[static_cast<unsigned char>(ch)] & D) != 0; }
-inline bool IsNumberBody     (char ch) { return (kCharClass[static_cast<unsigned char>(ch)] & N) != 0; }
-inline bool IsIdentifierBody (char ch) { return (kCharClass[static_cast<unsigned char>(ch)] & I) != 0; }
+bool IsWhitespace     (char ch) { return (kCharClass[static_cast<unsigned char>(ch)] & W) != 0; }
+bool IsDigit          (char ch) { return (kCharClass[static_cast<unsigned char>(ch)] & D) != 0; }
+#if 0
+bool IsNumberBody     (char ch) { return (kCharClass[static_cast<unsigned char>(ch)] & N) != 0; }
+#endif
+bool IsIdentifierBody (char ch) { return (kCharClass[static_cast<unsigned char>(ch)] & I) != 0; }
 
 #undef I
 #undef N
@@ -77,7 +83,8 @@ inline bool IsIdentifierBody (char ch) { return (kCharClass[static_cast<unsigned
 #undef D
 #undef W
 
-inline char const* SkipWhitespace(char const* f, char const* l)
+template <typename It>
+It SkipWhitespace(It f, It l)
 {
     for ( ; f != l && IsWhitespace(*f); ++f)
     {
@@ -85,11 +92,15 @@ inline char const* SkipWhitespace(char const* f, char const* l)
     return f;
 }
 
+} // namespace
+
 //--------------------------------------------------------------------------------------------------
 //
 //--------------------------------------------------------------------------------------------------
 
-inline char const* ScanNaNString(char const* next, char const* last)
+namespace {
+
+char const* ScanNaNString(char const* next, char const* last)
 {
     auto const len = last - next;
 
@@ -102,7 +113,7 @@ inline char const* ScanNaNString(char const* next, char const* last)
     return nullptr;
 }
 
-inline char const* ScanInfString(char const* next, char const* last)
+char const* ScanInfString(char const* next, char const* last)
 {
     auto const len = last - next;
 
@@ -118,13 +129,13 @@ inline char const* ScanInfString(char const* next, char const* last)
     return nullptr;
 }
 
-inline bool IsNaNString(char const* f, char const* l)
+bool IsNaNString(char const* f, char const* l)
 {
     auto const end = ScanNaNString(f, l);
     return end != nullptr && end == l;
 }
 
-inline bool IsInfString(char const* f, char const* l)
+bool IsInfString(char const* f, char const* l)
 {
     auto const end = ScanInfString(f, l);
     return end != nullptr && end == l;
@@ -260,9 +271,13 @@ ScanNumberResult<It> ScanNumber(It next, It last, json::Options const& options)
                                     : NumberClass::pos_integer};
 }
 
+} // namespace
+
 //--------------------------------------------------------------------------------------------------
 //
 //--------------------------------------------------------------------------------------------------
+
+namespace {
 
 enum class TokenKind : unsigned char {
     unknown,
@@ -309,18 +324,18 @@ struct Lexer
     Token LexComment   (char const* p);
 };
 
-inline Lexer::Lexer()
+Lexer::Lexer()
 {
 }
 
-inline Lexer::Lexer(char const* first, char const* last)
+Lexer::Lexer(char const* first, char const* last)
     : src(first)
     , end(last)
     , ptr(first)
 {
 }
 
-inline Token Lexer::MakeToken(char const* p, TokenKind kind, bool needs_cleaning, NumberClass number_class)
+Token Lexer::MakeToken(char const* p, TokenKind kind, bool needs_cleaning, NumberClass number_class)
 {
     Token tok;
 
@@ -335,7 +350,7 @@ inline Token Lexer::MakeToken(char const* p, TokenKind kind, bool needs_cleaning
     return tok;
 }
 
-inline Token Lexer::Lex(Options const& options)
+Token Lexer::Lex(Options const& options)
 {
 L_again:
     ptr = SkipWhitespace(ptr, end);
@@ -465,7 +480,7 @@ L_again:
     return MakeToken(p, kind);
 }
 
-inline Token Lexer::LexString(char const* p, char quote_char)
+Token Lexer::LexString(char const* p, char quote_char)
 {
     assert(p != end);
     assert(*p == quote_char);
@@ -510,14 +525,14 @@ inline Token Lexer::LexString(char const* p, char quote_char)
     return tok;
 }
 
-inline Token Lexer::LexNumber(char const* p, Options const& options)
+Token Lexer::LexNumber(char const* p, Options const& options)
 {
     auto const res = ScanNumber(p, end, options);
 
     return MakeToken(res.end, TokenKind::number, /*needs_cleaning*/ false, res.number_class);
 }
 
-inline Token Lexer::LexIdentifier(char const* p)
+Token Lexer::LexIdentifier(char const* p)
 {
     for ( ; p != end && IsIdentifierBody(*p); ++p)
     {
@@ -526,7 +541,7 @@ inline Token Lexer::LexIdentifier(char const* p)
     return MakeToken(p, TokenKind::identifier);
 }
 
-inline Token Lexer::LexComment(char const* p)
+Token Lexer::LexComment(char const* p)
 {
     assert(p != end);
     assert(*p == '/');
@@ -578,9 +593,13 @@ inline Token Lexer::LexComment(char const* p)
     return MakeToken(p, TokenKind::unknown);
 }
 
+} // namespace
+
 //--------------------------------------------------------------------------------------------------
 //
 //--------------------------------------------------------------------------------------------------
+
+namespace {
 
 struct Failed
 {
@@ -604,20 +623,29 @@ struct Parser
 
     Parser(ParseCallbacks& cb_, Options const& options_);
 
-    ParseStatus ParseObject     (int depth);
-    ParseStatus ParsePair       (int depth);
-    ParseStatus ParseArray      (int depth);
-    ParseStatus ParseString     (int depth);
-    ParseStatus ParseNumber     (int depth);
-    ParseStatus ParseIdentifier (int depth);
-    ParseStatus ParseValue      (int depth);
+#if !JSON_PARSE_ITERATIVE
+    ParseStatus ParseObject        (int depth);
+    ParseStatus ParsePair          (int depth);
+#endif
+    ParseStatus ParseArray         (int depth);
+    ParseStatus ParseString        (int depth = 0);
+    ParseStatus ParseNumber        (int depth = 0);
+    ParseStatus ParseIdentifier    (int depth = 0);
+#if !JSON_PARSE_ITERATIVE
+    ParseStatus ParseValue         (int depth = 0);
+#else
+    ParseStatus ParsePrimitive();
+    ParseStatus ParseValueIterative();
+#endif
 };
 
-inline Parser::Parser(ParseCallbacks& cb_, Options const& options_)
+Parser::Parser(ParseCallbacks& cb_, Options const& options_)
     : cb(cb_)
     , options(options_)
 {
 }
+
+#if !JSON_PARSE_ITERATIVE
 
 //
 //  object
@@ -627,7 +655,7 @@ inline Parser::Parser(ParseCallbacks& cb_, Options const& options_)
 //      pair
 //      pair , members
 //
-inline ParseStatus Parser::ParseObject(int depth)
+ParseStatus Parser::ParseObject(int depth)
 {
     assert(token.kind == TokenKind::l_brace);
 
@@ -680,7 +708,7 @@ inline ParseStatus Parser::ParseObject(int depth)
 //  pair
 //      string : value
 //
-inline ParseStatus Parser::ParsePair(int depth)
+ParseStatus Parser::ParsePair(int depth)
 {
     if (depth >= kMaxDepth)
         return ParseStatus::max_depth_reached;
@@ -712,7 +740,7 @@ inline ParseStatus Parser::ParsePair(int depth)
 //      value
 //      value , elements
 //
-inline ParseStatus Parser::ParseArray(int depth)
+ParseStatus Parser::ParseArray(int depth)
 {
     assert(token.kind == TokenKind::l_square);
 
@@ -761,26 +789,9 @@ inline ParseStatus Parser::ParseArray(int depth)
     return ParseStatus::success;
 }
 
-//
-//  string
-//      ""
-//      " chars "
-//  chars
-//      char
-//      char chars
-//  char
-//      <any Unicode character except " or \ or control-character>
-//      '\"'
-//      '\\'
-//      '\/'
-//      '\b'
-//      '\f'
-//      '\n'
-//      '\r'
-//      '\t'
-//      '\u' four-hex-digits
-//
-inline ParseStatus Parser::ParseString(int /*depth*/)
+#endif
+
+ParseStatus Parser::ParseString(int /*depth*/)
 {
     assert(token.kind == TokenKind::string);
 
@@ -793,33 +804,7 @@ inline ParseStatus Parser::ParseString(int /*depth*/)
     return ParseStatus::success;
 }
 
-//
-//  number
-//     int
-//     int frac
-//     int exp
-//     int frac exp
-//  int
-//     digit
-//     digit1-9 digits
-//     - digit
-//     - digit1-9 digits
-//  frac
-//     . digits
-//  exp
-//     e digits
-//  digits
-//     digit
-//     digit digits
-//  e
-//     e
-//     e+
-//     e-
-//     E
-//     E+
-//     E-
-//
-inline ParseStatus Parser::ParseNumber(int /*depth*/)
+ParseStatus Parser::ParseNumber(int /*depth*/)
 {
     assert(token.kind == TokenKind::number);
 
@@ -835,12 +820,7 @@ inline ParseStatus Parser::ParseNumber(int /*depth*/)
     return ParseStatus::success;
 }
 
-//
-//  true
-//  false
-//  null
-//
-inline ParseStatus Parser::ParseIdentifier(int /*depth*/)
+ParseStatus Parser::ParseIdentifier(int /*depth*/)
 {
     assert(token.kind == TokenKind::identifier);
     assert(token.end - token.ptr > 0 && "internal error");
@@ -850,23 +830,23 @@ inline ParseStatus Parser::ParseIdentifier(int /*depth*/)
     auto const len = l - f;
 
     ParseStatus ec;
-    if (len == 4 && std::memcmp(f, "null", 4) == 0)
+    if (len == 4 && /**f == 'n' &&*/ std::memcmp(f, "null", 4) == 0)
     {
         ec = cb.HandleNull(options);
     }
-    else if (len == 4 && std::memcmp(f, "true", 4) == 0)
+    else if (len == 4 && /**f == 't' &&*/ std::memcmp(f, "true", 4) == 0)
     {
         ec = cb.HandleBoolean(true, options);
     }
-    else if (len == 5 && std::memcmp(f, "false", 5) == 0)
+    else if (len == 5 && /**f == 'f' &&*/ std::memcmp(f, "false", 5) == 0)
     {
         ec = cb.HandleBoolean(false, options);
     }
-    else if (options.allow_nan_inf && IsNaNString(f, l))
+    else if (options.allow_nan_inf && /*(*f == 'n' || *f == 'N') &&*/ IsNaNString(f, l))
     {
         ec = cb.HandleNumber(f, l, NumberClass::pos_nan, options);
     }
-    else if (options.allow_nan_inf && IsInfString(f, l))
+    else if (options.allow_nan_inf && /*(*f == 'i' || *f == 'I') &&*/ IsInfString(f, l))
     {
         ec = cb.HandleNumber(f, l, NumberClass::pos_infinity, options);
     }
@@ -884,17 +864,9 @@ inline ParseStatus Parser::ParseIdentifier(int /*depth*/)
     return ParseStatus::success;
 }
 
-//
-//  value
-//      string
-//      number
-//      object
-//      array
-//      true
-//      false
-//      null
-//
-inline ParseStatus Parser::ParseValue(int depth)
+#if !JSON_PARSE_ITERATIVE
+
+ParseStatus Parser::ParseValue(int depth)
 {
     if (depth >= kMaxDepth)
         return ParseStatus::max_depth_reached;
@@ -917,6 +889,213 @@ inline ParseStatus Parser::ParseValue(int depth)
         return ParseStatus::unexpected_token;
     }
 }
+
+#else
+
+ParseStatus Parser::ParsePrimitive()
+{
+    switch (token.kind)
+    {
+    case TokenKind::string:
+        return ParseString();
+    case TokenKind::number:
+        return ParseNumber();
+    case TokenKind::identifier:
+        return ParseIdentifier();
+    case TokenKind::eof:
+        return ParseStatus::unexpected_eof;
+    default:
+        return ParseStatus::unexpected_token;
+    }
+}
+
+ParseStatus Parser::ParseValueIterative()
+{
+    enum class Structure {
+        object,
+        array,
+    };
+
+    struct StackElement
+    {
+        Structure structure;
+        size_t count; // number of elements or members in the current array resp. object
+
+        StackElement() = default;
+        StackElement(Structure structure_, size_t count_) : structure(structure_) , count(count_) {}
+    };
+
+    StackElement stack[kMaxDepth];
+    size_t stack_size = 0;
+
+    if (token.kind == TokenKind::l_brace)
+        goto L_parse_object;
+    if (token.kind == TokenKind::l_square)
+        goto L_parse_array;
+
+    return ParsePrimitive();
+
+L_parse_object:
+    //
+    //  object
+    //      {}
+    //      { members }
+    //  members
+    //      pair
+    //      pair , members
+    //  pair
+    //      string : value
+    //
+    assert(token.kind == TokenKind::l_brace);
+
+    if (stack_size >= kMaxDepth)
+        return ParseStatus::max_depth_reached;
+
+    stack[stack_size++] = {Structure::object, 0};
+
+    // skip '{'
+    token = lexer.Lex(options);
+
+    if (Failed ec = cb.HandleBeginObject(options))
+        return ec;
+
+    if (token.kind != TokenKind::r_brace)
+    {
+        for (;;)
+        {
+            if (token.kind != TokenKind::string && (!options.allow_unquoted_keys || token.kind != TokenKind::identifier))
+                return ParseStatus::expected_key;
+
+            if (Failed ec = cb.HandleKey(token.ptr, token.end, token.needs_cleaning, options))
+                return ec;
+
+            // skip 'key'
+            token = lexer.Lex(options);
+
+            if (token.kind != TokenKind::colon)
+                return ParseStatus::expected_colon_after_key;
+
+            // skip ':'
+            token = lexer.Lex(options);
+
+            // parse 'value'
+            if (token.kind == TokenKind::l_brace)
+                goto L_parse_object;
+            if (token.kind == TokenKind::l_square)
+                goto L_parse_array;
+
+            if (Failed ec = ParsePrimitive())
+                return ec;
+
+L_parse_end_member:
+            assert(stack_size != 0);
+            assert(stack[stack_size - 1].structure == Structure::object);
+            stack[stack_size - 1].count++;
+
+            if (Failed ec = cb.HandleEndMember(stack[stack_size - 1].count, options))
+                return ec;
+
+            if (token.kind != TokenKind::comma)
+                break;
+
+            // skip ','
+            token = lexer.Lex(options);
+
+            if (options.allow_trailing_comma && token.kind == TokenKind::r_brace)
+                break;
+        }
+
+        if (token.kind != TokenKind::r_brace)
+            return ParseStatus::expected_comma_or_closing_brace;
+    }
+
+    if (Failed ec = cb.HandleEndObject(stack[stack_size - 1].count, options))
+        return ec;
+
+    // skip '}'
+    token = lexer.Lex(options);
+    goto L_pop;
+
+L_parse_array:
+    //
+    //  array
+    //      []
+    //      [ elements ]
+    //  elements
+    //      value
+    //      value , elements
+    //
+    assert(token.kind == TokenKind::l_square);
+
+    if (stack_size >= kMaxDepth)
+        return ParseStatus::max_depth_reached;
+
+    stack[stack_size++] = {Structure::array, 0};
+
+    // skip '['
+    token = lexer.Lex(options);
+
+    if (Failed ec = cb.HandleBeginArray(options))
+        return ec;
+
+    if (token.kind != TokenKind::r_square)
+    {
+        for (;;)
+        {
+            // parse 'value'
+            if (token.kind == TokenKind::l_brace)
+                goto L_parse_object;
+            if (token.kind == TokenKind::l_square)
+                goto L_parse_array;
+
+            if (Failed ec = ParsePrimitive())
+                return ec;
+
+L_parse_end_element:
+            assert(stack_size != 0);
+            assert(stack[stack_size - 1].structure == Structure::array);
+            stack[stack_size - 1].count++;
+
+            if (Failed ec = cb.HandleEndElement(stack[stack_size - 1].count, options))
+                return ec;
+
+            if (token.kind != TokenKind::comma)
+                break;
+
+            // skip ','
+            token = lexer.Lex(options);
+
+            if (options.allow_trailing_comma && token.kind == TokenKind::r_square)
+                break;
+        }
+
+        if (token.kind != TokenKind::r_square)
+            return ParseStatus::expected_comma_or_closing_bracket;
+    }
+
+    if (Failed ec = cb.HandleEndArray(stack[stack_size - 1].count, options))
+        return ec;
+
+    // skip ']'
+    token = lexer.Lex(options);
+    goto L_pop;
+
+L_pop:
+    assert(stack_size != 0);
+    stack_size--;
+
+    if (stack_size == 0)
+        return ParseStatus::success;
+
+    if (stack[stack_size - 1].structure == Structure::object)
+        goto L_parse_end_member;
+    else
+        goto L_parse_end_element;
+}
+
+#endif
+
+} // namespace
 
 //--------------------------------------------------------------------------------------------------
 //
@@ -942,13 +1121,23 @@ ParseResult json::parse(ParseCallbacks& cb, char const* next, char const* last, 
     parser.lexer = Lexer(next, last);
     parser.token = parser.lexer.Lex(options); // Get the first token
 
-    auto /*const*/ ec = parser.ParseValue(0);
+#if JSON_PARSE_ITERATIVE
+    auto /*const*/ ec = parser.ParseValueIterative();
+#else
+    auto /*const*/ ec = parser.ParseValue();
+#endif
 
     if (ec == ParseStatus::success)
     {
         if (!options.allow_trailing_characters && parser.token.kind != TokenKind::eof)
         {
             ec = ParseStatus::expected_eof;
+        }
+        else if (options.allow_trailing_characters && parser.token.kind == TokenKind::comma)
+        {
+            // Skip commas at end of value.
+            // Allows to parse strings like "true,1,[1]"
+            parser.token = parser.lexer.Lex(options);
         }
     }
 

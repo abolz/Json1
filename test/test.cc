@@ -185,7 +185,8 @@ TEST_CASE("Value - construct JSON")
     })";
 
     json::Value val;
-    json::parse(val, input.data(), input.data() + input.size());
+    auto const res = json::parse(val, input.data(), input.data() + input.size());
+    CHECK(res.ec == json::ParseStatus{});
 
     std::string str;
     json::stringify(str, val);
