@@ -26,7 +26,7 @@
 
 using namespace json;
 
-#define JSON_PARSE_ITERATIVE 0
+#define JSON_PARSE_ITERATIVE 1
 
 //--------------------------------------------------------------------------------------------------
 //
@@ -42,53 +42,107 @@ namespace {
 #define I 0x10  // ident-body  : IsDigit, IsLetter, '_', '$'
                 // hex-digit   : IsDigit, 'a'...'f', 'A'...'F'
                 // esc-char    : '"', '\\', '/', 'b', 'f', 'n', 'r', 't', 'u'
+#define A 0x20  // ascii (non-special)
+#define S 0x40  // quote or bs : '"', '\'', '`', '\\'
+#define C 0x80  // needs cleaning (strings)
+// A == !(S|C)
 
-static constexpr uint8_t const kCharClass[256] = {
-//  NUL     SOH     STX     ETX     EOT     ENQ     ACK     BEL     BS      HT      LF      VT      FF      CR      SO      SI
-    0,      0,      0,      0,      0,      0,      0,      0,      0,      W,      W,      0,      0,      W,      0,      0,
-//  DLE     DC1     DC2     DC3     DC4     NAK     SYN     ETB     CAN     EM      SUB     ESC     FS      GS      RS      US
-    0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-//  space   !       "       #       $       %       &       '       (       )       *       +       ,       -       .       /
-    W,      0,      0,      0,      I,      0,      0,      0,      0,      0,      0,      N,      0,      N,      N,      0,
-//  0       1       2       3       4       5       6       7       8       9       :       ;       <       =       >       ?
-    D|N|I,  D|N|I,  D|N|I,  D|N|I,  D|N|I,  D|N|I,  D|N|I,  D|N|I,  D|N|I,  D|N|I,  0,      0,      0,      0,      0,      0,
-//  @       A       B       C       D       E       F       G       H       I       J       K       L       M       N       O
-    0,      X|I,    I,      I,      I,      N|I,    X|I,    I,      I,      X|I,    I,      I,      I,      I,      X|I,    I,
-//  P       Q       R       S       T       U       V       W       X       Y       Z       [       \       ]       ^       _
-    I,      I,      I,      I,      X|I,    I,      I,      I,      I,      X|I,    I,      0,      0,      0,      0,      I,
-//  `       a       b       c       d       e       f       g       h       i       j       k       l       m       n       o
-    0,      X|I,    I,      I,      I,      N|I,    X|I,    I,      I,      X|I,    I,      I,      I,      I,      X|I,    I,
-//  p       q       r       s       t       u       v       w       x       y       z       {       |       }       ~       DEL
-    I,      I,      I,      I,      X|I,    I,      I,      I,      I,      X|I,    I,      0,      0,      0,      0,      0,
-    0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-    0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-    0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-    0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-    0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-    0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-    0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-    0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+enum ECharClass : unsigned {
+    CC_None             = 0,
+    CC_Whitespace       = W,
+    CC_Digit            = D,
+    CC_NumberBody       = N,
+    CC_IdentifierBody   = I,
+    CC_ASCII            = A,
+    CC_NonASCII         = S | C,
+    CC_NeedsCleaning    = C,
 };
 
-bool IsWhitespace     (char ch) { return (kCharClass[static_cast<unsigned char>(ch)] & W) != 0; }
-bool IsDigit          (char ch) { return (kCharClass[static_cast<unsigned char>(ch)] & D) != 0; }
-#if 0
-bool IsNumberBody     (char ch) { return (kCharClass[static_cast<unsigned char>(ch)] & N) != 0; }
-#endif
-bool IsIdentifierBody (char ch) { return (kCharClass[static_cast<unsigned char>(ch)] & I) != 0; }
+static constexpr uint8_t const kCharClass[] = {
+//  NUL     SOH     STX     ETX     EOT     ENQ     ACK     BEL     BS      HT      LF      VT      FF      CR      SO      SI
+    C,      C,      C,      C,      C,      C,      C,      C,      C,      W|C,    W|C,    C,      C,      W|C,    C,      C,
+//  DLE     DC1     DC2     DC3     DC4     NAK     SYN     ETB     CAN     EM      SUB     ESC     FS      GS      RS      US
+    C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,
+//  space   !       "       #       $       %       &       '       (       )       *       +       ,       -       .       /
+    W|A,    A,      S,      A,      I|A,    A,      A,      S,      A,      A,      A,      N|A,    A,      N|A,    N|A,    A,
+//  0       1       2       3       4       5       6       7       8       9       :       ;       <       =       >       ?
+    D|N|I|A,D|N|I|A,D|N|I|A,D|N|I|A,D|N|I|A,D|N|I|A,D|N|I|A,D|N|I|A,D|N|I|A,D|N|I|A,A,      A,      A,      A,      A,      A,
+//  @       A       B       C       D       E       F       G       H       I       J       K       L       M       N       O
+    A,      X|I|A,  I|A,    I|A,    I|A,    N|I|A,  X|I|A,  I|A,    I|A,    X|I|A,  I|A,    I|A,    I|A,    I|A,    X|I|A,  I|A,
+//  P       Q       R       S       T       U       V       W       X       Y       Z       [       \       ]       ^       _
+    I|A,    I|A,    I|A,    I|A,    X|I|A,  I|A,    I|A,    I|A,    I|A,    X|I|A,  I|A,    A,      S|C,    A,      A,      I|A,
+//  `       a       b       c       d       e       f       g       h       i       j       k       l       m       n       o
+    S,      X|I|A,  I|A,    I|A,    I|A,    N|I|A,  X|I|A,  I|A,    I|A,    X|I|A,  I|A,    I|A,    I|A,    I|A,    X|I|A,  I|A,
+//  p       q       r       s       t       u       v       w       x       y       z       {       |       }       ~       DEL
+    I|A,    I|A,    I|A,    I|A,    X|I|A,  I|A,    I|A,    I|A,    I|A,    X|I|A,  I|A,    A,      A,      A,      A,      A,
+    C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,
+    C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,
+    C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,
+    C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,
+    C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,
+    C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,
+    C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,
+    C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,
+};
 
+#undef C
+#undef S
+#undef A
 #undef I
 #undef N
 #undef X
 #undef D
 #undef W
 
+inline unsigned GetCharClass(char ch)
+{
+    return kCharClass[static_cast<unsigned char>(ch)];
+}
+
+bool IsWhitespace     (char ch) { return (GetCharClass(ch) & CC_Whitespace    ) != 0; }
+bool IsDigit          (char ch) { return (GetCharClass(ch) & CC_Digit         ) != 0; }
+bool IsIdentifierBody (char ch) { return (GetCharClass(ch) & CC_IdentifierBody) != 0; }
+bool IsNonSpecialASCII(char ch) { return (GetCharClass(ch) & CC_ASCII         ) != 0; }
+
 template <typename It>
 It SkipWhitespace(It f, It l)
 {
+#if 0
+    while (l - f >= 4)
+    {
+        if (!IsWhitespace(f[0])) return f + 0;
+        if (!IsWhitespace(f[1])) return f + 1;
+        if (!IsWhitespace(f[2])) return f + 2;
+        if (!IsWhitespace(f[3])) return f + 3;
+        f += 4;
+    }
+#endif
+
     for ( ; f != l && IsWhitespace(*f); ++f)
     {
     }
+
+    return f;
+}
+
+template <typename It>
+It SkipNonSpecialASCII(It f, It l)
+{
+#if 0
+    while (l - f >= 4)
+    {
+        if (!IsNonSpecialASCII(f[0])) return f + 0;
+        if (!IsNonSpecialASCII(f[1])) return f + 1;
+        if (!IsNonSpecialASCII(f[2])) return f + 2;
+        if (!IsNonSpecialASCII(f[3])) return f + 3;
+        f += 4;
+    }
+#endif
+
+    for ( ; f != l && IsNonSpecialASCII(*f); ++f)
+    {
+    }
+
     return f;
 }
 
@@ -110,7 +164,7 @@ char const* ScanNaNString(char const* next, char const* last)
     if (len >= 3 && std::memcmp(next, "NAN", 3) == 0) { return next + 3; }
 #endif
 
-    return nullptr;
+    return next;
 }
 
 char const* ScanInfString(char const* next, char const* last)
@@ -126,19 +180,21 @@ char const* ScanInfString(char const* next, char const* last)
     if (len >= 3 && std::memcmp(next, "INF",      3) == 0) { return next + 3; }
 #endif
 
-    return nullptr;
+    return next;
 }
 
 bool IsNaNString(char const* f, char const* l)
 {
-    auto const end = ScanNaNString(f, l);
-    return end != nullptr && end == l;
+    if (f == l)
+        return false;
+    return l == ScanNaNString(f, l);
 }
 
 bool IsInfString(char const* f, char const* l)
 {
-    auto const end = ScanInfString(f, l);
-    return end != nullptr && end == l;
+    if (f == l)
+        return false;
+    return l == ScanInfString(f, l);
 }
 
 template <typename It>
@@ -178,11 +234,15 @@ ScanNumberResult<It> ScanNumber(It next, It last, json::Options const& options)
 
     if (options.allow_nan_inf)
     {
-        if (auto const end = ScanNaNString(next, last))
-            return {end, is_neg ? NumberClass::neg_nan : NumberClass::pos_nan};
+        auto const p1 = ScanNaNString(next, last);
+        if (p1 != next) {
+            return {p1, is_neg ? NumberClass::neg_nan : NumberClass::pos_nan};
+        }
 
-        if (auto const end = ScanInfString(next, last))
-            return {end, is_neg ? NumberClass::neg_infinity : NumberClass::pos_infinity};
+        auto const p2 = ScanInfString(next, last);
+        if (p2 != next) {
+            return {p2, is_neg ? NumberClass::neg_infinity : NumberClass::pos_infinity};
+        }
     }
 
 // int
@@ -485,44 +545,38 @@ Token Lexer::LexString(char const* p, char quote_char)
     assert(p != end);
     assert(*p == quote_char);
 
-    bool needs_cleaning = false;
-
     ptr = ++p; // skip " or '
 
+    p = SkipNonSpecialASCII(p, end);
+
+    unsigned mask = 0;
     for (;;)
     {
+        //p = SkipNonSpecialASCII(p, end);
+
         if (p == end)
-            return MakeToken(p, TokenKind::incomplete_string, needs_cleaning);
-
-        auto const ch = *p;
-        auto const uc = static_cast<unsigned char>(ch);
-
-        if (uc == quote_char)
             break;
 
-        ++p;
-        if (uc < 0x20) // Unescaped control character
-        {
-            needs_cleaning = true;
-        }
-        else if (uc >= 0x80) // Possibly a UTF-8 lead byte (sequence length >= 2)
-        {
-            needs_cleaning = true;
-        }
-        else if (ch == '\\')
-        {
-            if (p != end) // Skip the escaped character.
-                ++p;
+        auto const ch = *p;
+        mask |= GetCharClass(ch);
 
-            needs_cleaning = true;
+        if (ch == quote_char)
+        {
+            auto tok = MakeToken(p, TokenKind::string, (mask & CC_NeedsCleaning) != 0);
+            ptr = ++p; // skip " or '
+            return tok;
+        }
+
+        ++p;
+        if (ch == '\\')
+        {
+            if (p == end)
+                break;
+            ++p;
         }
     }
 
-    auto tok = MakeToken(p, TokenKind::string, needs_cleaning);
-
-    ptr = ++p; // skip " or '
-
-    return tok;
+    return MakeToken(p, TokenKind::incomplete_string, (mask & CC_NeedsCleaning) != 0);
 }
 
 Token Lexer::LexNumber(char const* p, Options const& options)

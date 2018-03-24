@@ -251,7 +251,7 @@ bool ForEachUTF16EncodedCodepoint(It next, It last, Put32 put)
 }
 #endif
 
-#if 1
+#if 0
 inline int HexDigitValue(char ch)
 {
 #define N -1
