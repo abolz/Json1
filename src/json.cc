@@ -679,11 +679,11 @@ double Value::to_number() const noexcept
 
 double Value::to_integer() const noexcept
 {
-    auto v = to_number();
+    auto const v = to_number();
     if (std::isnan(v)) {
         return 0.0;
     }
-    if (std::isinf(v) || v == 0.0) { // NB: -0 => +0
+    if (std::isinf(v) || v == 0.0) {
         return v;
     }
 
@@ -711,14 +711,12 @@ int32_t Value::to_int32() const noexcept
     constexpr double kTwo32 = 4294967296.0;
     constexpr double kTwo31 = 2147483648.0;
 
-    auto v = to_number();
+    auto const v = to_number();
     if (!std::isfinite(v) || v == 0.0) { // NB: -0 => +0
         return 0;
     }
 
-    auto i = std::trunc(v);
-    auto k = Modulo(i, kTwo32);
-
+    auto k = Modulo(std::trunc(v), kTwo32);
     if (k >= kTwo31) {
         k -= kTwo32;
     }
@@ -730,13 +728,12 @@ uint32_t Value::to_uint32() const noexcept
 {
     constexpr double kTwo32 = 4294967296.0;
 
-    auto v = to_number();
+    auto const v = to_number();
     if (!std::isfinite(v) || v == 0.0) { // NB: -0 => +0
         return 0;
     }
 
-    auto i = std::trunc(v);
-    auto k = Modulo(i, kTwo32);
+    auto k = Modulo(std::trunc(v), kTwo32);
 
     return static_cast<uint32_t>(k);
 }
@@ -746,14 +743,12 @@ int16_t Value::to_int16() const noexcept
     constexpr double kTwo16 = 65536.0;
     constexpr double kTwo15 = 32768.0;
 
-    auto v = to_number();
+    auto const v = to_number();
     if (!std::isfinite(v) || v == 0.0) { // NB: -0 => +0
         return 0;
     }
 
-    auto i = std::trunc(v);
-    auto k = Modulo(i, kTwo16);
-
+    auto k = Modulo(std::trunc(v), kTwo16);
     if (k >= kTwo15) {
         k -= kTwo16;
     }
@@ -765,13 +760,12 @@ uint16_t Value::to_uint16() const noexcept
 {
     constexpr double kTwo16 = 65536.0;
 
-    auto v = to_number();
+    auto const v = to_number();
     if (!std::isfinite(v) || v == 0.0) { // NB: -0 => +0
         return 0;
     }
 
-    auto i = std::trunc(v);
-    auto k = Modulo(i, kTwo16);
+    auto k = Modulo(std::trunc(v), kTwo16);
 
     return static_cast<uint16_t>(k);
 }
@@ -781,14 +775,12 @@ int8_t Value::to_int8() const noexcept
     constexpr double kTwo8 = 256.0;
     constexpr double kTwo7 = 128.0;
 
-    auto v = to_number();
+    auto const v = to_number();
     if (!std::isfinite(v) || v == 0.0) { // NB: -0 => +0
         return 0;
     }
 
-    auto i = std::trunc(v);
-    auto k = Modulo(i, kTwo8);
-
+    auto k = Modulo(std::trunc(v), kTwo8);
     if (k >= kTwo7) {
         k -= kTwo8;
     }
@@ -800,13 +792,12 @@ uint8_t Value::to_uint8() const noexcept
 {
     constexpr double kTwo8 = 256.0;
 
-    auto v = to_number();
+    auto const v = to_number();
     if (!std::isfinite(v) || v == 0.0) { // NB: -0 => +0
         return 0;
     }
 
-    auto i = std::trunc(v);
-    auto k = Modulo(i, kTwo8);
+    auto k = Modulo(std::trunc(v), kTwo8);
 
     return static_cast<uint8_t>(k);
 }
@@ -874,7 +865,7 @@ String Value::to_string() const
 // parse
 //==================================================================================================
 
-struct DOMParserCallbacks final : ParseCallbacks
+struct ParseValueCallbacks /*final*/ : ParseCallbacks
 {
     static constexpr int kMaxElements = 120;
     static constexpr int kMaxMembers = 120;
@@ -935,17 +926,46 @@ struct DOMParserCallbacks final : ParseCallbacks
 
     ParseStatus HandleEndArray(size_t count, Options const& /*options*/) override
     {
+//        if (count != 0)
+//        {
+//            assert(!stack.empty());
+//
+//            auto  K = std::to_string(count);
+//            auto& V = stack.back();
+//
+//            if (!reviver(K, V) /* || V.is_undefined() || V.is_null() */)
+//            {
+//                stack.pop_back();   // discard
+//                count--;            // discard
+//                return {};
+//            }
+//        }
+
         PopElements(count);
         return {};
     }
 
     ParseStatus HandleEndElement(size_t& count, Options const& /*options*/) override
     {
+        assert(!stack.empty());
+        assert(count != 0);
+
+//        auto  K = std::to_string(count);
+//        auto& V = stack.back();
+//
+//        if (!reviver(K, V) /* || V.is_undefined() || V.is_null() */)
+//        {
+//            stack.pop_back();   // discard
+//            count--;            // discard
+//            return {};
+//        }
+
         if (count >= kMaxElements)
         {
             PopElements(count);
             count = 0;
         }
+
         return {};
     }
 
@@ -957,6 +977,23 @@ struct DOMParserCallbacks final : ParseCallbacks
 
     ParseStatus HandleEndObject(size_t count, Options const& options) override
     {
+//        if (count > 0)
+//        {
+//            assert(!keys.empty());
+//            assert(!stack.empty());
+//
+//            auto& K = keys.back();
+//            auto& V = stack.back();
+//
+//            if (!reviver(K, V) /* || V.is_undefined() || V.is_null() */)
+//            {
+//                keys.pop_back();    // discard
+//                stack.pop_back();   // discard
+//                count--;            // discard
+//                return {};
+//            }
+//        }
+
         PopMembers(count, options.reject_duplicate_keys);
         return {};
     }
@@ -986,11 +1023,27 @@ struct DOMParserCallbacks final : ParseCallbacks
 
     ParseStatus HandleEndMember(size_t& count, Options const& options) override
     {
+        assert(!keys.empty());
+        assert(!stack.empty());
+        assert(count != 0);
+
+//        auto& K = keys.back();
+//        auto& V = stack.back();
+//
+//        if (!reviver(K, V) /* || V.is_undefined() || V.is_null() */)
+//        {
+//            keys.pop_back();    // discard
+//            stack.pop_back();   // discard
+//            count--;            // discard
+//            return {};
+//        }
+
         if (count >= kMaxMembers)
         {
             PopMembers(count, options.reject_duplicate_keys);
             count = 0;
         }
+
         return {};
     }
 
@@ -1058,13 +1111,19 @@ private:
 
 ParseResult json::parse(Value& value, char const* next, char const* last, Options const& options)
 {
-    DOMParserCallbacks cb;
+    ParseValueCallbacks cb;
 
     auto const res = json::parse(cb, next, last, options);
     if (res.ec == ParseStatus::success)
     {
         assert(cb.stack.size() == 1);
-        value = std::move(cb.stack.back());
+
+//        auto  K = std::string{};
+        auto& V = cb.stack.back();
+//        if (reviver(K, V) && !(V.is_undefined() || V.is_null()))
+//        {
+            value = std::move(V);
+//        }
     }
 
     return res;
@@ -1103,35 +1162,36 @@ static bool StringifyNumber(std::string& str, double value, Options const& optio
         if (!options.allow_nan_inf)
         {
             str += "null";
-            return true;
         }
-
-        if (value < 0)
-            str += '-';
-
-        if (std::isnan(value))
+        else if (std::isnan(value))
+        {
             str += "NaN";       // XXX: kNaNString
+        }
         else
+        {
+            if (value < 0)
+                str += '-';
+
             str += "Infinity";  // XXX: kInfString
-
-        return true;
+        }
     }
-
-    // Handle +-0.
-    // Interpret -0 as a floating-point number and +0 as an integer.
-    if (value == 0.0)
+    else if (value == 0.0)
     {
+        // Handle +-0.
+        // Interpret -0 as a floating-point number and +0 as an integer.
+
         if (std::signbit(value))
             str += "-0.0";
         else
             str += '0';
-
-        return true;
     }
+    else
+    {
+        char buf[32];
+        char* end = numbers::NumberToString(buf, buf + 32, value, /*emit_trailing_dot_zero*/ true);
 
-    char buf[32];
-    char* end = numbers::NumberToString(buf, buf + 32, value, /*emit_trailing_dot_zero*/ true);
-    str.append(buf, end);
+        str.append(buf, end);
+    }
 
     return true;
 }
@@ -1270,7 +1330,7 @@ static bool StringifyValue(std::string& str, Value const& value, Options const& 
     switch (value.type())
     {
     case Type::undefined:
-        assert(false && "cannot stringify 'undefined'");
+        assert(false && "cannot stringify 'undefined'"); // LCOV_EXCL_LINE
         return StringifyNull(str);
     case Type::null:
         return StringifyNull(str);
@@ -1285,7 +1345,7 @@ static bool StringifyValue(std::string& str, Value const& value, Options const& 
     case Type::object:
         return StringifyObject(str, value.get_object(), options, curr_indent);
     default:
-        assert(false && "invalid type");
+        assert(false && "invalid type"); // LCOV_EXCL_LINE
         return {};
     }
 }
