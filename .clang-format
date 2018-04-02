@@ -4,14 +4,14 @@ Language:                         Cpp
 AccessModifierOffset:             -4
 AlignAfterOpenBracket:            Align
 AlignConsecutiveAssignments:      false
-AlignConsecutiveDeclarations:     true
+AlignConsecutiveDeclarations:     false
 AlignEscapedNewlines:             Left
 AlignOperands:                    true
-AlignTrailingComments:            true
+AlignTrailingComments:            false
 AllowAllParametersOfDeclarationOnNextLine: false
 AllowShortBlocksOnASingleLine:    false
 AllowShortCaseLabelsOnASingleLine: false
-AllowShortFunctionsOnASingleLine: None
+AllowShortFunctionsOnASingleLine: Inline
 AllowShortIfStatementsOnASingleLine: false
 AllowShortLoopsOnASingleLine:     false
 AlwaysBreakAfterDefinitionReturnType: None
@@ -22,10 +22,10 @@ BinPackArguments:                 false
 BinPackParameters:                false
 BraceWrapping:
   AfterClass:                       true
-  AfterControlStatement:            true
-  AfterEnum:                        true
+  AfterControlStatement:            false
+  AfterEnum:                        false
   AfterFunction:                    true
-  AfterNamespace:                   true
+  AfterNamespace:                   false
   AfterStruct:                      false
   AfterUnion:                       false
   BeforeCatch:                      true

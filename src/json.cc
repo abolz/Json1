@@ -666,7 +666,12 @@ double Value::to_number() const noexcept
     case Type::number:
         return get_number();
     case Type::string:
-        return numbers::Strtod(get_string().c_str());
+        {
+            auto const& str = get_string();
+            double result;
+            json::numbers::StringToNumber(result, str.c_str(), str.c_str() + str.size());
+            return result;
+        }
     case Type::array:
     case Type::object:
         assert(false && "to_number must not be called for arrays or objects"); // LCOV_EXCL_LINE
@@ -885,34 +890,41 @@ struct ParseValueCallbacks /*final*/ : ParseCallbacks
         return {};
     }
 
-    ParseStatus HandleNumber(char const* first, char const* last, NumberClass nc, Options const& options) override
+    ParseStatus HandleNumber(char const* first, char const* last, NumberClass /*nc*/, Options const& options) override
     {
         if (options.parse_numbers_as_strings)
+        {
             stack.emplace_back(json::string_tag, first, last);
+        }
         else
-            stack.emplace_back(numbers::StringToNumber(first, last, nc));
+        {
+            double result;
+            numbers::StringToNumber(result, first, last, options);
+            stack.emplace_back(result);
+        }
 
         return {};
     }
 
-    ParseStatus HandleString(char const* first, char const* last, bool needs_cleaning, Options const& options) override
+    ParseStatus HandleString(char const* first, char const* last, bool needs_cleaning, Options const& /*options*/) override
     {
-        stack.emplace_back(json::string_tag);
-
-        auto& str = stack.back().get_string();
         if (needs_cleaning)
         {
-            auto const res = strings::UnescapeString(first, last, options, [&](char ch) {
+            String str;
+            str.reserve(static_cast<size_t>(last - first));
+
+            auto const res = strings::UnescapeString(first, last, [&](char ch) {
                 str.push_back(ch);
             });
 
-            if (!res.ok) {
+            if (!res.ok)
                 return ParseStatus::invalid_string;
-            }
+
+            stack.emplace_back(std::move(str));
         }
         else
         {
-            str.assign(first, last);
+            stack.emplace_back(json::string_tag, first, last);
         }
 
         return {};
@@ -926,21 +938,6 @@ struct ParseValueCallbacks /*final*/ : ParseCallbacks
 
     ParseStatus HandleEndArray(size_t count, Options const& /*options*/) override
     {
-//        if (count != 0)
-//        {
-//            assert(!stack.empty());
-//
-//            auto  K = std::to_string(count);
-//            auto& V = stack.back();
-//
-//            if (!reviver(K, V) /* || V.is_undefined() || V.is_null() */)
-//            {
-//                stack.pop_back();   // discard
-//                count--;            // discard
-//                return {};
-//            }
-//        }
-
         PopElements(count);
         return {};
     }
@@ -949,16 +946,6 @@ struct ParseValueCallbacks /*final*/ : ParseCallbacks
     {
         assert(!stack.empty());
         assert(count != 0);
-
-//        auto  K = std::to_string(count);
-//        auto& V = stack.back();
-//
-//        if (!reviver(K, V) /* || V.is_undefined() || V.is_null() */)
-//        {
-//            stack.pop_back();   // discard
-//            count--;            // discard
-//            return {};
-//        }
 
         if (count >= kMaxElements)
         {
@@ -975,72 +962,43 @@ struct ParseValueCallbacks /*final*/ : ParseCallbacks
         return {};
     }
 
-    ParseStatus HandleEndObject(size_t count, Options const& options) override
+    ParseStatus HandleEndObject(size_t count, Options const& /*options*/) override
     {
-//        if (count > 0)
-//        {
-//            assert(!keys.empty());
-//            assert(!stack.empty());
-//
-//            auto& K = keys.back();
-//            auto& V = stack.back();
-//
-//            if (!reviver(K, V) /* || V.is_undefined() || V.is_null() */)
-//            {
-//                keys.pop_back();    // discard
-//                stack.pop_back();   // discard
-//                count--;            // discard
-//                return {};
-//            }
-//        }
-
-        PopMembers(count, options.reject_duplicate_keys);
+        PopMembers(count);
         return {};
     }
 
-    ParseStatus HandleKey(char const* first, char const* last, bool needs_cleaning, Options const& options) override
+    ParseStatus HandleKey(char const* first, char const* last, bool needs_cleaning, Options const& /*options*/) override
     {
-        keys.emplace_back();
-
-        auto& str = keys.back();
         if (needs_cleaning)
         {
-            auto const res = strings::UnescapeString(first, last, options, [&](char ch) {
-                str.push_back(ch);
+            keys.emplace_back();
+            keys.back().reserve(static_cast<size_t>(last - first));
+
+            auto const res = strings::UnescapeString(first, last, [&](char ch) {
+                keys.back().push_back(ch);
             });
 
-            if (!res.ok) {
-                return ParseStatus::invalid_string;
-            }
+            if (!res.ok)
+                return ParseStatus::invalid_string; // return ParseStatus::invalid_key;
         }
         else
         {
-            str.assign(first, last);
+            keys.emplace_back(first, last);
         }
 
         return {};
     }
 
-    ParseStatus HandleEndMember(size_t& count, Options const& options) override
+    ParseStatus HandleEndMember(size_t& count, Options const& /*options*/) override
     {
         assert(!keys.empty());
         assert(!stack.empty());
         assert(count != 0);
 
-//        auto& K = keys.back();
-//        auto& V = stack.back();
-//
-//        if (!reviver(K, V) /* || V.is_undefined() || V.is_null() */)
-//        {
-//            keys.pop_back();    // discard
-//            stack.pop_back();   // discard
-//            count--;            // discard
-//            return {};
-//        }
-
         if (count >= kMaxMembers)
         {
-            PopMembers(count, options.reject_duplicate_keys);
+            PopMembers(count);
             count = 0;
         }
 
@@ -1070,7 +1028,7 @@ private:
         return {};
     }
 
-    ParseStatus PopMembers(size_t num_members, bool reject_duplicate_keys)
+    ParseStatus PopMembers(size_t num_members)
     {
         if (num_members == 0)
             return {};
@@ -1088,19 +1046,17 @@ private:
 
         auto& obj = Iv[-1].get_object();
 
-        //obj.reserve(obj.size() + num_members);
-
+#if 1
         for (std::ptrdiff_t i = 0; i != count; ++i)
         {
             auto& K = Ik[i];
             auto& V = Iv[i];
-
-            auto const it = obj.find(K);
-            if (reject_duplicate_keys && it != obj.end()) {
-                return ParseStatus::duplicate_key;
-            }
-            obj.emplace_hint(it, std::move(K), std::move(V));
+            obj[std::move(K)] = std::move(V);
         }
+#else
+        obj.insert(std::make_move_iterator(Ik), std::make_move_iterator(keys.end()),
+                   std::make_move_iterator(Iv), std::make_move_iterator(stack.end()));
+#endif
 
         stack.erase(Iv, stack.end());
         keys.erase(Ik, keys.end());
@@ -1118,12 +1074,8 @@ ParseResult json::parse(Value& value, char const* next, char const* last, Option
     {
         assert(cb.stack.size() == 1);
 
-//        auto  K = std::string{};
         auto& V = cb.stack.back();
-//        if (reviver(K, V) && !(V.is_undefined() || V.is_null()))
-//        {
-            value = std::move(V);
-//        }
+        value = std::move(V);
     }
 
     return res;
@@ -1165,16 +1117,17 @@ static bool StringifyNumber(std::string& str, double value, Options const& optio
         }
         else if (std::isnan(value))
         {
-            str += "NaN";       // XXX: kNaNString
+            str += "NaN";
         }
         else
         {
             if (value < 0)
                 str += '-';
 
-            str += "Infinity";  // XXX: kInfString
+            str += "Infinity";
         }
     }
+#if 0
     else if (value == 0.0)
     {
         // Handle +-0.
@@ -1185,6 +1138,7 @@ static bool StringifyNumber(std::string& str, double value, Options const& optio
         else
             str += '0';
     }
+#endif
     else
     {
         char buf[32];
@@ -1196,13 +1150,13 @@ static bool StringifyNumber(std::string& str, double value, Options const& optio
     return true;
 }
 
-static bool StringifyString(std::string& str, String const& value, Options const& options)
+static bool StringifyString(std::string& str, String const& value, Options const& /*options*/)
 {
     char const* const first = value.data();
     char const* const last  = value.data() + value.size();
 
     str += '"';
-    auto const res = strings::EscapeString(first, last, options, [&](char ch) { str += ch; });
+    auto const res = strings::EscapeString(first, last, [&](char ch) { str += ch; });
     str += '"';
 
     return res.ok;

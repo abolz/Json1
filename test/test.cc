@@ -9,6 +9,7 @@
 #endif
 
 #include "../src/json.h"
+#include "../src/json_numbers.h"
 
 #include "catch.hpp"
 
@@ -1366,7 +1367,7 @@ here */
     })";
 
     json::Options options;
-    options.allow_comments = true;
+    options.strip_comments = true;
     options.allow_trailing_comma = true;
 
     json::Value val;
@@ -1408,7 +1409,7 @@ TEST_CASE("Invalid block comments")
     for (auto const& inp : inputs)
     {
         json::Options options;
-        options.allow_comments = true;
+        options.strip_comments = true;
         json::Value val;
         auto const res = json::parse(val, inp.data(), inp.data() + inp.size(), options);
         CHECK(res.ec != json::ParseStatus::success);
@@ -1661,6 +1662,7 @@ TEST_CASE("Conversion")
     }
 }
 
+#if 0
 static std::string TimesString(std::string const& s, int count)
 {
     std::string out;
@@ -1681,6 +1683,7 @@ static std::string HexEscapeString(std::string const& s)
     }
     return out;
 }
+#endif
 
 TEST_CASE("Invalid UTF-8")
 {
@@ -1880,6 +1883,7 @@ TEST_CASE("Invalid UTF-8")
         CHECK(ok == false);
     }
 
+#if 0
     // When using 'allow_invalid_unicode' all the strings should be decoded into a
     // sequence of U+FFFD replacement characters.
     for (auto const& test : tests)
@@ -1906,6 +1910,7 @@ TEST_CASE("Invalid UTF-8")
             CHECK(out == "\"" + TimesString("\\uFFFD", test.num_replacements) + "\"");
         }
     }
+#endif
 }
 
 TEST_CASE("Value - array op")
@@ -2415,8 +2420,10 @@ TEST_CASE("Doubles 1")
     auto check_double = [](double number, const std::string & expected)
     {
         CAPTURE(number);
+        CAPTURE(expected);
         std::string actual;
         json::stringify(actual, number);
+        CAPTURE(actual);
         CHECK(actual == expected);
         json::Value back;
         json::parse(back, actual);
@@ -2528,8 +2535,13 @@ TEST_CASE("Doubles 1")
     // Table 21: Stress Inputs for Converting 56-bit Binary to Decimal, > 1/2 ULP
     check_double(make_double(49517601571415211,  -94), "2.5e-12");
     check_double(make_double(49517601571415211,  -95), "1.25e-12");
+#if JSON_USE_GRISU2
     check_double(make_double(54390733528642804, -133), "4.9949999999999996e-24"); // shortest: 4995e-27
     check_double(make_double(71805402319113924, -157), "3.9304999999999998e-31"); // shortest: 39305e-35
+#else
+    check_double(make_double(54390733528642804, -133), "4.995e-24");
+    check_double(make_double(71805402319113924, -157), "3.9305e-31");
+#endif
     check_double(make_double(40435277969631694, -179), "5.277049999999999e-38");
     check_double(make_double(57241991568619049, -165), "1.223955e-33");
     check_double(make_double(65224162876242886,  +58), "1.8799584999999998e+34");
@@ -2555,8 +2567,10 @@ TEST_CASE("DOubles 2")
     auto check_double = [](double number, const std::string & expected)
     {
         CAPTURE(number);
+        CAPTURE(expected);
         std::string actual;
         json::stringify(actual, number);
+        CAPTURE(actual);
         CHECK(actual == expected);
         json::Value back;
         json::parse(back, actual);
@@ -2609,8 +2623,72 @@ TEST_CASE("DOubles 2")
     check_double(  1.2345e+18,   "1234500000000000000.0"  ); // Not exactly representable as double => trailing ".0"
     check_double(  1.2345e+19,   "12345000000000000000.0" ); // Not exactly representable as double => trailing ".0"
     check_double(  1.2345e+20,   "123450000000000000000.0"); // Not exactly representable as double => trailing ".0"
+#if JSON_USE_GRISU2
     check_double(  1.2345e+21,   "1.2344999999999999e+21" ); // Grisu2 "fails"
+#else
+    check_double(  1.2345e+21,   "1.2345e+21"             );
+#endif
     check_double(  1.2345e+22,   "1.2345e+22"             );
+}
+
+TEST_CASE("Double 3")
+{
+    auto check_double = [](std::string const& input, double expected)
+    {
+        CAPTURE(input);
+        CAPTURE(expected);
+        json::Value val;
+        json::parse(val, input);
+        CHECK(val.is_number());
+        CHECK(val.get_number() == expected);
+    };
+
+    static constexpr double const kInf = std::numeric_limits<double>::infinity();
+
+    check_double("1e+2147483646", kInf);
+    check_double("1e+2147483647", kInf);
+    check_double("1e+2147483648", kInf);
+    check_double("1e-2147483646", 0.0);
+    check_double("1e-2147483647", 0.0);
+    check_double("1e-2147483648", 0.0);
+    check_double("1e-2147483649", 0.0);
+    check_double("-1e-2147483646", -0.0);
+    check_double("-1e-2147483647", -0.0);
+    check_double("-1e-2147483648", -0.0);
+    check_double("-1e-2147483649", -0.0);
+    check_double("1.0e+9223372036854775806", kInf);
+    check_double("1.0e+9223372036854775807", kInf);
+    check_double("1.0e+9223372036854775808", kInf);
+    check_double("1.0e-9223372036854775806", 0.0);
+    check_double("1.0e-9223372036854775807", 0.0);
+    check_double("1.0e-9223372036854775808", 0.0);
+    check_double("1.0e-9223372036854775809", 0.0);
+    check_double("-1.0e-9223372036854775806", -0.0);
+    check_double("-1.0e-9223372036854775807", -0.0);
+    check_double("-1.0e-9223372036854775808", -0.0);
+    check_double("-1.0e-9223372036854775809", -0.0);
+    check_double("1000.0e+9223372036854775806", kInf);
+    check_double("1000.0e+9223372036854775807", kInf);
+    check_double("1000.0e+9223372036854775808", kInf);
+    check_double("1000.0e-9223372036854775806", 0.0);
+    check_double("1000.0e-9223372036854775807", 0.0);
+    check_double("1000.0e-9223372036854775808", 0.0);
+    check_double("1000.0e-9223372036854775809", 0.0);
+    check_double("-1000.0e-9223372036854775806", -0.0);
+    check_double("-1000.0e-9223372036854775807", -0.0);
+    check_double("-1000.0e-9223372036854775808", -0.0);
+    check_double("-1000.0e-9223372036854775809", -0.0);
+    check_double("0.0001e+9223372036854775806", kInf);
+    check_double("0.0001e+9223372036854775807", kInf);
+    check_double("0.0001e+9223372036854775808", kInf);
+    check_double("0.0001e-9223372036854775806", 0.0);
+    check_double("0.0001e-9223372036854775807", 0.0);
+    check_double("0.0001e-9223372036854775808", 0.0);
+    check_double("0.0001e-9223372036854775809", 0.0);
+    check_double("-0.0001e-9223372036854775806", -0.0);
+    check_double("-0.0001e-9223372036854775807", -0.0);
+    check_double("-0.0001e-9223372036854775808", -0.0);
+    check_double("-0.0001e-9223372036854775809", -0.0);
 }
 
 TEST_CASE("number conversions")

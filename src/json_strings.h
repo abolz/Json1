@@ -23,12 +23,31 @@
 #include "json_options.h"
 #include "json_unicode.h"
 
+#ifndef JSON_CXX_HAS_IF_CONSTEXPR
+#define JSON_CXX_HAS_IF_CONSTEXPR 0
+#endif
+
 #include <cassert>
 #include <cstdint>
+#if JSON_CXX_HAS_IF_CONSTEXPR
 #include <iterator>
+#include <type_traits>
+#endif
 
 namespace json {
 namespace strings {
+
+#if JSON_CXX_HAS_IF_CONSTEXPR
+namespace impl
+{
+    template <typename It>
+    using IsInputIterator = std::integral_constant<
+        bool,
+        std::is_convertible<typename std::iterator_traits<It>::iterator_category, std::input_iterator_tag>::value &&
+        !std::is_convertible<typename std::iterator_traits<It>::iterator_category, std::forward_iterator_tag >::value
+    >;
+}
+#endif
 
 //==================================================================================================
 //
@@ -65,17 +84,12 @@ namespace strings {
 template <typename It>
 struct UnescapeStringResult
 {
-    bool ok;
     It next;
+    bool ok;
 };
 
 template <typename It, typename Fn>
-UnescapeStringResult<It> UnescapeString(
-    It             next,
-    It             last,
-    //char           quote_char,
-    Options const& options,
-    Fn             yield)
+UnescapeStringResult<It> UnescapeString(It next, It last, /*char quote_char,*/ Fn yield)
 {
     while (next != last)
     {
@@ -89,11 +103,7 @@ UnescapeStringResult<It> UnescapeString(
 
         if (uc < 0x20) // unescaped control character
         {
-            if (!options.allow_unescaped_control_characters)
-                return {false, next};
-
-            yield(*next);
-            ++next;
+            return {next, false};
         }
         else if (uc < 0x80) // ASCII printable or DEL
         {
@@ -108,7 +118,7 @@ UnescapeStringResult<It> UnescapeString(
 
             ++next; // skip '\'
             if (next == last)
-                return {false, next};
+                return {next, false};
 
             switch (*next)
             {
@@ -147,7 +157,7 @@ UnescapeStringResult<It> UnescapeString(
             case 'u':
                 {
                     if (++next == last)
-                        return {false, f};
+                        return {f, false};
 
                     uint32_t U = 0;
                     auto const end = json::unicode::DecodeTrimmedUCNSequence(next, last, U);
@@ -160,17 +170,12 @@ UnescapeStringResult<It> UnescapeString(
                     }
                     else
                     {
-                        if (!options.allow_invalid_unicode)
-                            return {false, f};
-
-                        yield('\xEF');
-                        yield('\xBF');
-                        yield('\xBD');
+                        return {f, false};
                     }
                 }
                 break;
             default:
-                return {false, next}; // invalid escaped character
+                return {next, false}; // invalid escaped character
             }
         }
         else // (possibly) the start of a UTF-8 sequence.
@@ -183,46 +188,39 @@ UnescapeStringResult<It> UnescapeString(
 
             if (U != json::unicode::kInvalidCodepoint)
             {
-                //if constexpr (std::is_same<std::input_iterator_tag, typename std::iterator_traits<It>::iterator_category>::value)
-                //{
-                //    json::unicode::EncodeUTF8(U, [&](uint8_t code_unit) { yield(static_cast<char>(code_unit)); });
-                //}
-                //else
-                //{
+#if JSON_CXX_HAS_IF_CONSTEXPR
+                if constexpr (json::strings::impl::IsInputIterator<It>::value)
+                {
+                    json::unicode::EncodeUTF8(U, [&](uint8_t code_unit) { yield(static_cast<char>(code_unit)); });
+                }
+                else
+#endif
+                {
                     // The range [f, next) already contains a valid UTF-8 encoding of U.
                     for ( ; f != next; ++f) {
                         yield(*f);
                     }
-                //}
+                }
             }
             else
             {
-                if (!options.allow_invalid_unicode)
-                    return {false, f};
-
-                yield('\xEF');
-                yield('\xBF');
-                yield('\xBD');
+                return {f, false};
             }
         }
     }
 
-    return {true, next};
+    return {next, true};
 }
 
 template <typename It>
 struct EscapeStringResult
 {
-    bool ok;
     It next;
+    bool ok;
 };
 
 template <typename It, typename Fn>
-EscapeStringResult<It> EscapeString(
-    It             next,
-    It             last,
-    Options const& options,
-    Fn             yield)
+EscapeStringResult<It> EscapeString(It next, It last, Fn yield)
 {
     static constexpr char const kHexDigits[] = "0123456789ABCDEF";
 
@@ -275,7 +273,7 @@ EscapeStringResult<It> EscapeString(
                 yield('\\');
                 break;
             case '/':   // U+002F
-                if (options.escape_slash && ch_prev == '<') {
+                if (ch_prev == '<') {
                     yield('\\');
                 }
                 break;
@@ -320,35 +318,29 @@ EscapeStringResult<It> EscapeString(
                 }
                 else
                 {
-                    //if constexpr (std::is_same<std::input_iterator_tag, typename std::iterator_traits<It>::iterator_category>::value)
-                    //{
-                    //    json::unicode::EncodeUTF8(U, [&](uint8_t code_unit) { yield(static_cast<char>(code_unit)); });
-                    //}
-                    //else
-                    //{
+#if JSON_CXX_HAS_IF_CONSTEXPR
+                    if constexpr (json::strings::impl::IsInputIterator<It>::value)
+                    {
+                        json::unicode::EncodeUTF8(U, [&](uint8_t code_unit) { yield(static_cast<char>(code_unit)); });
+                    }
+                    else
+#endif
+                    {
                         // The UTF-8 sequence is valid. No need to re-encode.
                         for ( ; f != next; ++f) {
                             yield(*f);
                         }
-                    //}
+                    }
                 }
             }
             else
             {
-                if (!options.allow_invalid_unicode)
-                    return {false, next};
-
-                yield('\\');
-                yield('u');
-                yield('F');
-                yield('F');
-                yield('F');
-                yield('D');
+                return {next, false};
             }
         }
     }
 
-    return {true, next};
+    return {next, true};
 }
 
 } // namespace strings

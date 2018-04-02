@@ -26,35 +26,28 @@
 
 using namespace json;
 
-#define JSON_PARSE_ITERATIVE 1
-
 //--------------------------------------------------------------------------------------------------
 //
 //--------------------------------------------------------------------------------------------------
 
 namespace {
 
-#define W 0x01  // whitespace  : ' ', '\n', '\r', '\t'
+#define W 0x01  // whitespace  : '\t', '\n', '\r', ' '
 #define D 0x02  // digit       : '0'...'9'
                 // letter      : 'a'...'z', 'A'...'Z'
-#define X 0x04  //               'N', 'n', 'A', 'a', 'I', 'i', 'F', 'f', 'T', 't', 'Y', 'y'
-#define N 0x08  // number-body : IsDigit, 'E', 'e', '.', '+', '-'
+                // number-body : IsDigit, 'E', 'e', '.', '+', '-'
 #define I 0x10  // ident-body  : IsDigit, IsLetter, '_', '$'
                 // hex-digit   : IsDigit, 'a'...'f', 'A'...'F'
                 // esc-char    : '"', '\\', '/', 'b', 'f', 'n', 'r', 't', 'u'
-#define A 0x20  // ascii (non-special)
 #define S 0x40  // quote or bs : '"', '\'', '`', '\\'
 #define C 0x80  // needs cleaning (strings)
-// A == !(S|C)
 
 enum ECharClass : unsigned {
     CC_None             = 0,
     CC_Whitespace       = W,
     CC_Digit            = D,
-    CC_NumberBody       = N,
     CC_IdentifierBody   = I,
-    CC_ASCII            = A,
-    CC_NonASCII         = S | C,
+    CC_StringSpecial    = S,
     CC_NeedsCleaning    = C,
 };
 
@@ -64,17 +57,17 @@ static constexpr uint8_t const kCharClass[] = {
 //  DLE     DC1     DC2     DC3     DC4     NAK     SYN     ETB     CAN     EM      SUB     ESC     FS      GS      RS      US
     C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,
 //  space   !       "       #       $       %       &       '       (       )       *       +       ,       -       .       /
-    W|A,    A,      S,      A,      I|A,    A,      A,      S,      A,      A,      A,      N|A,    A,      N|A,    N|A,    A,
+    W,      0,      S,      0,      I,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
 //  0       1       2       3       4       5       6       7       8       9       :       ;       <       =       >       ?
-    D|N|I|A,D|N|I|A,D|N|I|A,D|N|I|A,D|N|I|A,D|N|I|A,D|N|I|A,D|N|I|A,D|N|I|A,D|N|I|A,A,      A,      A,      A,      A,      A,
+    D|I,    D|I,    D|I,    D|I,    D|I,    D|I,    D|I,    D|I,    D|I,    D|I,    0,      0,      0,      0,      0,      0,
 //  @       A       B       C       D       E       F       G       H       I       J       K       L       M       N       O
-    A,      X|I|A,  I|A,    I|A,    I|A,    N|I|A,  X|I|A,  I|A,    I|A,    X|I|A,  I|A,    I|A,    I|A,    I|A,    X|I|A,  I|A,
+    0,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,
 //  P       Q       R       S       T       U       V       W       X       Y       Z       [       \       ]       ^       _
-    I|A,    I|A,    I|A,    I|A,    X|I|A,  I|A,    I|A,    I|A,    I|A,    X|I|A,  I|A,    A,      S|C,    A,      A,      I|A,
+    I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      0,      S|C,    0,      0,      I,
 //  `       a       b       c       d       e       f       g       h       i       j       k       l       m       n       o
-    S,      X|I|A,  I|A,    I|A,    I|A,    N|I|A,  X|I|A,  I|A,    I|A,    X|I|A,  I|A,    I|A,    I|A,    I|A,    X|I|A,  I|A,
+    0,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,
 //  p       q       r       s       t       u       v       w       x       y       z       {       |       }       ~       DEL
-    I|A,    I|A,    I|A,    I|A,    X|I|A,  I|A,    I|A,    I|A,    I|A,    X|I|A,  I|A,    A,      A,      A,      A,      A,
+    I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      0,      0,      0,      0,      0,
     C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,
     C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,
     C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,
@@ -85,29 +78,25 @@ static constexpr uint8_t const kCharClass[] = {
     C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,
 };
 
-#undef C
-#undef S
-#undef A
-#undef I
-#undef N
-#undef X
-#undef D
-#undef W
-
 inline unsigned GetCharClass(char ch)
 {
     return kCharClass[static_cast<unsigned char>(ch)];
 }
 
+#undef C
+#undef S
+#undef I
+#undef D
+#undef W
+
 bool IsWhitespace     (char ch) { return (GetCharClass(ch) & CC_Whitespace    ) != 0; }
 bool IsDigit          (char ch) { return (GetCharClass(ch) & CC_Digit         ) != 0; }
 bool IsIdentifierBody (char ch) { return (GetCharClass(ch) & CC_IdentifierBody) != 0; }
-bool IsNonSpecialASCII(char ch) { return (GetCharClass(ch) & CC_ASCII         ) != 0; }
 
 template <typename It>
 It SkipWhitespace(It f, It l)
 {
-#if 0
+#if 1
     while (l - f >= 4)
     {
         if (!IsWhitespace(f[0])) return f + 0;
@@ -125,27 +114,6 @@ It SkipWhitespace(It f, It l)
     return f;
 }
 
-template <typename It>
-It SkipNonSpecialASCII(It f, It l)
-{
-#if 0
-    while (l - f >= 4)
-    {
-        if (!IsNonSpecialASCII(f[0])) return f + 0;
-        if (!IsNonSpecialASCII(f[1])) return f + 1;
-        if (!IsNonSpecialASCII(f[2])) return f + 2;
-        if (!IsNonSpecialASCII(f[3])) return f + 3;
-        f += 4;
-    }
-#endif
-
-    for ( ; f != l && IsNonSpecialASCII(*f); ++f)
-    {
-    }
-
-    return f;
-}
-
 } // namespace
 
 //--------------------------------------------------------------------------------------------------
@@ -154,59 +122,20 @@ It SkipNonSpecialASCII(It f, It l)
 
 namespace {
 
-char const* ScanNaNString(char const* next, char const* last)
-{
-    auto const len = last - next;
-
-    if (len >= 3 && std::memcmp(next, "NaN", 3) == 0) { return next + 3; }
-#if 0
-    if (len >= 3 && std::memcmp(next, "nan", 3) == 0) { return next + 3; }
-    if (len >= 3 && std::memcmp(next, "NAN", 3) == 0) { return next + 3; }
-#endif
-
-    return next;
-}
-
-char const* ScanInfString(char const* next, char const* last)
-{
-    auto const len = last - next;
-
-    if (len >= 8 && std::memcmp(next, "Infinity", 8) == 0) { return next + 8; }
-#if 0
-    if (len >= 8 && std::memcmp(next, "infinity", 8) == 0) { return next + 8; }
-    if (len >= 8 && std::memcmp(next, "INFINITY", 8) == 0) { return next + 8; }
-    if (len >= 3 && std::memcmp(next, "Inf",      3) == 0) { return next + 3; }
-    if (len >= 3 && std::memcmp(next, "inf",      3) == 0) { return next + 3; }
-    if (len >= 3 && std::memcmp(next, "INF",      3) == 0) { return next + 3; }
-#endif
-
-    return next;
-}
-
-bool IsNaNString(char const* f, char const* l)
-{
-    if (f == l)
-        return false;
-    return l == ScanNaNString(f, l);
-}
-
-bool IsInfString(char const* f, char const* l)
-{
-    if (f == l)
-        return false;
-    return l == ScanInfString(f, l);
-}
-
 template <typename It>
 struct ScanNumberResult
 {
+    //It decimal_point;
+    //It exponent;
     It end;
     NumberClass number_class;
 };
 
 template <typename It>
-ScanNumberResult<It> ScanNumber(It next, It last, json::Options const& options)
+ScanNumberResult<It> ScanNumber(It first, It last, Options const& options)
 {
+    It next = first;
+
     if (next == last)
         return {next, NumberClass::invalid};
 
@@ -223,27 +152,6 @@ ScanNumberResult<It> ScanNumber(It next, It last, json::Options const& options)
         if (next == last)
             return {next, NumberClass::invalid};
     }
-    else if (options.allow_leading_plus && *next == '+')
-    {
-        ++next;
-        if (next == last)
-            return {next, NumberClass::invalid};
-    }
-
-// NaN/Infinity
-
-    if (options.allow_nan_inf)
-    {
-        auto const p1 = ScanNaNString(next, last);
-        if (p1 != next) {
-            return {p1, is_neg ? NumberClass::neg_nan : NumberClass::pos_nan};
-        }
-
-        auto const p2 = ScanInfString(next, last);
-        if (p2 != next) {
-            return {p2, is_neg ? NumberClass::neg_infinity : NumberClass::pos_infinity};
-        }
-    }
 
 // int
 
@@ -251,7 +159,7 @@ ScanNumberResult<It> ScanNumber(It next, It last, json::Options const& options)
     {
         ++next;
         if (next == last)
-            return {next, is_neg ? NumberClass::neg_integer : NumberClass::pos_integer};
+            return {next, NumberClass::integer};
         if (IsDigit(*next))
             return {next, NumberClass::invalid};
     }
@@ -261,17 +169,28 @@ ScanNumberResult<It> ScanNumber(It next, It last, json::Options const& options)
         {
             ++next;
             if (next == last)
-                return {next, is_neg ? NumberClass::neg_integer : NumberClass::pos_integer};
+                return {next, NumberClass::integer};
             if (!IsDigit(*next))
                 break;
         }
     }
-    else if (options.allow_leading_dot && *next == '.')
-    {
-        // Parsed again below.
-    }
     else
     {
+        // NaN/Infinity
+
+        //
+        // XXX:
+        // Requires It = char [const]*
+        //
+        if (options.allow_nan_inf && last - next >= 3 && std::memcmp(next, "NaN", 3) == 0)
+        {
+            return {next + 3, NumberClass::nan};
+        }
+        if (options.allow_nan_inf && last - next >= 8 && std::memcmp(next, "Infinity", 8) == 0)
+        {
+            return {next + 8, is_neg ? NumberClass::neg_infinity : NumberClass::pos_infinity};
+        }
+
         return {next, NumberClass::invalid};
     }
 
@@ -282,11 +201,9 @@ ScanNumberResult<It> ScanNumber(It next, It last, json::Options const& options)
         is_float = true;
 
         ++next;
-        if (next == last)
+        if (next == last || !IsDigit(*next))
             return {next, NumberClass::invalid};
 
-        if (!IsDigit(*next))
-            return {next, NumberClass::invalid};
         for (;;)
         {
             ++next;
@@ -316,6 +233,7 @@ ScanNumberResult<It> ScanNumber(It next, It last, json::Options const& options)
 
         if (!IsDigit(*next))
             return {next, NumberClass::invalid};
+
         for (;;)
         {
             ++next;
@@ -326,9 +244,7 @@ ScanNumberResult<It> ScanNumber(It next, It last, json::Options const& options)
         }
     }
 
-    return {next, is_float ? NumberClass::floating_point
-                           : is_neg ? NumberClass::neg_integer
-                                    : NumberClass::pos_integer};
+    return {next, is_float ? NumberClass::floating_point : NumberClass::integer};
 }
 
 } // namespace
@@ -378,7 +294,7 @@ struct Lexer
 
     Token Lex(Options const& options);
 
-    Token LexString    (char const* p, char quote_char);
+    Token LexString    (char const* p);
     Token LexNumber    (char const* p, Options const& options);
     Token LexIdentifier(char const* p);
     Token LexComment   (char const* p);
@@ -443,20 +359,8 @@ L_again:
     case ':':
         kind = TokenKind::colon;
         break;
-    case '\'':
-        if (options.allow_single_quoted_strings)
-            return LexString(p, '\'');
-        break;
     case '"':
-        return LexString(p, '"');
-    case '+':
-        if (options.allow_leading_plus)
-            return LexNumber(p, options);
-        break;
-    case '.':
-        if (options.allow_leading_dot)
-            return LexNumber(p, options);
-        break;
+        return LexString(p);
     case '-':
     case '0':
     case '1':
@@ -524,12 +428,11 @@ L_again:
     case '_':
         return LexIdentifier(p);
     case '/':
-        if (options.allow_comments)
+        if (options.strip_comments)
         {
             auto tok = LexComment(p);
-            if (tok.kind != TokenKind::comment)
-                return tok;
-            goto L_again;
+            if (tok.kind == TokenKind::comment)
+                goto L_again;
         }
         break;
     default:
@@ -540,42 +443,70 @@ L_again:
     return MakeToken(p, kind);
 }
 
-Token Lexer::LexString(char const* p, char quote_char)
+Token Lexer::LexString(char const* p)
 {
     assert(p != end);
-    assert(*p == quote_char);
+    assert(*p == '"');
 
     ptr = ++p; // skip " or '
-
-    p = SkipNonSpecialASCII(p, end);
 
     unsigned mask = 0;
     for (;;)
     {
-        //p = SkipNonSpecialASCII(p, end);
+#if 1
+        while (end - p >= 4)
+        {
+            unsigned const m0 = GetCharClass(p[0]);
+            unsigned const m1 = GetCharClass(p[1]);
+            unsigned const m2 = GetCharClass(p[2]);
+            unsigned const m3 = GetCharClass(p[3]);
 
-        if (p == end)
-            break;
+            unsigned const mm = m0 | m1 | m2 | m3;
+            if ((mm & CC_StringSpecial) == 0)
+            {
+                mask |= mm;
+                p += 4;
+                continue;
+            }
 
+            mask |= m0;        if ((m0 & CC_StringSpecial) != 0)   { goto L_check; }
+            mask |= m1; ++p;   if ((m1 & CC_StringSpecial) != 0)   { goto L_check; }
+            mask |= m2; ++p;   if ((m2 & CC_StringSpecial) != 0)   { goto L_check; }
+            mask |= m3; ++p; /*if ((m3 & CC_StringSpecial) != 0)*/ { goto L_check; }
+        }
+#endif
+
+        for (;;)
+        {
+            if (p == end)
+                goto L_incomplete;
+
+            unsigned const m0 = GetCharClass(*p);
+            mask |= m0;
+            if ((m0 & CC_StringSpecial) != 0)
+                goto L_check;
+
+            ++p;
+        }
+
+L_check:
         auto const ch = *p;
-        mask |= GetCharClass(ch);
 
-        if (ch == quote_char)
+        if (ch == '"')
         {
             auto tok = MakeToken(p, TokenKind::string, (mask & CC_NeedsCleaning) != 0);
             ptr = ++p; // skip " or '
             return tok;
         }
 
+        assert(ch == '\\');
         ++p;
-        if (ch == '\\')
-        {
-            if (p == end)
-                break;
-            ++p;
-        }
+        if (p == end)
+            break;
+        ++p; // Skip the escaped character.
     }
 
+L_incomplete:
     return MakeToken(p, TokenKind::incomplete_string, (mask & CC_NeedsCleaning) != 0);
 }
 
@@ -677,20 +608,11 @@ struct Parser
 
     Parser(ParseCallbacks& cb_, Options const& options_);
 
-#if !JSON_PARSE_ITERATIVE
-    ParseStatus ParseObject        (int depth);
-    ParseStatus ParsePair          (int depth);
-#endif
-    ParseStatus ParseArray         (int depth);
-    ParseStatus ParseString        (int depth = 0);
-    ParseStatus ParseNumber        (int depth = 0);
-    ParseStatus ParseIdentifier    (int depth = 0);
-#if !JSON_PARSE_ITERATIVE
-    ParseStatus ParseValue         (int depth = 0);
-#else
+    ParseStatus ParseString();
+    ParseStatus ParseNumber();
+    ParseStatus ParseIdentifier();
     ParseStatus ParsePrimitive();
-    ParseStatus ParseValueIterative();
-#endif
+    ParseStatus ParseValue();
 };
 
 Parser::Parser(ParseCallbacks& cb_, Options const& options_)
@@ -699,153 +621,7 @@ Parser::Parser(ParseCallbacks& cb_, Options const& options_)
 {
 }
 
-#if !JSON_PARSE_ITERATIVE
-
-//
-//  object
-//      {}
-//      { members }
-//  members
-//      pair
-//      pair , members
-//
-ParseStatus Parser::ParseObject(int depth)
-{
-    assert(token.kind == TokenKind::l_brace);
-
-    if (depth >= kMaxDepth)
-        return ParseStatus::max_depth_reached;
-
-    // skip '{'
-    token = lexer.Lex(options);
-
-    if (Failed ec = cb.HandleBeginObject(options))
-        return ec;
-
-    size_t num_members = 0;
-    if (token.kind != TokenKind::r_brace)
-    {
-        for (;;)
-        {
-            if (Failed ec = ParsePair(depth + 1))
-                return ec;
-
-            ++num_members;
-
-            if (Failed ec = cb.HandleEndMember(num_members, options))
-                return ec;
-
-            if (token.kind != TokenKind::comma)
-                break;
-
-            // skip ','
-            token = lexer.Lex(options);
-
-            if (options.allow_trailing_comma && token.kind == TokenKind::r_brace)
-                break;
-        }
-
-        if (token.kind != TokenKind::r_brace)
-            return ParseStatus::expected_comma_or_closing_brace;
-    }
-
-    if (Failed ec = cb.HandleEndObject(num_members, options))
-        return ec;
-
-    // skip '}'
-    token = lexer.Lex(options);
-
-    return ParseStatus::success;
-}
-
-//
-//  pair
-//      string : value
-//
-ParseStatus Parser::ParsePair(int depth)
-{
-    if (depth >= kMaxDepth)
-        return ParseStatus::max_depth_reached;
-
-    if (token.kind != TokenKind::string && (!options.allow_unquoted_keys || token.kind != TokenKind::identifier))
-        return ParseStatus::expected_key;
-
-    if (Failed ec = cb.HandleKey(token.ptr, token.end, token.needs_cleaning, options))
-        return ec;
-
-    // skip 'key'
-    token = lexer.Lex(options);
-
-    if (token.kind != TokenKind::colon)
-        return ParseStatus::expected_colon_after_key;
-
-    // skip ':'
-    token = lexer.Lex(options);
-
-    // parse 'value'
-    return ParseValue(depth);
-}
-
-//
-//  array
-//      []
-//      [ elements ]
-//  elements
-//      value
-//      value , elements
-//
-ParseStatus Parser::ParseArray(int depth)
-{
-    assert(token.kind == TokenKind::l_square);
-
-    if (depth >= kMaxDepth)
-        return ParseStatus::max_depth_reached;
-
-    // skip '['
-    token = lexer.Lex(options);
-
-    if (Failed ec = cb.HandleBeginArray(options))
-        return ec;
-
-    size_t num_elements = 0;
-    if (token.kind != TokenKind::r_square)
-    {
-        for (;;)
-        {
-            if (Failed ec = ParseValue(depth + 1))
-                return ec;
-
-            ++num_elements;
-
-            if (Failed ec = cb.HandleEndElement(num_elements, options))
-                return ec;
-
-            if (token.kind != TokenKind::comma)
-                break;
-
-            // skip ','
-            token = lexer.Lex(options);
-
-            if (options.allow_trailing_comma && token.kind == TokenKind::r_square)
-                break;
-        }
-
-        if (token.kind != TokenKind::r_square)
-            return ParseStatus::expected_comma_or_closing_bracket;
-    }
-
-    if (Failed ec = cb.HandleEndArray(num_elements, options))
-        return ec;
-
-    // skip ']'
-    token = lexer.Lex(options);
-
-    return ParseStatus::success;
-}
-
-#endif
-
-ParseStatus Parser::ParseString(int /*depth*/)
+ParseStatus Parser::ParseString()
 {
     assert(token.kind == TokenKind::string);
 
@@ -858,7 +634,7 @@ ParseStatus Parser::ParseString(int /*depth*/)
     return ParseStatus::success;
 }
 
-ParseStatus Parser::ParseNumber(int /*depth*/)
+ParseStatus Parser::ParseNumber()
 {
     assert(token.kind == TokenKind::number);
 
@@ -874,7 +650,7 @@ ParseStatus Parser::ParseNumber(int /*depth*/)
     return ParseStatus::success;
 }
 
-ParseStatus Parser::ParseIdentifier(int /*depth*/)
+ParseStatus Parser::ParseIdentifier()
 {
     assert(token.kind == TokenKind::identifier);
     assert(token.end - token.ptr > 0 && "internal error");
@@ -896,11 +672,11 @@ ParseStatus Parser::ParseIdentifier(int /*depth*/)
     {
         ec = cb.HandleBoolean(false, options);
     }
-    else if (options.allow_nan_inf && /*(*f == 'n' || *f == 'N') &&*/ IsNaNString(f, l))
+    else if (options.allow_nan_inf && len == 3 && std::memcmp(f, "NaN", 3) == 0)
     {
-        ec = cb.HandleNumber(f, l, NumberClass::pos_nan, options);
+        ec = cb.HandleNumber(f, l, NumberClass::nan, options);
     }
-    else if (options.allow_nan_inf && /*(*f == 'i' || *f == 'I') &&*/ IsInfString(f, l))
+    else if (options.allow_nan_inf && len == 8 && std::memcmp(f, "Infinity", 8) == 0)
     {
         ec = cb.HandleNumber(f, l, NumberClass::pos_infinity, options);
     }
@@ -917,34 +693,6 @@ ParseStatus Parser::ParseIdentifier(int /*depth*/)
 
     return ParseStatus::success;
 }
-
-#if !JSON_PARSE_ITERATIVE
-
-ParseStatus Parser::ParseValue(int depth)
-{
-    if (depth >= kMaxDepth)
-        return ParseStatus::max_depth_reached;
-
-    switch (token.kind)
-    {
-    case TokenKind::l_brace:
-        return ParseObject(depth);
-    case TokenKind::l_square:
-        return ParseArray(depth);
-    case TokenKind::string:
-        return ParseString(depth);
-    case TokenKind::number:
-        return ParseNumber(depth);
-    case TokenKind::identifier:
-        return ParseIdentifier(depth);
-    case TokenKind::eof:
-        return ParseStatus::unexpected_eof;
-    default:
-        return ParseStatus::unexpected_token;
-    }
-}
-
-#else
 
 ParseStatus Parser::ParsePrimitive()
 {
@@ -963,7 +711,7 @@ ParseStatus Parser::ParsePrimitive()
     }
 }
 
-ParseStatus Parser::ParseValueIterative()
+ParseStatus Parser::ParseValue()
 {
     enum class Structure {
         object,
@@ -982,6 +730,7 @@ ParseStatus Parser::ParseValueIterative()
     StackElement stack[kMaxDepth];
     size_t stack_size = 0;
 
+    // parse 'value'
     if (token.kind == TokenKind::l_brace)
         goto L_parse_object;
     if (token.kind == TokenKind::l_square)
@@ -1017,7 +766,7 @@ L_parse_object:
     {
         for (;;)
         {
-            if (token.kind != TokenKind::string && (!options.allow_unquoted_keys || token.kind != TokenKind::identifier))
+            if (token.kind != TokenKind::string)
                 return ParseStatus::expected_key;
 
             if (Failed ec = cb.HandleKey(token.ptr, token.end, token.needs_cleaning, options))
@@ -1147,8 +896,6 @@ L_pop:
         goto L_parse_end_element;
 }
 
-#endif
-
 } // namespace
 
 //--------------------------------------------------------------------------------------------------
@@ -1175,11 +922,7 @@ ParseResult json::parse(ParseCallbacks& cb, char const* next, char const* last, 
     parser.lexer = Lexer(next, last);
     parser.token = parser.lexer.Lex(options); // Get the first token
 
-#if JSON_PARSE_ITERATIVE
-    auto /*const*/ ec = parser.ParseValueIterative();
-#else
     auto /*const*/ ec = parser.ParseValue();
-#endif
 
     if (ec == ParseStatus::success)
     {

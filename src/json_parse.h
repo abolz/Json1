@@ -46,11 +46,9 @@ enum class ParseStatus {
 
 enum class NumberClass : unsigned char {
     invalid,
-    neg_integer,
-    pos_integer,
+    integer,
     floating_point,
-    pos_nan,
-    neg_nan,
+    nan,
     pos_infinity,
     neg_infinity,
 };
@@ -85,5 +83,10 @@ struct ParseResult
 
 // Parse the JSON stored in the string [first, last).
 ParseResult parse(ParseCallbacks& cb, char const* first, char const* last, Options const& options = {});
+
+#if 0
+bool parse_number(double&      result, char const* first, char const* last, Options const& options = {});
+bool parse_string(std::string& result, char const* first, char const* last, Options const& options = {});
+#endif
 
 } // namespace json

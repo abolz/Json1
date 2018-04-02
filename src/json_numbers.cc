@@ -21,47 +21,24 @@
 #include "json_numbers.h"
 
 #include <cassert>
-#include <climits>
 #include <cmath>
-#include <cstdlib>
 #include <cstring>
 #include <limits>
-#include <vector>
+#include <type_traits>
 
 #ifdef _MSC_VER
 #include <intrin.h>
 #endif
 
-#ifndef JSON_HAS_DOUBLE_CONVERSION
-#define JSON_HAS_DOUBLE_CONVERSION 0
-#endif
-#ifndef JSON_USE_GRISU2
-#define JSON_USE_GRISU2 1
-#endif
-#ifndef JSON_HAS_STRTOD_L
-#define JSON_HAS_STRTOD_L 0
-#endif
-
-#if JSON_HAS_DOUBLE_CONVERSION
-#include <double-conversion/double-conversion.h>
-#endif
-
 using namespace json;
 using namespace json::numbers;
-
-//
-// XXX:
-// Strtod should use these strings...
-//
-static constexpr char const* const kNaNString = "NaN";
-static constexpr char const* const kInfString = "Infinity";
 
 //==================================================================================================
 // NumberToString
 //==================================================================================================
 
 //--------------------------------------------------------------------------------------------------
-// Int -> String
+//
 //--------------------------------------------------------------------------------------------------
 
 namespace {
@@ -81,7 +58,7 @@ char* Itoa100(char* buf, uint32_t digits)
         "90919293949596979899";
 
     assert(digits < 100);
-    memcpy(buf, kDigits100 + 2*digits, 2);
+    std::memcpy(buf, kDigits100 + 2*digits, 2);
     return buf + 2;
 }
 
@@ -251,7 +228,16 @@ char* U64ToString(char* buf, uint64_t n)
         // 2^32 < hi = hi1 * 10^9 + hi0 < 10^11,   where hi1 < 10^2, 10^9 <= hi0 < 10^9
         auto const hi1 = static_cast<uint32_t>(hi / 1000000000);
         auto const hi0 = static_cast<uint32_t>(hi % 1000000000);
-        buf = U32ToString_n(buf, hi1, hi1 >= 10 ? 2 : 1);
+        if (hi1 >= 10)
+        {
+            buf = Itoa100(buf, hi1);
+        }
+        else
+        {
+            assert(hi1 != 0);
+            buf[0] = static_cast<char>('0' + hi1);
+            buf++;
+        }
         buf = U32ToString_n(buf, hi0, 9);
     }
 
@@ -276,10 +262,8 @@ char* I64ToString(char* buf, int64_t i)
 } // namespace
 
 //--------------------------------------------------------------------------------------------------
-// Double -> String
+//
 //--------------------------------------------------------------------------------------------------
-
-#if !JSON_HAS_DOUBLE_CONVERSION || JSON_USE_GRISU2
 
 namespace {
 
@@ -884,16 +868,6 @@ void Grisu2DigitGen(char* buffer, int& length, int& decimal_exponent, DiyFp M_mi
         //
         //      rest * 2^e <= delta * 2^e
         //
-        // This test can be slightly simplified, since
-        //
-        //      rest = (p1 mod 10^n) * 2^-e + p2 <= delta
-        //      <==>    r * 2^-e + p2 <= delta
-        //      <==>    r * 2^-e      <= delta - p2 = D = D1 * 2^-e + D2
-        //      <==>    r < D1 or (r == D1 and 0 <= D2)
-        //      <==>    r <= D1
-        //
-
-        auto const D1 = static_cast<uint32_t>((delta - p2) >> -one.e);
 
         int k = length;
         int n = 0;
@@ -903,12 +877,12 @@ void Grisu2DigitGen(char* buffer, int& length, int& decimal_exponent, DiyFp M_mi
         for (;;)
         {
             assert(k >= n + 1);
-            assert(r <= D1);
+            assert((uint64_t{r} << -one.e) + p2 <= delta);
             assert(n <= 9);
             assert(static_cast<uint32_t>(buffer[k - (n + 1)] - '0') <= UINT32_MAX / pow10);
 
             auto const r_next = pow10 * static_cast<uint32_t>(buffer[k - (n + 1)] - '0') + r;
-            if (r_next > D1)
+            if ((uint64_t{r_next} << -one.e) + p2 > delta)
                 break;
             r = r_next;
             n++;
@@ -934,7 +908,6 @@ void Grisu2DigitGen(char* buffer, int& length, int& decimal_exponent, DiyFp M_mi
         //
         auto const ten_n = uint64_t{pow10} << -one.e;
         Grisu2Round(buffer, length, dist, delta, rest, ten_n);
-
         return;
     }
 
@@ -1257,17 +1230,15 @@ char* StrCopy(char* first, char const* last, char const* source)
     return first + len;
 }
 
+static constexpr int const kDtoaMaximalLength = 17;
+
 // Generates a decimal representation of the floating-point number 'value' in
 // [first, last).
 //
 // Note: The buffer must be large enough.
 // Note: The result is _not_ null-terminated.
-template <typename FloatType>
-char* DtoaShort(char* first, char* last, FloatType value, bool emit_trailing_dot_zero, char const* nan_string, char const* inf_string)
+char* DoubleToString(char* first, char* last, double value, bool emit_trailing_dot_zero, char const* nan_string, char const* inf_string)
 {
-    static_assert(DiyFp::kPrecision >= std::numeric_limits<FloatType>::digits + 3, "Not enough precision");
-    static_cast<void>(last); // maybe unused - fix warning
-
     if (std::isnan(value))
     {
         return StrCopy(first, last, nan_string);
@@ -1296,47 +1267,30 @@ char* DtoaShort(char* first, char* last, FloatType value, bool emit_trailing_dot
         return first;
     }
 
-    assert(last - first >= std::numeric_limits<FloatType>::max_digits10);
+    assert(last - first >= kDtoaMaximalLength);
+    assert(last - first <= INT_MAX);
 
     // Compute v = buffer * 10^decimal_exponent.
     // The decimal digits are stored in the buffer, which needs to be interpreted
     // as an unsigned decimal integer.
     // len is the length of the buffer, i.e. the number of decimal digits.
+
     int len = 0;
     int decimal_exponent = 0;
     Grisu2(first, len, decimal_exponent, value);
-
-    assert(len <= std::numeric_limits<FloatType>::max_digits10);
+    assert(len <= kDtoaMaximalLength);
 
     constexpr int kMinExp = -6;
     constexpr int kMaxExp = 21;
 
     assert(last - first >= kMaxExp);
-    assert(last - first >= 2 + (-kMinExp - 1) + std::numeric_limits<FloatType>::max_digits10);
-    assert(last - first >= std::numeric_limits<FloatType>::max_digits10 + 6);
+    assert(last - first >= 2 + (-kMinExp - 1) + kDtoaMaximalLength);
+    assert(last - first >= kDtoaMaximalLength + 6);
 
     return FormatBuffer(first, len, decimal_exponent, kMinExp, kMaxExp, emit_trailing_dot_zero);
 }
 
-// Generates a decimal representation of the floating-point number 'value' in
-// [first, last).
-//
-// Note: The buffer must be large enough.
-// Note: The result is _not_ null-terminated.
-char* DoubleToString(
-        char*       first,
-        char*       last,
-        double      value,
-        bool        emit_trailing_dot_zero = false,
-        char const* nan_string = "NaN",
-        char const* inf_string = "Infinity")
-{
-    return DtoaShort(first, last, value, emit_trailing_dot_zero, nan_string, inf_string);
-}
-
 } // namespace
-
-#endif // !JSON_HAS_DOUBLE_CONVERSION || JSON_USE_GRISU2
 
 //--------------------------------------------------------------------------------------------------
 //
@@ -1368,180 +1322,502 @@ char* json::numbers::NumberToString(char* next, char* last, double value, bool e
         }
     }
 
-#if JSON_HAS_DOUBLE_CONVERSION && !JSON_USE_GRISU2
-    using double_conversion::DoubleToStringConverter;
-    using double_conversion::StringBuilder;
-
-    int flags = DoubleToStringConverter::EMIT_POSITIVE_EXPONENT_SIGN;
-    if (emit_trailing_dot_zero)
-    {
-        flags |= DoubleToStringConverter::EMIT_TRAILING_DECIMAL_POINT;
-        flags |= DoubleToStringConverter::EMIT_TRAILING_ZERO_AFTER_POINT;
-    }
-
-    DoubleToStringConverter conv(
-        flags,
-        kInfString, // infinity_symbol
-        kNaNString, // nan_symbol
-        'e',        // exponent_character
-        -6,         // decimal_in_shortest_low
-        21,         // decimal_in_shortest_high
-        0,          // max_leading_padding_zeroes_in_precision_mode
-        0);         // max_trailing_padding_zeroes_in_precision_mode
-
-
-    assert(last - next <= INT_MAX);
-    StringBuilder builder(next, static_cast<int>(last - next));
-
-    conv.ToShortest(value, &builder);
-
-    return next + builder.position();
-#else
-    return DoubleToString(next, last, value, emit_trailing_dot_zero, kNaNString, kInfString);
-#endif
+    return DoubleToString(next, last, value, emit_trailing_dot_zero, "NaN", "Infinity");
 }
 
 //==================================================================================================
 // StringToNumber
 //==================================================================================================
 
-#if JSON_HAS_DOUBLE_CONVERSION
-
-double json::numbers::Strtod(char const* str, int len, char** end)
-{
-    using double_conversion::StringToDoubleConverter;
-
-    StringToDoubleConverter conv(
-        StringToDoubleConverter::ALLOW_LEADING_SPACES |
-        StringToDoubleConverter::ALLOW_TRAILING_SPACES,
-        0.0,                                        // empty_string_value
-        std::numeric_limits<double>::quiet_NaN(),   // junk_string_value,
-        kInfString,                                 // infinity_symbol,
-        kNaNString);                                // nan_symbol
-
-    int processed = 0;
-    double const value = conv.StringToDouble(str, len, &processed);
-    if (end != nullptr)
-    {
-        *end = const_cast<char*>(str) + processed;
-    }
-
-    return value;
-}
-
-double json::numbers::Strtod(char const* str, char** end)
-{
-    assert(str != nullptr);
-    auto const len = ::strlen(str);
-
-    assert(len <= INT_MAX);
-
-    return json::numbers::Strtod(str, static_cast<int>(len), end);
-}
-
-#elif defined(_MSC_VER)
-
-#include <clocale>
-#include <cstdio>
-
 namespace {
 
-struct ClassicLocale {
-    const ::_locale_t loc;
-    ClassicLocale() noexcept : loc(::_create_locale(LC_ALL, "C")) {}
-    ~ClassicLocale() noexcept { ::_free_locale(loc); }
-};
-static const ClassicLocale s_clocale;
+//--------------------------------------------------------------------------------------------------
+// FastStrtod
+//--------------------------------------------------------------------------------------------------
 
-double StrtodImpl(char const* c_str, char** end)
-{
-    return ::_strtod_l(c_str, end, s_clocale.loc);
-}
+// 2^53 = 9007199254740992.
+// Any integer with at most 15 decimal digits will hence fit into a double (which has a 53bit significand) without loss of precision.
+static constexpr int const kMaxExactDoubleIntegerDecimalDigits = 15;
 
-} // namespace
-
-#elif 0 // JSON_HAS_STRTOD_L // not tested...
-
-#include <clocale>
-#include <cstdio>
-
-namespace {
-
-struct ClassicLocale {
-    const ::locale_t loc;
-    ClassicLocale() noexcept : loc(::newlocale(LC_ALL, "C", 0)) {}
-    ~ClassicLocale() noexcept { ::freelocale(loc); }
-};
-static const ClassicLocale s_clocale;
-
-double StrtodImpl(char const* c_str, char** end)
-{
-    return ::strtod_l(c_str, end, s_clocale.loc);
-}
-
-} // namespace
-
+// Double operations detection based on target architecture.
+// Linux uses a 80bit wide floating point stack on x86. This induces double
+// rounding, which in turn leads to wrong results.
+// An easy way to test if the floating-point operations are correct is to
+// evaluate: 89255.0/1e22. If the floating-point stack is 64 bits wide then
+// the result is equal to 89255e-22.
+// The best way to test this, is to create a division-function and to compare
+// the output of the division with the expected result. (Inlining must be
+// disabled.)
+// On Linux,x86 89255e-22 != Div_double(89255.0/1e22)
+#if defined(_M_X64)              || \
+    defined(__x86_64__)          || \
+    defined(__ARMEL__)           || \
+    defined(__avr32__)           || \
+    defined(__hppa__)            || \
+    defined(__ia64__)            || \
+    defined(__mips__)            || \
+    defined(__powerpc__)         || \
+    defined(__ppc__)             || \
+    defined(__ppc64__)           || \
+    defined(_POWER)              || \
+    defined(_ARCH_PPC)           || \
+    defined(_ARCH_PPC64)         || \
+    defined(__sparc__)           || \
+    defined(__sparc)             || \
+    defined(__s390__)            || \
+    defined(__SH4__)             || \
+    defined(__alpha__)           || \
+    defined(_MIPS_ARCH_MIPS32R2) || \
+    defined(__AARCH64EL__)       || \
+    defined(__aarch64__)         || \
+    defined(__riscv)
+#define CORRECT_DOUBLE_OPERATIONS 1
+#elif defined(__mc68000__)
+#undef CORRECT_DOUBLE_OPERATIONS
+#elif defined(_M_IX86) || defined(__i386__) || defined(__i386)
+#if defined(_WIN32)
+// Windows uses a 64bit wide floating point stack.
+#define CORRECT_DOUBLE_OPERATIONS 1
 #else
-
-#include <cstdio>
-
-namespace {
-
-// FIXME!
-static double StrtodImpl(char const* c_str, char** end)
-{
-    return ::strtod(c_str, end);
-}
-
-} // namespace
-
+#undef CORRECT_DOUBLE_OPERATIONS
+#endif  // _WIN32
+#else
+#error Target architecture was not detected as supported by Double-Conversion.
 #endif
 
-#if !JSON_HAS_DOUBLE_CONVERSION
+#if !defined(CORRECT_DOUBLE_OPERATIONS)
 
-double json::numbers::Strtod(char const* str, int len, char** end)
+bool FastStrtod(char const* /*next*/, char const* /*last*/, int /*exponent*/, double& result)
 {
-    static constexpr int const kBufSize = 200;
+    // On x86 the floating-point stack can be 64 or 80 bits wide. If it is
+    // 80 bits wide (as is the case on Linux) then double-rounding occurs and the
+    // result is not accurate.
+    // We know that Windows32 uses 64 bits and is therefore accurate.
+    // Note that the ARM simulator is compiled for 32bits. It therefore exhibits
+    // the same problem.
 
-    assert(str != nullptr);
-    assert(len >= 0);
+    result = std::numeric_limits<double>::quiet_NaN();
+    return false;
+}
 
-    if (len < kBufSize)
+#else // ^^^ !CORRECT_DOUBLE_OPERATIONS
+
+static constexpr int const kExactPowersOfTenSize = 23;
+static constexpr double const kExactPowersOfTen[] = {
+    1.0e+00,
+    1.0e+01,
+    1.0e+02,
+    1.0e+03,
+    1.0e+04,
+    1.0e+05,
+    1.0e+06,
+    1.0e+07,
+    1.0e+08,
+    1.0e+09,
+    1.0e+10,
+    1.0e+11,
+    1.0e+12,
+    1.0e+13,
+    1.0e+14,
+    1.0e+15,
+    1.0e+16,
+    1.0e+17,
+    1.0e+18,
+    1.0e+19,
+    1.0e+20,
+    1.0e+21,
+    1.0e+22,
+};
+
+static double ReadDouble_unguarded(char const* buffer, int buffer_length)
+{
+    int64_t result = 0;
+
+    for (int i = 0; i != buffer_length; ++i)
     {
-        char buf[kBufSize];
-        std::memcpy(buf, str, static_cast<size_t>(len));
-        buf[len] = '\0';
-
-        return StrtodImpl(buf, end);
+        assert(buffer[i] >= '0');
+        assert(buffer[i] <= '9');
+        result = 10 * result + (buffer[i] - '0');
     }
 
-    std::vector<char> buf(str, str + len);
-    buf.push_back('\0');
-
-    return StrtodImpl(buf.data(), end);
+    return static_cast<double>(result);
 }
 
-double json::numbers::Strtod(char const* str, char** end)
+bool FastStrtod(char const* buffer, int buffer_length, int exponent, double& result)
 {
-    assert(str != nullptr);
+    if (buffer_length > kMaxExactDoubleIntegerDecimalDigits)
+        return false;
 
-    return StrtodImpl(str, end);
+    // The trimmed input fits into a double.
+    // If the 10^exponent (resp. 10^-exponent) fits into a double too then we
+    // can compute the result-double simply by multiplying (resp. dividing) the
+    // two numbers.
+    // This is possible because IEEE guarantees that floating-point operations
+    // return the best possible approximation.
+
+    if (exponent < 0 && -exponent < kExactPowersOfTenSize)
+    {
+        // 10^-exponent fits into a double.
+        double d = ReadDouble_unguarded(buffer, buffer_length);
+        d /= kExactPowersOfTen[-exponent];
+        result = d;
+        return true;
+    }
+
+    if (0 <= exponent && exponent < kExactPowersOfTenSize)
+    {
+        // 10^exponent fits into a double.
+        double d = ReadDouble_unguarded(buffer, buffer_length);
+        d *= kExactPowersOfTen[exponent];
+        result = d;
+        return true;
+    }
+
+    int const remaining_digits = kMaxExactDoubleIntegerDecimalDigits - buffer_length;
+    if (0 <= exponent && exponent - remaining_digits < kExactPowersOfTenSize)
+    {
+        // The trimmed string was short and we can multiply it with
+        // 10^remaining_digits. As a result the remaining exponent now fits
+        // into a double too.
+        double d = ReadDouble_unguarded(buffer, buffer_length);
+        d *= kExactPowersOfTen[remaining_digits];
+        d *= kExactPowersOfTen[exponent - remaining_digits];
+        result = d;
+        return true;
+    }
+
+    return false;
 }
 
-#endif
+#endif // ^^^ CORRECT_DOUBLE_OPERATIONS
 
-namespace {
+//--------------------------------------------------------------------------------------------------
+// DiyFpStrtod
+//--------------------------------------------------------------------------------------------------
 
-// 2^53 = 9007199254740992 is the largest integer which can be represented
-// without loss of precision in an IEEE double. That's 16 digits, so an integer
-// with at most 15 digits always can be converted to double without loss of
-// precision.
-static constexpr int const kSmallIntDigits10 = 15;
+// 2^64 = 18446744073709551616 > 10^19
+static constexpr int const kMaxUint64DecimalDigits = 19; // std::numeric_limits<uint64_t>::digits10;
 
-int64_t ParseSmallInteger(char const* f, char const* l)
+struct Double
+{
+    static constexpr uint64_t const kSignificandMask         = 0x000FFFFFFFFFFFFF;
+    static constexpr uint64_t const kHiddenBit               = 0x0010000000000000;
+    static constexpr int      const kSignificandSize         = 53;  // Includes the hidden bit.
+    static constexpr int      const kPhysicalSignificandSize = 52;  // Excludes the hidden bit.
+    static constexpr int      const kExponentBias            = 0x3FF + kPhysicalSignificandSize;
+    static constexpr int      const kDenormalExponent        = -kExponentBias + 1;
+    static constexpr int      const kMaxExponent             = 0x7FF - kExponentBias;
+};
+
+// ldexp: Convert x = f * 2^e to IEEE double precision.
+double MakeDouble(uint64_t f, int e)
+{
+    while (f > Double::kHiddenBit + Double::kSignificandMask) {
+        f >>= 1;
+        assert(e < INT_MAX);
+        e++;
+    }
+
+    if (e >= Double::kMaxExponent)
+        return std::numeric_limits<double>::infinity();
+
+    if (e < Double::kDenormalExponent)
+        return 0;
+
+    while (e > Double::kDenormalExponent && (f & Double::kHiddenBit) == 0) {
+        f <<= 1;
+        e--;
+    }
+
+    uint64_t biased_exponent;
+    if (e == Double::kDenormalExponent && (f & Double::kHiddenBit) == 0)
+        biased_exponent = 0;
+    else
+        biased_exponent = static_cast<uint64_t>(e + Double::kExponentBias);
+
+    uint64_t const bits = (f & Double::kSignificandMask) | (biased_exponent << Double::kPhysicalSignificandSize);
+
+    return ReinterpretBits<double>(bits);
+}
+
+// Reads a DiyFp from the buffer.
+// The returned DiyFp is not necessarily normalized.
+// If remaining_decimals is zero then the returned DiyFp is accurate.
+// Otherwise it has been rounded and has error of at most 1/2 ulp.
+DiyFp ReadDiyFp(char const* buffer, int buffer_length, int& remaining_decimals)
+{
+    uint64_t significand = 0;
+
+    int const max_len = buffer_length <= kMaxUint64DecimalDigits ? static_cast<int>(buffer_length) : kMaxUint64DecimalDigits;
+    int i = 0;
+    for (; i != max_len; ++i)
+    {
+        assert(buffer[i] >= '0');
+        assert(buffer[i] <= '9');
+        auto const digit = static_cast<unsigned>(buffer[i] - '0');
+        significand = 10 * significand + digit;
+    }
+
+    if (i != buffer_length)
+    {
+        assert(buffer[i] >= '0');
+        assert(buffer[i] <= '9');
+        if (buffer[i] >= '5')
+        {
+            assert(significand != UINT64_MAX);
+            ++significand;
+        }
+    }
+
+    remaining_decimals = buffer_length - i;
+    return DiyFp(significand, 0);
+}
+
+// Returns a cached power of ten x ~= 10^n such that
+//      n <= k < n + kCachedPowersDecimalDistance.
+// The given k must satisfy
+//      (1)     k >= kCachedPowersMinDecExp
+//      (2)     k < kCachedPowersMaxDecExp + kCachedPowersDecExpStep
+CachedPower GetCachedPowerForDecimalExponent(int64_t k)
+{
+    assert(k >= kCachedPowersMinDecExp);
+    assert(k < kCachedPowersMaxDecExp + kCachedPowersDecExpStep);
+    static_cast<void>(kCachedPowersMaxDecExp);
+
+    auto const index = (-kCachedPowersMinDecExp + k) / kCachedPowersDecExpStep;
+    assert(index >= 0);
+    assert(index < kCachedPowersSize);
+    static_cast<void>(kCachedPowersSize);
+
+//  auto const cached = kCachedPowers[static_cast<size_t>(index)];
+    auto const cached = kCachedPowers[index];
+    assert(k >= cached.k);
+    assert(k < cached.k + kCachedPowersDecExpStep);
+
+    return cached;
+}
+
+// Returns 10^exponent as an exact DiyFp.
+// The given exponent must be in the range [1, kCachedPowersDecExpStep).
+DiyFp AdjustmentPowerOfTen(int64_t exponent)
+{
+    assert(exponent > 0);
+    assert(exponent < kCachedPowersDecExpStep);
+
+    // Simply hardcode the remaining powers for the given decimal exponent distance.
+    static_assert(kCachedPowersDecExpStep == 8, "internal error");
+    switch (exponent)
+    {
+    case 1: return DiyFp(0xA000000000000000, -60);
+    case 2: return DiyFp(0xC800000000000000, -57);
+    case 3: return DiyFp(0xFA00000000000000, -54);
+    case 4: return DiyFp(0x9C40000000000000, -50);
+    case 5: return DiyFp(0xC350000000000000, -47);
+    case 6: return DiyFp(0xF424000000000000, -44);
+    case 7: return DiyFp(0x9896800000000000, -40);
+    default:
+        assert(false && "unreachable");
+        return {};
+    }
+}
+
+// Returns the significand size for a given order of magnitude.
+// If v = f*2^e with 2^p-1 <= f <= 2^p then p+e is v's order of magnitude.
+// This function returns the number of significant binary digits v will have
+// once it's encoded into a double. In almost all cases this is equal to
+// kSignificandSize. The only exceptions are denormals. They start with
+// leading zeroes and their effective significand-size is hence smaller.
+int SignificandSizeForOrderOfMagnitude(int order)
+{
+    static constexpr int const kSignificandSize  = 53;  // Includes the hidden bit.
+    static constexpr int const kDenormalExponent = 1 - (0x3FF + 52);
+
+    if (order >= kDenormalExponent + kSignificandSize)
+        return kSignificandSize;
+
+    if (order <= kDenormalExponent)
+        return 0;
+
+    return order - kDenormalExponent;
+}
+
+// If the function returns true then the result is the correct double.
+// Otherwise it is either the correct double or the double that is just below
+// the correct double.
+static bool DiyFpStrtod(char const* buffer, int buffer_length, int exponent, double& result)
+{
+    static_assert(DiyFp::kPrecision == 64, "We use uint64_ts. This only works if the DiyFp uses uint64_ts too.");
+
+    int remaining_decimals;
+    auto input = ReadDiyFp(buffer, buffer_length, remaining_decimals);
+
+    // Since we may have dropped some digits the input is not accurate.
+    // If remaining_decimals is different than 0 than the error is at most
+    // .5 ulp (unit in the last place).
+    // We don't want to deal with fractions and therefore keep a common
+    // denominator.
+    constexpr int kDenominatorLog = 3;
+    constexpr int kDenominator = 1 << kDenominatorLog;
+
+    // Move the remaining decimals into the exponent.
+    exponent += remaining_decimals;
+    uint64_t error = (remaining_decimals == 0) ? 0 : kDenominator / 2;
+
+    {
+        auto const old_e = input.e;
+        input = DiyFp::normalize(input);
+        error <<= old_e - input.e;
+    }
+
+    assert(exponent <= kCachedPowersMaxDecExp);
+    if (exponent < kCachedPowersMinDecExp)
+    {
+        result = 0.0;
+        return true;
+    }
+
+    auto const cached = GetCachedPowerForDecimalExponent(exponent);
+    auto const cached_power = DiyFp(cached.f, cached.e);
+    auto const cached_decimal_exponent = cached.k;
+
+    if (cached_decimal_exponent != exponent)
+    {
+        auto const adjustment_exponent = exponent - cached_decimal_exponent;
+        auto const adjustment_power = AdjustmentPowerOfTen(adjustment_exponent);
+
+        input = DiyFp::mul(input, adjustment_power);
+
+        if (kMaxUint64DecimalDigits - buffer_length >= adjustment_exponent)
+        {
+            // The product of input with the adjustment power fits into a 64 bit
+            // integer.
+        }
+        else
+        {
+            // The adjustment power is exact. There is hence only an error of 0.5.
+            error += kDenominator / 2;
+        }
+    }
+
+    input = DiyFp::mul(input, cached_power);
+
+    // The error introduced by a multiplication of a*b equals
+    //   error_a + error_b + error_a*error_b/2^64 + 0.5
+    // Substituting a with 'input' and b with 'cached_power' we have
+    //   error_b = 0.5  (all cached powers have an error of less than 0.5 ulp),
+    //   error_ab = 0 or 1 / kDenominator > error_a*error_b/ 2^64
+    uint64_t const error_b = kDenominator / 2;
+    uint64_t const error_ab = (error == 0) ? 0 : 1; // We round up to 1.
+    uint64_t const fixed_error = kDenominator / 2;
+
+    error += error_b + error_ab + fixed_error;
+
+    {
+        auto const old_e = input.e;
+        input = DiyFp::normalize(input);
+        error <<= old_e - input.e;
+    }
+
+    // See if the double's significand changes if we add/subtract the error.
+    auto const order_of_magnitude = DiyFp::kPrecision + input.e;
+    auto const effective_significand_size = SignificandSizeForOrderOfMagnitude(order_of_magnitude);
+
+    int precision_digits_count = DiyFp::kPrecision - effective_significand_size;
+    if (precision_digits_count + kDenominatorLog >= DiyFp::kPrecision)
+    {
+        // This can only happen for very small denormals. In this case the
+        // half-way multiplied by the denominator exceeds the range of an uint64.
+        // Simply shift everything to the right.
+
+        auto const shift_amount = (precision_digits_count + kDenominatorLog) - DiyFp::kPrecision + 1;
+        input.f = input.f >> shift_amount;
+        input.e = input.e + shift_amount;
+
+        // We add 1 for the lost precision of error, and kDenominator for
+        // the lost precision of input.f().
+        error = (error >> shift_amount) + 1 + kDenominator;
+        precision_digits_count -= shift_amount;
+    }
+
+    // We use uint64_ts now. This only works if the DiyFp uses uint64_ts too.
+    assert(precision_digits_count > 0);
+    assert(precision_digits_count < 64);
+
+    uint64_t const precision_bits = kDenominator * (input.f & ((uint64_t{1} << precision_digits_count) - 1));
+    uint64_t const half_way       = kDenominator * (uint64_t{1} << (precision_digits_count - 1));
+
+    auto rounded_input = DiyFp(input.f >> precision_digits_count, input.e + precision_digits_count);
+    if (precision_bits >= half_way + error)
+    {
+        assert(rounded_input.f != UINT64_MAX);
+        rounded_input.f += 1;
+    }
+
+    // If the last_bits are too close to the half-way case than we are too
+    // inaccurate and round down. In this case we return false so that we can
+    // fall back to a more precise algorithm.
+
+    result = MakeDouble(rounded_input.f, rounded_input.e);
+
+    if (half_way - error < precision_bits && precision_bits < half_way + error)
+    {
+        // Too imprecise. The caller will have to fall back to a slower version.
+        // However the returned number is guaranteed to be either the correct
+        // double, or the next-lower double.
+        return false;
+    }
+
+    return true;
+}
+
+//--------------------------------------------------------------------------------------------------
+//
+//--------------------------------------------------------------------------------------------------
+
+// Max double: 1.7976931348623157 x 10^308
+// Min non-zero double: 4.9406564584124654 x 10^-324
+// Any x >= 10^309 is interpreted as +infinity.
+// Any x <= 10^-324 is interpreted as 0.
+// Note that 2.5e-324 (despite being smaller than the min double) will be read
+// as non-zero (equal to the min non-zero double).
+static constexpr int const kMaxDecimalPower =  309;
+static constexpr int const kMinDecimalPower = -324;
+
+// Returns true if the guess is the correct double.
+// Returns false, when guess is either correct or the next-lower double.
+static bool ComputeGuess(char const* buffer, int buffer_length, int exponent, double& guess)
+{
+    assert(buffer_length == 0 || (buffer[0] != '0' && buffer[buffer_length - 1] != '0'));
+
+    if (buffer_length == 0) {
+        guess = 0.0;
+        return true;
+    }
+    if (exponent + buffer_length - 1 >= kMaxDecimalPower) {
+        guess = std::numeric_limits<double>::infinity();
+        return true;
+    }
+    if (exponent + buffer_length <= kMinDecimalPower) {
+        guess = 0.0;
+        return true;
+    }
+
+    if (FastStrtod(buffer, buffer_length, exponent, guess) || DiyFpStrtod(buffer, buffer_length, exponent, guess)) {
+        return true;
+    }
+    if (guess == std::numeric_limits<double>::infinity()) {
+        return true;
+    }
+
+    // guess has been assigned to in DiyFpStrtod.
+    // guess is either correct or the next-lower double.
+    return false;
+}
+
+double ReadDouble(char const* f, char const* l)
 {
     assert(l - f > 0); // internal error
-    assert(l - f <= kSmallIntDigits10); // internal error
+    assert(l - f <= kMaxExactDoubleIntegerDecimalDigits); // internal error
 
     int64_t val = 0;
     for ( ; f != l; ++f)
@@ -1551,50 +1827,354 @@ int64_t ParseSmallInteger(char const* f, char const* l)
         val = val * 10 + (*f - '0');
     }
 
-    return val;
+    return static_cast<double>(val);
+}
+
+int CountTrailingZeros(char const* buffer, int buffer_length)
+{
+    int i = buffer_length;
+    for ( ; i != 0; --i)
+    {
+        if (buffer[i - 1] != '0')
+            break;
+    }
+
+    return buffer_length - i;
+}
+
+// Maximum number of significant digits in decimal representation.
+// The longest possible double in decimal representation is
+// (2^53 - 1) * 2^-1074 that is (2^53 - 1) * 5^1074 / 10^1074 (768 digits). If
+// we parse a number whose first digits are equal to a mean of 2 adjacent
+// doubles (that could have up to 769 digits) the result must be rounded to the
+// bigger one unless the tail consists of zeros, so we don't need to preserve
+// all the digits.
+static constexpr int const kMaxSignificantDigits = 772;
+
+bool IsDigit(char ch)
+{
+    return '0' <= ch && ch <= '9';
+}
+
+bool StringToIeee(double& result, char const* next, char const* last, Options const& options)
+{
+    // Inputs larger than kMaxInt (currently) can not be handled.
+    // To avoid overflow in integer arithmetic.
+    constexpr int const kMaxInt = INT_MAX / 4;
+
+    if (next == last)
+    {
+        result = 0.0; // [Recover.]
+        return true;
+    }
+
+    if (last - next >= kMaxInt)
+    {
+        result = std::numeric_limits<double>::quiet_NaN();
+        return false;
+    }
+
+    static constexpr int const kBufferSize = kMaxSignificantDigits + 1;
+
+    char digits[kBufferSize];
+    int  num_digits = 0;
+    int  exponent = 0;
+    bool nonzero_digit_dropped = false;
+
+    bool is_neg = false;
+    if (*next == '-')
+    {
+        is_neg = true;
+
+        ++next;
+        if (next == last)
+        {
+            result = is_neg ? -0.0 : +0.0; // Recover.
+            return false;
+        }
+    }
+#if 0
+    else if (options.allow_leading_plus && *next == '+')
+    {
+        ++next;
+        if (next == last)
+        {
+            result = is_neg ? -0.0 : +0.0; // Recover.
+            return false;
+        }
+    }
+#endif
+
+    if (*next == '0')
+    {
+        ++next;
+        if (next == last)
+        {
+            result = is_neg ? -0.0 : +0.0;
+            return true;
+        }
+    }
+    else if (IsDigit(*next))
+    {
+        // Copy significant digits of the integer part (if any) to the buffer.
+        for (;;)
+        {
+            if (num_digits < kMaxSignificantDigits)
+            {
+                digits[num_digits++] = *next;
+            }
+            else
+            {
+                ++exponent;
+                nonzero_digit_dropped = nonzero_digit_dropped || *next != '0';
+            }
+            ++next;
+            if (next == last)
+            {
+                goto L_parsing_done;
+            }
+            if (!IsDigit(*next))
+            {
+                break;
+            }
+        }
+    }
+#if 0
+    else if (options.allow_leading_dot && *next == '.')
+    {
+    }
+#endif
+    else
+    {
+        if (options.allow_nan_inf && last - next >= 3 && std::memcmp(next, "NaN", 3) == 0)
+        {
+            result = std::numeric_limits<double>::quiet_NaN();
+            return true;
+        }
+
+        if (options.allow_nan_inf && last - next >= 8 && std::memcmp(next, "Infinity", 8) == 0)
+        {
+            result = is_neg ? -std::numeric_limits<double>::infinity() : std::numeric_limits<double>::infinity();
+            return true;
+        }
+
+        return false;
+    }
+
+    if (*next == '.')
+    {
+        ++next;
+        if (next == last)
+        {
+            // XXX: Recover? Continue with exponent?
+            return false;
+        }
+
+        if (num_digits == 0)
+        {
+            // Integer part consists of 0 (or is absent).
+            // Significant digits start after leading zeros (if any).
+            while (*next == '0')
+            {
+                ++next;
+                if (next == last)
+                {
+                    result = is_neg ? -0.0 : +0.0;
+                    return true;
+                }
+
+                // Move this 0 into the exponent.
+                --exponent;
+            }
+        }
+
+        // There is a fractional part.
+        // We don't emit a '.', but adjust the exponent instead.
+        while (IsDigit(*next))
+        {
+            if (num_digits < kMaxSignificantDigits)
+            {
+                digits[num_digits++] = *next;
+                --exponent;
+            }
+            else
+            {
+                nonzero_digit_dropped = nonzero_digit_dropped || *next != '0';
+            }
+            ++next;
+            if (next == last)
+            {
+                goto L_parsing_done;
+            }
+        }
+    }
+
+    // Parse exponential part.
+    if (*next == 'e' || *next == 'E')
+    {
+        ++next;
+        if (next == last)
+        {
+            // XXX:
+            // Recover? Parse as if exponent = 0?
+            return false;
+        }
+
+        bool const exp_is_neg = (*next == '-');
+
+        if (*next == '+' || exp_is_neg)
+        {
+            ++next;
+            if (next == last)
+            {
+                // XXX:
+                // Recover? Parse as if exponent = 0?
+                return false;
+            }
+        }
+
+        if (!IsDigit(*next))
+        {
+            // XXX:
+            // Recover? Parse as if exponent = 0?
+            return false;
+        }
+
+        int num = 0;
+        for (;;)
+        {
+            assert(IsDigit(*next));
+            int const digit = *next - '0';
+
+            if (num > kMaxInt / 10 || digit > kMaxInt - 10 * num)
+            {
+                // Overflow.
+                // Skip the rest of the exponent (ignored).
+                for (++next; next != last && IsDigit(*next); ++next)
+                {
+                }
+                num = kMaxInt;
+                break;
+            }
+
+            num = num * 10 + digit;
+            ++next;
+            if (next == last)
+            {
+                break;
+            }
+            if (!IsDigit(*next))
+            {
+                break; // trailing junk
+            }
+        }
+
+        exponent += exp_is_neg ? -num : num;
+    }
+
+L_parsing_done:
+#if 1
+    if (next != last)
+    {
+        return false; // trailing junk
+    }
+#endif
+
+    if (nonzero_digit_dropped)
+    {
+        // Set the last digit to be non-zero. This is sufficient to guarantee
+        // correct rounding.
+        assert(num_digits == kMaxSignificantDigits);
+        assert(num_digits < kBufferSize);
+        digits[num_digits++] = '1';
+        --exponent;
+    }
+    else
+    {
+        int const num_zeros = CountTrailingZeros(digits, num_digits);
+        exponent += num_zeros;
+        num_digits -= num_zeros;
+    }
+
+#if 1
+    if (exponent == 0 && num_digits <= kMaxExactDoubleIntegerDecimalDigits)
+    {
+        double d = ReadDouble(digits, digits + num_digits);
+        result = is_neg ? -d : d;
+        return true;
+    }
+#endif
+
+    double guess;
+#if 1
+    ComputeGuess(digits, num_digits, exponent, guess);
+#else
+    if (ComputeGuess(digits, num_digits, exponent, guess))
+#endif
+    {
+        result = is_neg ? -guess : guess;
+        return true;
+    }
 }
 
 } // namespace
 
-double json::numbers::StringToNumber(char const* first, char const* last, NumberClass nc)
+//--------------------------------------------------------------------------------------------------
+//
+//--------------------------------------------------------------------------------------------------
+
+#if 0
+double json::numbers::StringToNumber(char const* first, char const* last, NumberClass nc, Options const& options)
 {
+    assert(first != last);
     assert(nc != NumberClass::invalid);
+
+    if (first == last)
+        return std::numeric_limits<double>::quiet_NaN();
 
     // Use a _slightly_ faster method for parsing integers which will fit into a
     // double-precision number without loss of precision. Larger numbers will be
     // handled by strtod.
-    bool const is_pos_int = (nc == NumberClass::pos_integer) && (last - first) <= kSmallIntDigits10;
-    bool const is_neg_int = (nc == NumberClass::neg_integer) && (last - first) <= kSmallIntDigits10 + 1/*minus sign*/;
-
-    if (is_pos_int)
+    if (nc == NumberClass::integer && last - first <= kMaxExactDoubleIntegerDecimalDigits)
     {
-        return static_cast<double>(ParseSmallInteger(first, last));
+        bool const is_neg = *first == '-';
+        if (is_neg || *first == '+')
+        {
+            ++first;
+        }
+
+        double const result = ReadDouble(first, last);
+        return is_neg ? -result : result;
     }
 
-    if (is_neg_int)
-    {
-        assert(last - first >= 1); // internal error
-        assert(first[0] == '-'); // internal error
-
-        // NB:
-        // Works for signed zeros.
-        return -static_cast<double>(ParseSmallInteger(first + 1, last));
-    }
-
-    if (nc == NumberClass::neg_nan) {
-        return -std::numeric_limits<double>::quiet_NaN();
-    }
-    if (nc == NumberClass::pos_nan) {
-        return +std::numeric_limits<double>::quiet_NaN();
-    }
-    if (nc == NumberClass::neg_infinity) {
-        return -std::numeric_limits<double>::infinity();
+    if (nc == NumberClass::nan) {
+        return std::numeric_limits<double>::quiet_NaN();
     }
     if (nc == NumberClass::pos_infinity) {
         return +std::numeric_limits<double>::infinity();
     }
+    if (nc == NumberClass::neg_infinity) {
+        return -std::numeric_limits<double>::infinity();
+    }
 
-    return Strtod(first, static_cast<int>(last - first));
+    double result;
+    if (StringToIeee(result, first, last))
+    {
+        return result;
+    }
+
+    assert(false && "unreachable");
+    return std::numeric_limits<double>::quiet_NaN();
+}
+#endif
+
+bool json::numbers::StringToNumber(double& result, char const* first, char const* last, Options const& options)
+{
+    if (StringToIeee(result, first, last, options))
+        return true;
+
+    result = std::numeric_limits<double>::quiet_NaN();
+    return false;
 }
 
 /*
@@ -1620,4 +2200,33 @@ HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
 WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
+*/
+
+/*
+Copyright 2006-2011, the V8 project authors. All rights reserved.
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+    * Redistributions of source code must retain the above copyright
+      notice, this list of conditions and the following disclaimer.
+    * Redistributions in binary form must reproduce the above
+      copyright notice, this list of conditions and the following
+      disclaimer in the documentation and/or other materials provided
+      with the distribution.
+    * Neither the name of Google Inc. nor the names of its
+      contributors may be used to endorse or promote products derived
+      from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */

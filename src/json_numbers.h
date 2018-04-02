@@ -23,21 +23,27 @@
 #include "json_options.h"
 #include "json_parse.h" // XXX: For NumberClass
 
+#define JSON_USE_GRISU2 1 /* NOT an option yet */
+
 namespace json {
 namespace numbers {
 
 // Convert the double-precision number `value` to a decimal floating-point
 // number.
-// The buffer must be large enough!
+// The buffer must be large enough! (A size >= 32 is sufficient.)
 char* NumberToString(char* next, char* last, double value, bool emit_trailing_dot_zero = true);
 
-double Strtod(char const* str, int len, char** end = nullptr);
-double Strtod(char const* str, char** end = nullptr);
-
+#if 0
 // Convert the string `[first, last)` to a double-precision value.
 // The string must be valid according to the JSON grammar and match the number
 // class defined by `nc` (which must not be `NumberClass::invalid`).
-double StringToNumber(char const* first, char const* last, NumberClass nc);
+double StringToNumber(char const* first, char const* last, NumberClass nc, Options const& options = {});
+#endif
+
+// Convert the string `[first, last)` to a double-precision value.
+// Returns true if the string is a valid number according to the JSON grammar.
+// Otherwise returns false and stores 'NaN' in `result`.
+bool StringToNumber(double& result, char const* first, char const* last, Options const& options = {});
 
 } // namespace numbers
 } // namespace json

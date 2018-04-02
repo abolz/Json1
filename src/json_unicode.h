@@ -94,6 +94,7 @@ It DecodeUTF8Sequence(It next, It last, uint32_t& U)
     int const slen = GetUTF8SequenceLengthFromLeadByte(*next, U);
     ++next;
 
+#if 0
     if (slen == 0)
     {
         U = kInvalidCodepoint; // Invalid lead byte
@@ -119,6 +120,20 @@ It DecodeUTF8Sequence(It next, It last, uint32_t& U)
 
         U = (U << 6) | (static_cast<uint8_t>(cb) & 0x3F);
     }
+#else
+    if (slen == 0 || last - next < slen - 1)
+    {
+        U = kInvalidCodepoint; // Invalid lead byte or incomplete UTF-8 sequence
+        return FindNextUTF8Sequence(next, last);
+    }
+
+    for (int i = slen - 1; i != 0; --i)
+    {
+        auto const cb = *next;
+        ++next;
+        U = (U << 6) | (IsUTF8Trail(cb) ? (static_cast<uint8_t>(cb) & 0x3F) : kInvalidCodepoint);
+    }
+#endif
 
     if (!IsValidCodepoint(U) || IsUTF8OverlongSequence(U, slen))
     {
