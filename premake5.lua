@@ -151,3 +151,22 @@ project "test"
             "-Wconversion",
             "-pedantic",
         }
+
+project "benchmark"
+    language "C++"
+    kind "ConsoleApp"
+    files {
+        "benchmark/benchmark.cc",
+    }
+    links {
+        "json",
+    }
+    configuration { "gmake" }
+        buildoptions {
+            "-Wsign-compare",
+            "-Wsign-conversion",
+            "-Wold-style-cast",
+            "-Wshadow",
+            "-Wconversion",
+            "-pedantic",
+        }

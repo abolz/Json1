@@ -62,39 +62,6 @@ Value::Value(Value const& rhs)
     }
 }
 
-Value& Value::operator=(Value const& rhs)
-{
-    if (this != &rhs)
-    {
-        switch (rhs.type())
-        {
-        case Type::undefined:
-            assign(undefined_tag);
-            break;
-        case Type::null:
-            assign(null_tag);
-            break;
-        case Type::boolean:
-            assign(boolean_tag, rhs.get_boolean());
-            break;
-        case Type::number:
-            assign(number_tag, rhs.get_number());
-            break;
-        case Type::string:
-            assign(string_tag, rhs.get_string());
-            break;
-        case Type::array:
-            assign(array_tag, rhs.get_array());
-            break;
-        case Type::object:
-            assign(object_tag, rhs.get_object());
-            break;
-        }
-    }
-
-    return *this;
-}
-
 Value::Value(Type t)
 {
     switch (t)
@@ -203,6 +170,39 @@ Object& Value::assign(Tag_object, Object const& v)
 Object& Value::assign(Tag_object, Object&& v)
 {
     return _assign_object(std::move(v));
+}
+
+Value& Value::operator=(Value const& rhs)
+{
+    if (this != &rhs)
+    {
+        switch (rhs.type())
+        {
+        case Type::undefined:
+            assign(undefined_tag);
+            break;
+        case Type::null:
+            assign(null_tag);
+            break;
+        case Type::boolean:
+            assign(boolean_tag, rhs.get_boolean());
+            break;
+        case Type::number:
+            assign(number_tag, rhs.get_number());
+            break;
+        case Type::string:
+            assign(string_tag, rhs.get_string());
+            break;
+        case Type::array:
+            assign(array_tag, rhs.get_array());
+            break;
+        case Type::object:
+            assign(object_tag, rhs.get_object());
+            break;
+        }
+    }
+
+    return *this;
 }
 
 void Value::_clear()
@@ -890,18 +890,12 @@ struct ParseValueCallbacks /*final*/ : ParseCallbacks
         return {};
     }
 
-    ParseStatus HandleNumber(char const* first, char const* last, NumberClass /*nc*/, Options const& options) override
+    ParseStatus HandleNumber(char const* first, char const* last, NumberClass nc, Options const& options) override
     {
         if (options.parse_numbers_as_strings)
-        {
             stack.emplace_back(json::string_tag, first, last);
-        }
         else
-        {
-            double result;
-            numbers::StringToNumber(result, first, last, options);
-            stack.emplace_back(result);
-        }
+            stack.emplace_back(numbers::StringToNumber(first, last, nc));
 
         return {};
     }

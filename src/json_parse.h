@@ -84,9 +84,4 @@ struct ParseResult
 // Parse the JSON stored in the string [first, last).
 ParseResult parse(ParseCallbacks& cb, char const* first, char const* last, Options const& options = {});
 
-#if 0
-bool parse_number(double&      result, char const* first, char const* last, Options const& options = {});
-bool parse_string(std::string& result, char const* first, char const* last, Options const& options = {});
-#endif
-
 } // namespace json

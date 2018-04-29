@@ -65,23 +65,19 @@ enum class Type : int {
     object,
 };
 
-inline constexpr bool operator<(Type lhs, Type rhs)
-{
+inline constexpr bool operator<(Type lhs, Type rhs) {
     return static_cast<std::underlying_type_t<Type>>(lhs) < static_cast<std::underlying_type_t<Type>>(rhs);
 }
 
-inline constexpr bool operator>(Type lhs, Type rhs)
-{
+inline constexpr bool operator>(Type lhs, Type rhs) {
     return rhs < lhs;
 }
 
-inline constexpr bool operator<=(Type lhs, Type rhs)
-{
+inline constexpr bool operator<=(Type lhs, Type rhs) {
     return !(rhs < lhs);
 }
 
-inline constexpr bool operator>=(Type lhs, Type rhs)
-{
+inline constexpr bool operator>=(Type lhs, Type rhs) {
     return !(lhs < rhs);
 }
 
@@ -493,9 +489,7 @@ public:
     Value() noexcept = default;
    ~Value() noexcept
     {
-       if (!is_undefined()) {
-           assign(undefined_tag);
-       }
+       _clear();
     }
 
     Value(Value const& rhs);
@@ -503,14 +497,6 @@ public:
         : data_(rhs.data_)
         , type_(std::exchange(rhs.type_, Type::undefined))
     {
-    }
-
-    Value& operator=(Value const& rhs);
-    Value& operator=(Value&& rhs) noexcept
-    {
-        data_ = rhs.data_;
-        type_ = std::exchange(rhs.type_, Type::undefined);
-        return *this;
     }
 
     Value(Type t);
@@ -659,6 +645,16 @@ public:
     Object& assign(Tag_object, Object&& value);
 
     // assignment operators
+
+    Value& operator=(Value const& rhs);
+    Value& operator=(Value&& rhs) noexcept
+    {
+        _clear();
+
+        data_ = rhs.data_;
+        type_ = std::exchange(rhs.type_, Type::undefined);
+        return *this;
+    }
 
     template <typename T,
         std::enable_if_t< !IsValue<T>::value

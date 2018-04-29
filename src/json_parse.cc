@@ -30,8 +30,6 @@ using namespace json;
 //
 //--------------------------------------------------------------------------------------------------
 
-namespace {
-
 #define W 0x01  // whitespace  : '\t', '\n', '\r', ' '
 #define D 0x02  // digit       : '0'...'9'
                 // letter      : 'a'...'z', 'A'...'Z'
@@ -78,7 +76,7 @@ static constexpr uint8_t const kCharClass[] = {
     C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,
 };
 
-inline unsigned GetCharClass(char ch)
+static unsigned GetCharClass(char ch)
 {
     return kCharClass[static_cast<unsigned char>(ch)];
 }
@@ -89,12 +87,12 @@ inline unsigned GetCharClass(char ch)
 #undef D
 #undef W
 
-bool IsWhitespace     (char ch) { return (GetCharClass(ch) & CC_Whitespace    ) != 0; }
-bool IsDigit          (char ch) { return (GetCharClass(ch) & CC_Digit         ) != 0; }
-bool IsIdentifierBody (char ch) { return (GetCharClass(ch) & CC_IdentifierBody) != 0; }
+static bool IsWhitespace     (char ch) { return (GetCharClass(ch) & CC_Whitespace    ) != 0; }
+static bool IsDigit          (char ch) { return (GetCharClass(ch) & CC_Digit         ) != 0; }
+static bool IsIdentifierBody (char ch) { return (GetCharClass(ch) & CC_IdentifierBody) != 0; }
 
 template <typename It>
-It SkipWhitespace(It f, It l)
+static It SkipWhitespace(It f, It l)
 {
 #if 1
     while (l - f >= 4)
@@ -114,25 +112,19 @@ It SkipWhitespace(It f, It l)
     return f;
 }
 
-} // namespace
-
 //--------------------------------------------------------------------------------------------------
 //
 //--------------------------------------------------------------------------------------------------
 
-namespace {
-
 template <typename It>
 struct ScanNumberResult
 {
-    //It decimal_point;
-    //It exponent;
-    It end;
+    It next;
     NumberClass number_class;
 };
 
 template <typename It>
-ScanNumberResult<It> ScanNumber(It first, It last, Options const& options)
+static ScanNumberResult<It> ScanNumber(It first, It last, Options const& options)
 {
     It next = first;
 
@@ -246,8 +238,6 @@ ScanNumberResult<It> ScanNumber(It first, It last, Options const& options)
 
     return {next, is_float ? NumberClass::floating_point : NumberClass::integer};
 }
-
-} // namespace
 
 //--------------------------------------------------------------------------------------------------
 //
@@ -514,7 +504,7 @@ Token Lexer::LexNumber(char const* p, Options const& options)
 {
     auto const res = ScanNumber(p, end, options);
 
-    return MakeToken(res.end, TokenKind::number, /*needs_cleaning*/ false, res.number_class);
+    return MakeToken(res.next, TokenKind::number, /*needs_cleaning*/ false, res.number_class);
 }
 
 Token Lexer::LexIdentifier(char const* p)
