@@ -18,14 +18,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+// Derived from the double-conversion library:
+// https://github.com/google/double-conversion
+//
+// The original license can be found at the end of this file.
+
 #pragma once
 
-#include <cstdio>
-
-#include "dtoa.h" // DiyFp, GetCachedPower
-
-// If 0, the result of StringToIeee might be off by 1 ULP
-#define DTOA_STRTOD_FULL_PRECISION 1
+#include "dtoa.h"
 
 namespace base_conv {
 
@@ -33,38 +33,34 @@ inline constexpr int Min(int x, int y) { return y < x ? y : x; }
 inline constexpr int Max(int x, int y) { return y < x ? x : y; }
 
 // Returns `f * 2^e`.
-// Note: the significand is truncated to Float::precision bits.
-template <typename Float>
-inline Float FloatFromDiyFp(DiyFp v)
+// Note: the significand is truncated to Double::SignificandSize bits.
+inline double DoubleFromDiyFp(DiyFp v)
 {
-    using Traits = IEEE<Float>;
-    using Bits = typename Traits::bits_type;
-
     auto f = v.f;
     auto e = v.e;
 
-    while (f > Traits::HiddenBit + Traits::SignificandMask) {
+    while (f > Double::HiddenBit + Double::SignificandMask) {
         f >>= 1;
         DTOA_ASSERT(e != INT_MAX);
         e++;
     }
-    if (e > Traits::MaxExponent) {
-        return std::numeric_limits<Float>::infinity();
+    if (e > Double::MaxExponent) {
+        return std::numeric_limits<double>::infinity();
     }
-    if (e < Traits::MinExponent) {
+    if (e < Double::MinExponent) {
         return 0.0;
     }
-    while (e > Traits::MinExponent && (f & Traits::HiddenBit) == 0) {
+    while (e > Double::MinExponent && (f & Double::HiddenBit) == 0) {
         f <<= 1;
         e--;
     }
 
-    Bits const exponent = (e == Traits::MinExponent && (f & Traits::HiddenBit) == 0)
+    uint64_t const exponent = (e == Double::MinExponent && (f & Double::HiddenBit) == 0)
         ? 0
-        : static_cast<Bits>(e + Traits::ExponentBias);
+        : static_cast<uint64_t>(e + Double::ExponentBias);
 
-    Bits const bits = (exponent << Traits::PhysicalSignificandSize) | (f & Traits::SignificandMask);
-    return ReinterpretBits<Float>(bits);
+    uint64_t const bits = (exponent << Double::PhysicalSignificandSize) | (f & Double::SignificandMask);
+    return ReinterpretBits<double>(bits);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -117,10 +113,8 @@ inline Float FloatFromDiyFp(DiyFp v)
 
 #if !DTOA_CORRECT_DOUBLE_OPERATIONS
 
-inline bool StringToIeeeFast(char const* /*buffer*/, int /*buffer_length*/, int /*exponent*/, double& /*result*/)
+inline bool StringToDoubleFast(uint8_t const* /*digits*/, int /*num_digits*/, int /*exponent*/, double& /*result*/)
 {
-    // On x86 the floating-point stack can be 64 or 80 bits wide. If it is
-    // 80 bits wide then double-rounding occurs and the result is not accurate.
     return false;
 }
 
@@ -131,24 +125,23 @@ inline bool StringToIeeeFast(char const* /*buffer*/, int /*buffer_length*/, int 
 // (which has a 53bit significand) without loss of precision.
 constexpr int kMaxExactDoubleIntegerDecimalDigits = 15;
 
-inline double ReadDouble_unsafe(char const* buffer, int buffer_length)
+inline double ReadDouble_unsafe(uint8_t const* digits, int num_digits)
 {
-    DTOA_ASSERT(buffer_length >= 0);
-    DTOA_ASSERT(buffer_length <= kMaxExactDoubleIntegerDecimalDigits);
+    DTOA_ASSERT(num_digits >= 0);
+    DTOA_ASSERT(num_digits <= kMaxExactDoubleIntegerDecimalDigits);
 
     int64_t result = 0;
 
-    for (int i = 0; i < buffer_length; ++i)
+    for (int i = 0; i < num_digits; ++i)
     {
-        DTOA_ASSERT(buffer[i] >= '0');
-        DTOA_ASSERT(buffer[i] <= '9');
-        result = 10 * result + (buffer[i] - '0');
+        DTOA_ASSERT(digits[i] <= 9);
+        result = 10 * result + digits[i];
     }
 
     return static_cast<double>(result);
 }
 
-inline bool StringToIeeeFast(char const* buffer, int buffer_length, int exponent, double& result)
+inline bool StringToDoubleFast(uint8_t const* digits, int num_digits, int exponent, double& result)
 {
     static constexpr int kMaxExactPowerOfTen = 22;
     static constexpr double kExactPowersOfTen[] = {
@@ -178,7 +171,7 @@ inline bool StringToIeeeFast(char const* buffer, int buffer_length, int exponent
 //      1.0e+23,
     };
 
-    if (buffer_length > kMaxExactDoubleIntegerDecimalDigits)
+    if (num_digits > kMaxExactDoubleIntegerDecimalDigits)
         return false;
 
     // The significand fits into a double.
@@ -188,10 +181,10 @@ inline bool StringToIeeeFast(char const* buffer, int buffer_length, int exponent
     // This is possible because IEEE guarantees that floating-point operations
     // return the best possible approximation.
 
-    int const remaining_digits = kMaxExactDoubleIntegerDecimalDigits - buffer_length; // 0 <= rd <= 15
+    int const remaining_digits = kMaxExactDoubleIntegerDecimalDigits - num_digits; // 0 <= rd <= 15
     if (-kMaxExactPowerOfTen <= exponent && exponent <= remaining_digits + kMaxExactPowerOfTen)
     {
-        auto d = ReadDouble_unsafe(buffer, buffer_length);
+        auto d = ReadDouble_unsafe(digits, num_digits);
         if (exponent < 0)
         {
             d /= kExactPowersOfTen[-exponent];
@@ -217,82 +210,6 @@ inline bool StringToIeeeFast(char const* buffer, int buffer_length, int exponent
     return false;
 }
 
-#if 1 // !DTOA_CORRECT_DOUBLE_OPERATIONS
-inline bool StringToIeeeFast(char const* /*buffer*/, int /*buffer_length*/, int /*exponent*/, float& /*result*/)
-{
-    // On x86 the floating-point stack can be 64 or 80 bits wide. If it is
-    // 80 bits wide then double-rounding occurs and the result is not accurate.
-    return false;
-}
-#else
-// 2^24 = 16777216.
-// Any integer with at most 7 decimal digits will hence fit into a single
-// (which has a 24bit significand) without loss of precision.
-constexpr int kMaxExactSingleIntegerDecimalDigits = 7;
-
-inline float ReadSingle_unsafe(char const* buffer, int buffer_length)
-{
-    DTOA_ASSERT(buffer_length >= 0);
-    DTOA_ASSERT(buffer_length <= kMaxExactSingleIntegerDecimalDigits);
-
-    int32_t result = 0;
-
-    for (int i = 0; i < buffer_length; ++i)
-    {
-        DTOA_ASSERT(buffer[i] >= '0');
-        DTOA_ASSERT(buffer[i] <= '9');
-        result = 10 * result + (buffer[i] - '0');
-    }
-
-    return static_cast<float>(result);
-}
-
-inline bool StringToIeeeFast(char const* buffer, int buffer_length, int exponent, float& result)
-{
-    static constexpr int kMaxExactPowerOfTen = 10;
-    static constexpr float kExactPowersOfTen[] = {
-        1.0e+00f,
-        1.0e+01f,
-        1.0e+02f,
-        1.0e+03f,
-        1.0e+04f,
-        1.0e+05f,
-        1.0e+06f,
-        1.0e+07f,
-        1.0e+08f,
-        1.0e+09f,
-        1.0e+10f,
-//      1.0e+11f,
-    };
-
-    if (buffer_length > kMaxExactSingleIntegerDecimalDigits)
-        return false;
-
-    int const remaining_digits = kMaxExactSingleIntegerDecimalDigits - buffer_length;
-    if (-kMaxExactPowerOfTen <= exponent && exponent <= remaining_digits + kMaxExactPowerOfTen)
-    {
-        auto d = ReadSingle_unsafe(buffer, buffer_length);
-        if (exponent < 0)
-        {
-            d /= kExactPowersOfTen[-exponent];
-        }
-        else if (exponent <= kMaxExactPowerOfTen)
-        {
-            d *= kExactPowersOfTen[exponent];
-        }
-        else
-        {
-            d *= kExactPowersOfTen[remaining_digits]; // exact
-            d *= kExactPowersOfTen[exponent - remaining_digits];
-        }
-        result = d;
-        return true;
-    }
-
-    return false;
-}
-#endif
-
 #endif // DTOA_CORRECT_DOUBLE_OPERATIONS
 
 //--------------------------------------------------------------------------------------------------
@@ -309,27 +226,25 @@ constexpr int kMaxUint64DecimalDigits = 19;
 // Otherwise it has been rounded and has an error of at most 1/2 ulp.
 //
 // The returned DiyFp is not normalized.
-inline DiyFp ReadDiyFp(char const* buffer, int buffer_length, int& read_digits)
+inline DiyFp ReadDiyFp(uint8_t const* digits, int num_digits, int& read_digits)
 {
-    DTOA_ASSERT(buffer_length > 0);
-    DTOA_ASSERT(buffer[buffer_length - 1] != '0'); // The buffer has been trimmed.
+    DTOA_ASSERT(num_digits > 0);
+    DTOA_ASSERT(digits[num_digits - 1] != 0); // The buffer has been trimmed.
 
     uint64_t significand = 0;
 
-    int const max_len = buffer_length < kMaxUint64DecimalDigits ? buffer_length : kMaxUint64DecimalDigits;
+    int const max_len = num_digits < kMaxUint64DecimalDigits ? num_digits : kMaxUint64DecimalDigits;
     int i = 0;
     for ( ; i < max_len; ++i)
     {
-        DTOA_ASSERT(buffer[i] >= '0');
-        DTOA_ASSERT(buffer[i] <= '9');
-        significand = 10 * significand + static_cast<uint32_t>(buffer[i] - '0');
+        DTOA_ASSERT(digits[i] <= 9);
+        significand = 10 * significand + digits[i];
     }
 
-    if (i < buffer_length)
+    if (i < num_digits)
     {
-        DTOA_ASSERT(buffer[i] >= '0');
-        DTOA_ASSERT(buffer[i] <= '9');
-        if (buffer[i] >= '5')
+        DTOA_ASSERT(digits[i] <= 9);
+        if (digits[i] >= 5)
         {
             // Round up.
             DTOA_ASSERT(significand != UINT64_MAX);
@@ -376,28 +291,6 @@ inline DiyFp GetAdjustmentPowerOfTen(int exponent)
         { 0xC350000000000000, -47 }, // == 10^5
         { 0xF424000000000000, -44 }, // == 10^6
         { 0x9896800000000000, -40 }, // == 10^7
-#if 0
-        { 0xBEBC200000000000, -37 }, // == 10^8
-        { 0xEE6B280000000000, -34 }, // == 10^9
-        { 0x9502F90000000000, -30 }, // == 10^10
-        { 0xBA43B74000000000, -27 }, // == 10^11
-        { 0xE8D4A51000000000, -24 }, // == 10^12
-        { 0x9184E72A00000000, -20 }, // == 10^13
-        { 0xB5E620F480000000, -17 }, // == 10^14
-        { 0xE35FA931A0000000, -14 }, // == 10^15
-        { 0x8E1BC9BF04000000, -10 }, // == 10^16
-        { 0xB1A2BC2EC5000000,  -7 }, // == 10^17
-        { 0xDE0B6B3A76400000,  -4 }, // == 10^18
-        { 0x8AC7230489E80000,   0 }, // == 10^19
-        { 0xAD78EBC5AC620000,   3 }, // == 10^20
-        { 0xD8D726B7177A8000,   6 }, // == 10^21
-        { 0x878678326EAC9000,  10 }, // == 10^22
-        { 0xA968163F0A57B400,  13 }, // == 10^23
-        { 0xD3C21BCECCEDA100,  16 }, // == 10^24
-        { 0x84595161401484A0,  20 }, // == 10^25
-        { 0xA56FA5B99019A5C8,  23 }, // == 10^26
-        { 0xCECB8F27F4200F3A,  26 }, // == 10^27
-#endif
     };
 
     DTOA_ASSERT(exponent > 0);
@@ -416,58 +309,56 @@ constexpr int kMinDecimalPower = -324;
 
 // Returns the significand size for a given order of magnitude.
 //
-// If v = f*2^e with 2^p-1 <= f <= 2^p then p+e is v's order of magnitude.
+// If v = f * 2^e with 2^(q-1) <= f <= 2^q then (q+e) is v's order of magnitude.
+// If v = s * 2^e with 1/2 <= s < 1 then e is v's order of magnitude.
 //
 // This function returns the number of significant binary digits v will have
-// once it's encoded into a double. In almost all cases this is equal to
-// SignificandSize. The only exceptions are denormals. They start with
+// once it's encoded into a 'double'. In almost all cases this is equal to
+// Double::SignificandSize. The only exceptions are denormals. They start with
 // leading zeroes and their effective significand-size is hence smaller.
-template <typename Float>
-inline int SignificandSizeForOrderOfMagnitude(int order)
+inline int EffectiveSignificandSize(int order)
 {
-    using Traits = IEEE<Float>;
+    if (order >= Double::MinExponent + Double::SignificandSize)
+        return Double::SignificandSize;
 
-    if (order >= Traits::MinExponent + Traits::SignificandSize)
-        return Traits::SignificandSize;
-
-    if (order <= Traits::MinExponent)
+    if (order <= Double::MinExponent)
         return 0;
 
-    return order - Traits::MinExponent;
+    return order - Double::MinExponent;
 }
 
-// If the function returns true then the result is the correct double.
-// Otherwise it is either the correct double or the double that is just below
-// the correct double.
+// Use DiyFp's to approximate digits * 10^exponent.
 //
-// PRE: buffer_length + exponent <= kMaxDecimalPower
-// PRE: buffer_length + exponent >  kMinDecimalPower
-template <typename Float>
-inline bool StringToIeeeApprox(char const* buffer, int buffer_length, int exponent, Float& result)
+// If the function returns true then 'result' is the correct double.
+// Otherwise 'result' is either the correct double or the double that is just
+// below the correct double.
+//
+// PRE: num_digits + exponent <= kMaxDecimalPower
+// PRE: num_digits + exponent >  kMinDecimalPower
+inline bool StringToDoubleApprox(uint8_t const* digits, int num_digits, int exponent, double& result)
 {
-    // TODO:
-    // Understand this...
-
     static_assert(DiyFp::SignificandSize == 64,
         "We use uint64_ts. This only works if the DiyFp uses uint64_ts too.");
 
-    DTOA_ASSERT(buffer_length + exponent <= kMaxDecimalPower);
-    DTOA_ASSERT(buffer_length + exponent >  kMinDecimalPower);
+    DTOA_ASSERT(num_digits + exponent <= kMaxDecimalPower);
+    DTOA_ASSERT(num_digits + exponent >  kMinDecimalPower);
 
-    // 1)
     //
-    // Compute an approximation `input` of B using DiyFp's.
+    // Compute an approximation 'input' for B = digits * 10^exponent
+    // using DiyFp's.
+    // And keep track of the error.
     //
     //                       <-- error -->
-    //                               B = buffer * 10^exponent
-    //  ---------[-----------|-------+---]------------------------------------
+    //                               B = digits * 10^exponent
+    //  ---------(-----------|-------+---)------------------------------------
     //                       input
-    //                       ~= buffer * 10^exponent
+    //                       ~= digits * 10^exponent
+    //
 
     int read_digits;
-    auto input = ReadDiyFp(buffer, buffer_length, read_digits);
+    auto input = ReadDiyFp(digits, num_digits, read_digits);
 
-    int const remaining_decimals = buffer_length - read_digits; // 0 <= rd < buffer_length
+    int const remaining_decimals = num_digits - read_digits; // 0 <= rd < num_digits
 
     // Move the remaining decimals into the exponent.
     exponent += remaining_decimals;
@@ -523,17 +414,23 @@ inline bool StringToIeeeApprox(char const* buffer, int buffer_length, int expone
         auto const adjustment_exponent = exponent - cached.k;
         auto const adjustment_power = GetAdjustmentPowerOfTen(adjustment_exponent);
 
+        auto const input_f_old = input.f;
         input = Multiply(input, adjustment_power);
         // input ~= digits * 10^adjustment_exponent
 
         // Adjust error.
         // The adjustment_power is exact (error_b = error_ab = 0).
         // There is hence only an additional error of (at most) 1/2.
-        if (buffer_length + adjustment_exponent <= kMaxUint64DecimalDigits)
+
+        if (num_digits + adjustment_exponent <= kMaxUint64DecimalDigits)
         {
             // input and adjustment_power are exact.
-            // The product buffer * 10^adjustment_exponent fits into an uint64_t.
+            // The product digits * 10^adjustment_exponent fits into an uint64_t.
             // input * adjustment_power is therefore exact, too.
+
+            // (Assert the lower 64-bits of the product are 0.)
+            DTOA_ASSERT(input_f_old * adjustment_power.f == 0);
+            static_cast<void>(input_f_old);
         }
         else
         {
@@ -544,9 +441,9 @@ inline bool StringToIeeeApprox(char const* buffer, int buffer_length, int expone
     input = Multiply(input, cached_power);
     // input ~= digits * 10^exponent
 
-    // Adjust error.
-    // Substituting a with 'input' and b with 'cached_power' we have
-    //   error_b  = 0.5  (all cached powers have an error of less than 0.5 ulp),
+    // Adjust the error.
+    // Substituting 'a' with 'input' and 'b' with 'cached_power' we have
+    //   error_b  = 0.5  (all cached powers have an error of less than 1/2 ulp),
     //   error_ab = 0 or 1/kDenominator > error_a*error_b/2^64
     uint64_t const error_a = error;
     uint64_t const error_b = kDenominator / 2;
@@ -563,47 +460,44 @@ inline bool StringToIeeeApprox(char const* buffer, int buffer_length, int expone
         error <<= s;                // error * 2^e = (error * 2^s) * 2^(e - s)
     }
 
-    // 2)
     //
-    // We now have an approximation B = buffer * 10^exponent.
+    // We now have an approximation input = f * 2^e ~= digits * 10^exponent.
     //
     //                       <-- error -->
-    //                               B = buffer * 10^exponent
-    //  ---------[-----------|-------+---]------------------------------------
+    //                               B = digits * 10^exponent
+    //  ---------(-----------|-------+---)------------------------------------
     //                       input
-    //                       ~= buffer * 10^exponent
+    //                       ~= digits * 10^exponent
+    //
+    // When converting f * 2^e, which has a q-bit significand, into an IEEE
+    // double-precision number, we need to drop some 'extra_bits' bits of
+    // precision.
+    //
 
-    // See if the double's significand changes if we add/subtract the error.
-
-    // For v = f * 2^e, where 2^(q-1) <= f < 2^q, the order of magnitude is q+e.
     int const order_of_magnitude = DiyFp::SignificandSize + input.e;
 
-    // Determine the number of significand digits needed the DiyFp `input` will
-    // have once encoded as an IEEE double-precision number.
-    int const effective_significand_size = SignificandSizeForOrderOfMagnitude<Float>(order_of_magnitude);
+    int const effective_significand_size = EffectiveSignificandSize(order_of_magnitude);
     DTOA_ASSERT(effective_significand_size >= 0);
     DTOA_ASSERT(effective_significand_size <= 53);
 
-    // Determine the effective number of extra bits of precision we have and see
-    // if these extra bits of precision are sufficient to ensure that the
-    // rounded `input` will be correctly rounded.
-    // (When converting 'input' to double, the lower 'extra_bits' will be discarded.)
     int extra_bits = DiyFp::SignificandSize - effective_significand_size;
     DTOA_ASSERT(extra_bits >= 11);
     DTOA_ASSERT(extra_bits <= 64);
 
     if (extra_bits + kDenominatorLog >= DiyFp::SignificandSize)
     {
-        // This can only happen for very small denormals. In this case
-        // 'half' (see below) multiplied by kDenominator exceeds the range of an uint64.
+        // This can only happen for very small denormals. In this case 'half'
+        // (see below) multiplied by kDenominator exceeds the range of an
+        // uint64_t.
         // Simply shift everything to the right.
+        // And adjust the error.
 
-        // input = f * 2^e ~= floor(f / 2^s) * 2^(e + s)
-        int const s = (extra_bits + kDenominatorLog) - DiyFp::SignificandSize + 1;
+        // input = f * 2^e ~= (f div 2^s) * 2^(e + s)
+        int const s = extra_bits - (DiyFp::SignificandSize - kDenominatorLog - 1);
         input.f >>= s;
         input.e  += s;
 
-        // error * 2^e ~= floor(error / 2^s) * 2^(e + s)
+        // error * 2^e ~= (error div 2^s) * 2^(e + s)
         error >>= s;
 
         // We add kDenominator for the lost precision of input.f
@@ -611,67 +505,85 @@ inline bool StringToIeeeApprox(char const* buffer, int buffer_length, int expone
         // We add 1 for the lost precision of error,
         error += 1;             // 1 = 1/kDenominator ulp
 
-        //extra_bits -= s;
         extra_bits = DiyFp::SignificandSize - kDenominatorLog - 1;
     }
 
+    //
+    // f = (f div 2^p) * 2^p + (f mod 2^p)
+    //   = (p1       ) * 2^p + (p2       )
+    //
+    //                             f = p1 * 2^p + p2
+    //   <--- p2 ------------------>
+    //                 <-- error --+-- error -->
+    // --|-------------(-----------+------|----)---------------------------|--
+    //   p1 * 2^p                                                 (p1 + 1) * 2^p
+    //   <------------- half ------------->
+    //                  = 2^p / 2
+    //
+    // The correct double now is either p1 * 2^(e + p) or (p1 + 1) * 2^(e + p).
+    // In case p2 + error < half, we can safely round down. If p2 - error > half
+    // we can safely round up. Otherwise, we are too inaccurate. In this case
+    // we round down, so the returned double is either the correct double or the
+    // double just below the correct double. In this case we return false, so
+    // that the we can fall back to a more precise algorithm.
+    //
+
     DTOA_ASSERT(extra_bits >= 11);
+    DTOA_ASSERT(extra_bits <  64);
     DTOA_ASSERT(extra_bits <  DiyFp::SignificandSize - kDenominatorLog);
 
-    // Split the significand f of input into an integral and a fractional part:
-    //  f = iiii.ffff = int * 2^extra_bits + frac
-    // where
-    //  frac < 2^extra_bits
-
-    uint64_t frac = input.f & ((uint64_t{1} << extra_bits) - 1);
+    uint64_t p2   = input.f & ((uint64_t{1} << extra_bits) - 1);
     uint64_t half = uint64_t{1} << (extra_bits - 1);
-    // error is scaled by kDenominator.
-    // In order to compare 'frac' and 'half' with error, these values need to be
+    // 'error' is scaled by kDenominator.
+    // In order to compare 'p2' and 'half' with 'error', these values need to be
     // scaled, too.
-    frac *= kDenominator;
+    DTOA_ASSERT(p2   <= UINT64_MAX / kDenominator);
+    DTOA_ASSERT(half <= UINT64_MAX / kDenominator);
+    p2   *= kDenominator;
     half *= kDenominator;
 
-    DTOA_ASSERT(half <= UINT64_MAX - error);
-
-    // -+-----------+-----------+----------------------------
-    //  h=           f
-
-    // Round the significand to p bits: f = round(f / 2^prec) * 2^prec, move the
-    // factor of 2^prec into the exponent.
+    // Truncate the significand to p = Float::SignificandSize bits and move the
+    // remaining bits into the exponent.
     input.f >>= extra_bits;
     input.e  += extra_bits;
-    if (frac >= half + error)
+
+    DTOA_ASSERT(error > 0);
+    DTOA_ASSERT(half >= error);
+    DTOA_ASSERT(half <= UINT64_MAX - error);
+
+    // Since 'error' is non-zero, we can safely use '<=' and '>=' in the
+    // comparisons below.
+
+    bool success;
+    if (p2 >= half + error)
     {
         // Round up.
         DTOA_ASSERT(input.f != UINT64_MAX);
         ++input.f;
+        success = true;
+    }
+    else if (p2 <= half - error)
+    {
+        // Round down.
+        success = true;
     }
     else
     {
-        // Round down.
-
-        // If the last_bits are too close to the half-way case than we are too
-        // inaccurate and round down. In this case we return false so that we can
-        // fall back to a more precise algorithm.
+        // Too imprecise.
+        // Round down and return false, so that we can fall back to a more
+        // precise algorithm.
+        success = false;
     }
 
-    result = FloatFromDiyFp<Float>(input); // (Truncate to 53-bits and convert to double-precision.)
-
-    if (half - error < frac && frac < half + error)
-    {
-        // Too imprecise. The caller will have to fall back to a slower version.
-        // However the returned number is guaranteed to be either the correct
-        // double, or the double just below the correct double.
-        return false;
-    }
-
-    return true;
+    result = DoubleFromDiyFp(input);
+    return success;
 }
 
 //--------------------------------------------------------------------------------------------------
-// StringToIeee
+// StringToDouble
 //--------------------------------------------------------------------------------------------------
 
+#if 1
 // Maximum number of significant digits in decimal representation.
 // The longest possible double in decimal representation is
 // (2^53 - 1) * 2^(1-1023-52) that is (2^53 - 1) * 5^1074 / 10^1074 (768 digits). If
@@ -679,15 +591,15 @@ inline bool StringToIeeeApprox(char const* buffer, int buffer_length, int expone
 // doubles (that could have up to 769 digits) the result must be rounded to the
 // bigger one unless the tail consists of zeros, so we don't need to preserve
 // all the digits.
-//constexpr int kMaxSignificantDigits = 772;
+constexpr int kMaxSignificantDigits = 772;
+#else
 constexpr int kMaxSignificantDigits = 767 + 1;
+#endif
 
 // Maximum number of significant digits in the decimal representation.
 // In fact the value is 772 (see conversions.cc), but to give us some margin
 // we round up to 780.
 constexpr int kMaxSignificantDecimalDigits = 780;
-
-#if DTOA_STRTOD_FULL_PRECISION
 
 struct DiyInt // bigits * 2^exponent
 {
@@ -707,6 +619,7 @@ struct DiyInt // bigits * 2^exponent
 inline void AssignZero(DiyInt& x)
 {
     x.size = 0;
+    x.exponent = 0;
 }
 
 inline void AssignU64(DiyInt& x, uint64_t value)
@@ -770,21 +683,20 @@ inline void AddU32(DiyInt& x, uint32_t value)
     }
 }
 
-inline uint32_t ReadU32(char const* buffer, int num_digits)
+inline uint32_t ReadU32(uint8_t const* digits, int num_digits)
 {
     uint32_t result = 0;
 
     for (int i = 0; i < num_digits; ++i)
     {
-        DTOA_ASSERT(buffer[i] >= '0');
-        DTOA_ASSERT(buffer[i] <= '9');
-        result = 10 * result + static_cast<uint32_t>(buffer[i] - '0');
+        DTOA_ASSERT(digits[i] <= 9);
+        result = 10 * result + digits[i];
     }
 
     return result;
 }
 
-inline void AssignDecimalString(DiyInt& x, char const* buffer, int length)
+inline void AssignDecimalDigits(DiyInt& x, uint8_t const* digits, int num_digits)
 {
     static constexpr uint32_t kPow10[] = {
         1, // (unused)
@@ -802,26 +714,26 @@ inline void AssignDecimalString(DiyInt& x, char const* buffer, int length)
     AssignZero(x);
 
 #if 0
-    while (length >= 9)
+    while (num_digits >= 9)
     {
         MulU32(x, 1000000000);
-        AddU32(x, ReadU32(buffer, 9));
-        length -= 9;
-        buffer += 9;
+        AddU32(x, ReadU32(digits, 9));
+        digits     += 9;
+        num_digits -= 9;
     }
-    if (length > 0)
+    if (num_digits > 0)
     {
-        MulU32(x, kPow10[length]);
-        AddU32(x, ReadU32(buffer, length));
+        MulU32(x, kPow10[num_digits]);
+        AddU32(x, ReadU32(digits, num_digits));
     }
 #else
-    while (length > 0)
+    while (num_digits > 0)
     {
-        int const n = Min(length, 9);
+        int const n = Min(num_digits, 9);
         MulU32(x, kPow10[n]);
-        AddU32(x, ReadU32(buffer, n));
-        length -= n;
-        buffer += n;
+        AddU32(x, ReadU32(digits, n));
+        digits     += n;
+        num_digits -= n;
     }
 #endif
 }
@@ -881,7 +793,7 @@ inline void MulPow5(DiyInt& x, int exp)
     if (exp == 0)
         return;
 
-#if 1
+#if 0
     while (exp >= 13)
     {
         MulU32(x, 1220703125);
@@ -899,6 +811,12 @@ inline void MulPow5(DiyInt& x, int exp)
         exp -= n;
     }
 #endif
+}
+
+inline void MulPow10(DiyInt& x, int exp)
+{
+    MulPow5(x, exp);
+    MulPow2(x, exp);
 }
 
 inline int Compare(DiyInt const& lhs, DiyInt const& rhs)
@@ -927,24 +845,27 @@ inline int Compare(DiyInt const& lhs, DiyInt const& rhs)
     return 0;
 }
 
-// Compate buffer * 10^exponent with v = f * 2^e
+// Compare digits * 10^exponent with v = f * 2^e.
 //
-// PRE: buffer_length + exponent <= kMaxDecimalPower + 1
-// PRE: buffer_length + exponent >  kMinDecimalPower
-// PRE: buffer_length            <= kMaxSignificantDecimalDigits
-inline int CompareBufferWithDiyFp(char const* buffer, int buffer_length, int exponent, DiyFp v)
+// PRE: num_digits + exponent <= kMaxDecimalPower + 1
+// PRE: num_digits + exponent >  kMinDecimalPower
+// PRE: num_digits            <= kMaxSignificantDecimalDigits
+inline int CompareBufferWithDiyFp(uint8_t const* digits, int num_digits, int exponent, DiyFp v)
 {
-    DTOA_ASSERT(buffer_length + exponent <= kMaxDecimalPower + 1);
-    DTOA_ASSERT(buffer_length + exponent > kMinDecimalPower);
-    DTOA_ASSERT(buffer_length <= kMaxSignificantDecimalDigits);
+    DTOA_ASSERT(num_digits + exponent <= kMaxDecimalPower + 1);
+    DTOA_ASSERT(num_digits + exponent >  kMinDecimalPower);
+    DTOA_ASSERT(num_digits            <= kMaxSignificantDecimalDigits);
 
     DiyInt lhs;
     DiyInt rhs;
 
-    AssignDecimalString(lhs, buffer, buffer_length);
+    AssignDecimalDigits(lhs, digits, num_digits);
     AssignU64(rhs, v.f);
 
 #if 1
+    MulPow10(exponent >= 0 ? lhs : rhs, exponent >= 0 ? exponent : -exponent);
+    MulPow2 (v.e      >= 0 ? rhs : lhs, v.e      >= 0 ? v.e      : -v.e     );
+#else
     int lhs_exp2 = 0;
     int rhs_exp2 = 0;
 
@@ -963,38 +884,7 @@ inline int CompareBufferWithDiyFp(char const* buffer, int buffer_length, int exp
     lhs_exp2 -= min_exp2;
     rhs_exp2 -= min_exp2;
 
-    auto& m5 = (exponent >= 0) ? lhs : rhs;
-    MulPow5(m5, (exponent >= 0) ? exponent : -exponent);
-
-    MulPow2(lhs, lhs_exp2);
-    MulPow2(rhs, rhs_exp2);
-#else
-    int lhs_exp5 = 0;
-    int rhs_exp5 = 0;
-    int lhs_exp2 = 0;
-    int rhs_exp2 = 0;
-
-    if (exponent >= 0) {
-        lhs_exp5 += exponent;
-        lhs_exp2 += exponent;
-    } else {
-        rhs_exp5 -= exponent;
-        rhs_exp2 -= exponent;
-    }
-
-    if (v.e >= 0)
-        rhs_exp2 += v.e;
-    else
-        lhs_exp2 -= v.e;
-
-    // Remove common factors of 2.
-    int const min_exp2 = Min(lhs_exp2, rhs_exp2);
-    lhs_exp2 -= min_exp2;
-    rhs_exp2 -= min_exp2;
-
-    MulPow5(lhs, lhs_exp5);
-    MulPow5(rhs, rhs_exp5);
-
+    MulPow5(exponent >= 0 ? lhs : rhs, exponent >= 0 ? exponent : -exponent);
     MulPow2(lhs, lhs_exp2);
     MulPow2(rhs, rhs_exp2);
 #endif
@@ -1003,71 +893,61 @@ inline int CompareBufferWithDiyFp(char const* buffer, int buffer_length, int exp
 }
 
 // Returns whether the significand f of v = f * 2^e is even.
-template <typename Float>
-inline bool SignificandIsEven(Float v)
+inline bool SignificandIsEven(double v)
 {
-    using Traits = IEEE<Float>;
-
-    auto const bits = ReinterpretBits<typename Traits::bits_type>(v);
-    return (bits & 1) == 0;
+    return (Double(v).Significand() & 1) == 0;
 }
 
 // Returns the next larger double-precision value.
 // If v is +Infinity returns v.
-template <typename Float>
-inline Float NextFloat(Float v)
+inline double NextFloat(double v)
 {
-    return std::nextafter(v, std::numeric_limits<Float>::infinity());
+    return Double(v).NextValue();
 }
 
-#endif // DTOA_STRTOD_FULL_PRECISION
-
-template <typename Float>
-inline bool ComputeGuess(Float& result, char const* buffer, int buffer_length, int exponent)
+inline bool ComputeGuess(double& result, uint8_t const* digits, int num_digits, int exponent)
 {
-    if (buffer_length == 0) {
+    if (num_digits == 0) {
         result = 0;
         return true;
     }
 
-    DTOA_ASSERT(buffer_length <= kMaxSignificantDecimalDigits);
-    DTOA_ASSERT(buffer[0] != '0');
-    DTOA_ASSERT(buffer[buffer_length - 1] != '0');
+    DTOA_ASSERT(num_digits <= kMaxSignificantDecimalDigits);
+    DTOA_ASSERT(digits[0] > 0);
+    DTOA_ASSERT(digits[num_digits - 1] > 0);
 
     // Any v >= 10^309 is interpreted as +Infinity.
-    if (buffer_length + exponent >= kMaxDecimalPower + 1) {
-        result = std::numeric_limits<Float>::infinity();
+    if (num_digits + exponent >= kMaxDecimalPower + 1) {
+        result = std::numeric_limits<double>::infinity();
         return true;
     }
 
     // Any v <= 10^-324 is interpreted as 0.
-    if (buffer_length + exponent <= kMinDecimalPower) {
+    if (num_digits + exponent <= kMinDecimalPower) {
         result = 0;
         return true;
     }
 
-    if (StringToIeeeFast(buffer, buffer_length, exponent, result)) {
+    if (StringToDoubleFast(digits, num_digits, exponent, result)) {
         return true;
     }
-    if (StringToIeeeApprox(buffer, buffer_length, exponent, result)) {
+    if (StringToDoubleApprox(digits, num_digits, exponent, result)) {
         return true;
     }
-    if (result == std::numeric_limits<Float>::infinity()) {
+    if (result == std::numeric_limits<double>::infinity()) {
         return true;
     }
 
     return false;
 }
 
-template <typename Float>
-inline Float StringToIeee(char const* buffer, int buffer_length, int exponent)
+inline double StringToDouble(uint8_t const* digits, int num_digits, int exponent)
 {
-    Float v;
-    if (ComputeGuess(v, buffer, buffer_length, exponent)) {
+    double v;
+    if (ComputeGuess(v, digits, num_digits, exponent)) {
         return v;
     }
 
-#if DTOA_STRTOD_FULL_PRECISION
     // Now v is either the correct or the next-lower double (i.e. the correct double is v+).
     // Compare B = buffer * 10^exponent with v's upper boundary m+.
     //
@@ -1075,14 +955,11 @@ inline Float StringToIeee(char const* buffer, int buffer_length, int exponent)
     //  ---+--------+----+-------------+---
     //              B
 
-    int const cmp = CompareBufferWithDiyFp(buffer, buffer_length, exponent, UpperBoundary(v));
+    int const cmp = CompareBufferWithDiyFp(digits, num_digits, exponent, UpperBoundary(v));
     if (cmp < 0 || (cmp == 0 && SignificandIsEven(v))) {
         return v;
     }
     return NextFloat(v);
-#else
-    return v;
-#endif
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1090,98 +967,44 @@ inline Float StringToIeee(char const* buffer, int buffer_length, int exponent)
 //--------------------------------------------------------------------------------------------------
 #if 0
 
-#if 0
-inline int DigitValue(char ch)
+inline int CountTrailingZeros(uint8_t const* digits, int num_digits)
 {
-#define N -1
-    static constexpr int8_t const kDigitValue[256] = {
-    //  NUL   SOH   STX   ETX   EOT   ENQ   ACK   BEL   BS    HT    LF    VT    FF    CR    SO    SI
-        N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,
-    //  DLE   DC1   DC2   DC3   DC4   NAK   SYN   ETB   CAN   EM    SUB   ESC   FS    GS    RS    US
-        N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,
-    //  space !     "     #     $     %     &     '     (     )     *     +     ,     -     .     /
-        N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,
-    //  0     1     2     3     4     5     6     7     8     9     :     ;     <     =     >     ?
-        0,    1,    2,    3,    4,    5,    6,    7,    8,    9,    N,    N,    N,    N,    N,    N,
-    //  @     A     B     C     D     E     F     G     H     I     J     K     L     M     N     O
-        N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,
-    //  P     Q     R     S     T     U     V     W     X     Y     Z     [     \     ]     ^     _
-        N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,
-    //  `     a     b     c     d     e     f     g     h     i     j     k     l     m     n     o
-        N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,
-    //  p     q     r     s     t     u     v     w     x     y     z     {     |     }     ~     DEL
-        N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,
-        N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,
-        N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,
-        N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,
-        N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,
-        N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,
-        N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,
-        N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,
-        N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,    N,
-    };
-#undef N
+    DTOA_ASSERT(num_digits >= 0);
 
-    return kDigitValue[static_cast<unsigned char>(ch)];
-}
-#else
-inline int DigitValue(char ch)
-{
-    if ('0' <= ch && ch <= '9')
-        return ch - '0';
-    return -1;
-}
-#endif
-
-inline bool IsDigit(char ch)
-{
-    return DigitValue(ch) >= 0;
-}
-
-inline int CountTrailingZeros(char const* buffer, int buffer_length)
-{
-    DTOA_ASSERT(buffer_length >= 0);
-
-    int i = buffer_length;
-    for ( ; i > 0; --i)
+    int i = num_digits;
+    for ( ; i > 0 && digits[i - 1] == 0; --i)
     {
-        if (buffer[i - 1] != '0')
-            break;
     }
 
-    return buffer_length - i;
+    return num_digits - i;
 }
 
-template <typename Float>
-inline Float SignedZero(bool negative)
+inline double SignedZero(bool negative)
 {
-    return negative ? -static_cast<Float>(0) : static_cast<Float>(0);
+    return negative ? -0.0 : 0.0;
 }
 
-template <typename Float>
-inline bool Strtod(Float& result, char const* next, char const* last)
+inline bool Strtod(double& result, char const* next, char const* last)
 {
     // Inputs larger than kMaxInt (currently) can not be handled.
     // To avoid overflow in integer arithmetic.
     constexpr int const kMaxInt = INT_MAX / 4;
 
-    if (next == last)
-    {
+    if (next == last) {
         result = 0; // [Recover.]
         return true;
     }
 
-    if (last - next >= kMaxInt)
-    {
+    if (last - next >= kMaxInt) {
         return false;
     }
 
     constexpr int const kBufferSize = kMaxSignificantDigits + 1;
 
-    char buffer[kBufferSize];
-    int  length = 0;
-    int  exponent = 0;
-    bool nonzero_digit_dropped = false;
+    uint8_t digits[kBufferSize];
+    int     num_digits = 0;
+    int     exponent = 0;
+    bool    nonzero_digit_dropped = false;
 
     bool is_neg = false;
     if (*next == '-')
@@ -1191,7 +1014,7 @@ inline bool Strtod(Float& result, char const* next, char const* last)
         ++next;
         if (next == last)
         {
-            result = SignedZero<Float>(is_neg); // Recover.
+            result = SignedZero(is_neg); // Recover.
             return false;
         }
     }
@@ -1200,7 +1023,7 @@ inline bool Strtod(Float& result, char const* next, char const* last)
         ++next;
         if (next == last)
         {
-            result = SignedZero<Float>(is_neg); // Recover.
+            result = SignedZero(is_neg); // Recover.
             return false;
         }
     }
@@ -1210,30 +1033,31 @@ inline bool Strtod(Float& result, char const* next, char const* last)
         ++next;
         if (next == last)
         {
-            result = SignedZero<Float>(is_neg);
+            result = SignedZero(is_neg);
             return true;
         }
     }
-    else if (IsDigit(*next))
+    else if ('1' <= *next && *next <= '9')
     {
         // Copy significant digits of the integer part (if any) to the buffer.
         for (;;)
         {
-            if (length < kMaxSignificantDigits)
+            int const digit = *next - '0';
+            if (num_digits < kMaxSignificantDigits)
             {
-                buffer[length++] = *next;
+                digits[num_digits++] = static_cast<uint8_t>(digit);
             }
             else
             {
                 ++exponent;
-                nonzero_digit_dropped = nonzero_digit_dropped || *next != '0';
+                nonzero_digit_dropped = nonzero_digit_dropped || digit != 0;
             }
             ++next;
             if (next == last)
             {
                 goto L_parsing_done;
             }
-            if (!IsDigit(*next))
+            if (*next < '0' || *next > '9')
             {
                 break;
             }
@@ -1272,7 +1096,7 @@ inline bool Strtod(Float& result, char const* next, char const* last)
             return false;
         }
 
-        if (length == 0)
+        if (num_digits == 0)
         {
             // Integer part consists of 0 (or is absent).
             // Significant digits start after leading zeros (if any).
@@ -1281,7 +1105,7 @@ inline bool Strtod(Float& result, char const* next, char const* last)
                 ++next;
                 if (next == last)
                 {
-                    result = SignedZero<Float>(is_neg);
+                    result = SignedZero(is_neg);
                     return true;
                 }
 
@@ -1292,16 +1116,17 @@ inline bool Strtod(Float& result, char const* next, char const* last)
 
         // There is a fractional part.
         // We don't emit a '.', but adjust the exponent instead.
-        while (IsDigit(*next))
+        while ('0' <= *next && *next <= '9')
         {
-            if (length < kMaxSignificantDigits)
+            int const digit = *next - '0';
+            if (num_digits < kMaxSignificantDigits)
             {
-                buffer[length++] = *next;
+                digits[num_digits++] = static_cast<uint8_t>(digit);
                 --exponent;
             }
             else
             {
-                nonzero_digit_dropped = nonzero_digit_dropped || *next != '0';
+                nonzero_digit_dropped = nonzero_digit_dropped || digit != 0;
             }
             ++next;
             if (next == last)
@@ -1335,7 +1160,7 @@ inline bool Strtod(Float& result, char const* next, char const* last)
             }
         }
 
-        if (!IsDigit(*next))
+        if (*next < '0' || *next > '9')
         {
             // XXX:
             // Recover? Parse as if exponent = 0?
@@ -1345,15 +1170,13 @@ inline bool Strtod(Float& result, char const* next, char const* last)
         int num = 0;
         for (;;)
         {
-            DTOA_ASSERT(IsDigit(*next));
             int const digit = *next - '0';
 
             if (num > kMaxInt / 10 || digit > kMaxInt - 10 * num)
             {
                 // Overflow.
                 // Skip the rest of the exponent (ignored).
-                //for (++next; next != last && IsDigit(*next); ++next)
-                for (++next; next != last && DigitValue(*next) >= 0; ++next)
+                for (++next; next != last && '0' <= *next && *next <= '9'; ++next)
                 {
                 }
                 num = kMaxInt;
@@ -1366,7 +1189,7 @@ inline bool Strtod(Float& result, char const* next, char const* last)
             {
                 break;
             }
-            if (!IsDigit(*next))
+            if (*next < '0' || *next > '9')
             {
                 break; // trailing junk
             }
@@ -1376,8 +1199,8 @@ inline bool Strtod(Float& result, char const* next, char const* last)
     }
 
 L_parsing_done:
-#if 1
-    if (/*allow_trailing_junk &&*/ next != last)
+#if 0
+    if (/*!allow_trailing_junk &&*/ next != last)
     {
         return false; // trailing junk
     }
@@ -1387,19 +1210,20 @@ L_parsing_done:
     {
         // Set the last digit to be non-zero.
         // This is sufficient to guarantee correct rounding.
-        DTOA_ASSERT(length == kMaxSignificantDigits);
-        DTOA_ASSERT(length < kBufferSize);
-        buffer[length++] = '1';
+        DTOA_ASSERT(num_digits == kMaxSignificantDigits);
+        DTOA_ASSERT(num_digits < kBufferSize);
+        digits[num_digits++] = 1;
         --exponent;
     }
     else
     {
-        int const num_zeros = CountTrailingZeros(buffer, length);
-        length   -= num_zeros;
-        exponent += num_zeros;
+        int const num_zeros = CountTrailingZeros(digits, num_digits);
+        num_digits -= num_zeros;
+        exponent   += num_zeros;
     }
 
-    auto value = StringToIeee<Float>(buffer, length, exponent);
+    auto value = StringToDouble(digits, num_digits, exponent);
+    DTOA_ASSERT(!Double(value).SignBit());
     result = is_neg ? -value : value;
     return true;
 }

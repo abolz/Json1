@@ -684,7 +684,17 @@ public:
     }
 
 private:
-    void _clear();
+    void _clear()
+    {
+        if (type_ < Type::string) {
+            type_ = Type::undefined;
+            return;
+        }
+
+        _clear_allocated();
+    }
+
+    void _clear_allocated();
     template <typename T> String& _assign_string(T&& value);
     template <typename T> Array&  _assign_array (T&& value);
     template <typename T> Object& _assign_object(T&& value);

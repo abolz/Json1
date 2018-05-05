@@ -252,66 +252,16 @@ char* json::numbers::NumberToString(char* next, char* last, double value, bool f
 // StringToNumber
 //==================================================================================================
 
-#if 0
-static int DigitValue(char ch)
+static int CountTrailingZeros(uint8_t const* digits, int num_digits)
 {
-#define N -1
-    static constexpr int8_t const kDigitValue[256] = {
-    //  NUL     SOH     STX     ETX     EOT     ENQ     ACK     BEL     BS      HT      LF      VT      FF      CR      SO      SI
-        N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,
-    //  DLE     DC1     DC2     DC3     DC4     NAK     SYN     ETB     CAN     EM      SUB     ESC     FS      GS      RS      US
-        N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,
-    //  space   !       "       #       $       %       &       '       (       )       *       +       ,       -       .       /
-        N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,
-    //  0       1       2       3       4       5       6       7       8       9       :       ;       <       =       >       ?
-        0,      1,      2,      3,      4,      5,      6,      7,      8,      9,      N,      N,      N,      N,      N,      N,
-    //  @       A       B       C       D       E       F       G       H       I       J       K       L       M       N       O
-        N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,
-    //  P       Q       R       S       T       U       V       W       X       Y       Z       [       \       ]       ^       _
-        N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,
-    //  `       a       b       c       d       e       f       g       h       i       j       k       l       m       n       o
-        N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,
-    //  p       q       r       s       t       u       v       w       x       y       z       {       |       }       ~       DEL
-        N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,
-        N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,
-        N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,
-        N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,
-        N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,
-        N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,
-        N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,
-        N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,
-        N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,
-    };
-#undef N
+    assert(num_digits >= 0);
 
-    return kDigitValue[static_cast<unsigned char>(ch)];
-}
-#else
-static int DigitValue(char ch)
-{
-    if ('0' <= ch && ch <= '9')
-        return ch - '0';
-    return -1;
-}
-#endif
-
-static bool IsDigit(char ch)
-{
-    return DigitValue(ch) >= 0;
-}
-
-static int CountTrailingZeros(char const* buffer, int buffer_length)
-{
-    assert(buffer_length >= 0);
-
-    int i = buffer_length;
-    for ( ; i > 0; --i)
+    int i = num_digits;
+    for ( ; i > 0 && digits[i - 1] == 0; --i)
     {
-        if (buffer[i - 1] != '0')
-            break;
     }
 
-    return buffer_length - i;
+    return num_digits - i;
 }
 
 static bool Strtod(double& result, char const* next, char const* last, Options const& options)
@@ -335,10 +285,10 @@ static bool Strtod(double& result, char const* next, char const* last, Options c
     constexpr int kMaxSignificantDigits = base_conv::kMaxSignificantDigits;
     constexpr int kBufferSize = kMaxSignificantDigits + 1;
 
-    char buffer[kBufferSize];
-    int  length = 0;
-    int  exponent = 0;
-    bool nonzero_digit_dropped = false;
+    uint8_t digits[kBufferSize];
+    int     num_digits = 0;
+    int     exponent = 0;
+    bool    nonzero_digit_dropped = false;
 
     bool is_neg = false;
     if (*next == '-')
@@ -373,26 +323,27 @@ static bool Strtod(double& result, char const* next, char const* last, Options c
             return true;
         }
     }
-    else if (IsDigit(*next))
+    else if ('1' <= *next && *next <= '9')
     {
         // Copy significant digits of the integer part (if any) to the buffer.
         for (;;)
         {
-            if (length < kMaxSignificantDigits)
+            int const digit = *next - '0';
+            if (num_digits < kMaxSignificantDigits)
             {
-                buffer[length++] = *next;
+                digits[num_digits++] = static_cast<uint8_t>(digit);
             }
             else
             {
                 ++exponent;
-                nonzero_digit_dropped = nonzero_digit_dropped || *next != '0';
+                nonzero_digit_dropped = nonzero_digit_dropped || digit != 0;
             }
             ++next;
             if (next == last)
             {
                 goto L_parsing_done;
             }
-            if (!IsDigit(*next))
+            if (*next < '0' || *next > '9')
             {
                 break;
             }
@@ -429,7 +380,7 @@ static bool Strtod(double& result, char const* next, char const* last, Options c
             return false;
         }
 
-        if (length == 0)
+        if (num_digits == 0)
         {
             // Integer part consists of 0 (or is absent).
             // Significant digits start after leading zeros (if any).
@@ -449,16 +400,17 @@ static bool Strtod(double& result, char const* next, char const* last, Options c
 
         // There is a fractional part.
         // We don't emit a '.', but adjust the exponent instead.
-        while (IsDigit(*next))
+        while ('0' <= *next && *next <= '9')
         {
-            if (length < kMaxSignificantDigits)
+            int const digit = *next - '0';
+            if (num_digits < kMaxSignificantDigits)
             {
-                buffer[length++] = *next;
+                digits[num_digits++] = static_cast<uint8_t>(digit);
                 --exponent;
             }
             else
             {
-                nonzero_digit_dropped = nonzero_digit_dropped || *next != '0';
+                nonzero_digit_dropped = nonzero_digit_dropped || digit != 0;
             }
             ++next;
             if (next == last)
@@ -492,7 +444,7 @@ static bool Strtod(double& result, char const* next, char const* last, Options c
             }
         }
 
-        if (!IsDigit(*next))
+        if (*next < '0' || *next > '9')
         {
             // XXX:
             // Recover? Parse as if exponent = 0?
@@ -502,15 +454,13 @@ static bool Strtod(double& result, char const* next, char const* last, Options c
         int num = 0;
         for (;;)
         {
-            assert(IsDigit(*next));
             int const digit = *next - '0';
 
             if (num > kMaxInt / 10 || digit > kMaxInt - 10 * num)
             {
                 // Overflow.
                 // Skip the rest of the exponent (ignored).
-                //for (++next; next != last && IsDigit(*next); ++next)
-                for (++next; next != last && DigitValue(*next) >= 0; ++next)
+                for (++next; next != last && '0' <= *next && *next <= '9'; ++next)
                 {
                 }
                 num = kMaxInt;
@@ -523,7 +473,7 @@ static bool Strtod(double& result, char const* next, char const* last, Options c
             {
                 break;
             }
-            if (!IsDigit(*next))
+            if (*next < '0' || *next > '9')
             {
                 break; // trailing junk
             }
@@ -544,31 +494,33 @@ L_parsing_done:
     {
         // Set the last digit to be non-zero.
         // This is sufficient to guarantee correct rounding.
-        assert(length == kMaxSignificantDigits);
-        assert(length < kBufferSize);
-        buffer[length++] = '1';
+        assert(num_digits == kMaxSignificantDigits);
+        assert(num_digits < kBufferSize);
+        digits[num_digits++] = 1;
         --exponent;
     }
     else
     {
-        int const num_zeros = CountTrailingZeros(buffer, length);
-        length   -= num_zeros;
-        exponent += num_zeros;
+        int const num_zeros = CountTrailingZeros(digits, num_digits);
+        num_digits -= num_zeros;
+        exponent   += num_zeros;
     }
 
-    double value = base_conv::StringToIeee<double>(buffer, length, exponent);
+    double value = base_conv::StringToDouble(digits, num_digits, exponent);
+    assert(!std::signbit(value));
     result = is_neg ? -value : value;
     return true;
 }
 
-static double ReadDouble_unguarded(char const* buffer, int buffer_length)
+static double ReadDouble_unguarded(char const* digits, int num_digits)
 {
     int64_t result = 0;
 
-    for (int i = 0; i != buffer_length; ++i)
+    for (int i = 0; i != num_digits; ++i)
     {
-        assert(IsDigit(buffer[i]));
-        result = 10 * result + DigitValue(buffer[i]);
+        assert(digits[i] >= '0');
+        assert(digits[i] <= '9');
+        result = 10 * result + (digits[i] - '0');
     }
 
     return static_cast<double>(result);
@@ -593,27 +545,31 @@ double json::numbers::StringToNumber(char const* first, char const* last, Number
         return -std::numeric_limits<double>::infinity();
     }
 
-    char const* first_digit = first;
-
-    bool const is_neg = *first == '-';
-    if (is_neg || *first == '+')
-    {
-        ++first_digit;
-    }
-
 #if 1
     // Use a _slightly_ faster method for parsing integers which will fit into a
     // double-precision number without loss of precision. Larger numbers will be
     // handled by strtod.
-    //
-    // 10^15 < 2^53 = 9007199254740992 < 10^16
-    if (nc == NumberClass::integer && last - first_digit <= 16)
+    if (nc == NumberClass::integer)
     {
-        assert(IsDigit(*first_digit));
-        if (last - first_digit < 16 || *first_digit <= '8' /*|| std::memcmp(first_digit, "9007199254740992", 16) <= 0*/)
+        char const* first_digit = first;
+
+        bool const is_neg = *first == '-';
+        if (is_neg || *first == '+')
         {
-            double const result = ReadDouble_unguarded(first_digit, static_cast<int>(last - first_digit));
-            return is_neg ? -result : result;
+            ++first_digit;
+        }
+
+        // 10^15 < 2^53 = 9007199254740992 < 10^16
+        if (last - first_digit <= 16)
+        {
+            assert(*first_digit >= '0');
+            assert(*first_digit <= '9');
+
+            if (last - first_digit < 16 || *first_digit <= '8' /*|| std::memcmp(first_digit, "9007199254740992", 16) <= 0*/)
+            {
+                double const result = ReadDouble_unguarded(first_digit, static_cast<int>(last - first_digit));
+                return is_neg ? -result : result;
+            }
         }
     }
 #endif

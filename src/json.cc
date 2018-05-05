@@ -205,7 +205,7 @@ Value& Value::operator=(Value const& rhs)
     return *this;
 }
 
-void Value::_clear()
+void Value::_clear_allocated()
 {
     switch (type_)
     {
@@ -213,6 +213,7 @@ void Value::_clear()
     case Type::null:
     case Type::boolean:
     case Type::number:
+        assert(false && "invalid function call");
         break;
     case Type::string:
         delete data_.string;
@@ -1068,8 +1069,8 @@ ParseResult json::parse(Value& value, char const* next, char const* last, Option
     {
         assert(cb.stack.size() == 1);
 
-        auto& V = cb.stack.back();
-        value = std::move(V);
+//      value.swap(cb.stack.back());
+        value = std::move(cb.stack.back());
     }
 
     return res;

@@ -37,7 +37,6 @@
 #pragma once
 
 #include <cassert>
-#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <climits>
@@ -244,46 +243,89 @@ inline DiyFp NormalizeTo(DiyFp x, int e)
     return DiyFp(x.f << delta, e);
 }
 
-template <typename Float>
-struct IEEE
+struct Double
 {
-    // NB:
-    // Works for double == long double.
-    static_assert(std::numeric_limits<Float>::is_iec559 &&
-                  ((std::numeric_limits<Float>::digits == 24 && std::numeric_limits<Float>::max_exponent == 128) ||
-                   (std::numeric_limits<Float>::digits == 53 && std::numeric_limits<Float>::max_exponent == 1024)),
-        "IEEE-754 single- or double-precision implementation required");
+    static_assert(std::numeric_limits<double>::is_iec559 &&
+                  std::numeric_limits<double>::digits == 53 &&
+                  std::numeric_limits<double>::max_exponent == 1024,
+        "Dtoa requires an IEEE-754 double-precision implementation");
 
-    using ieee_type = Float;
-    using bits_type = typename std::conditional<std::numeric_limits<Float>::digits == 24, uint32_t, uint64_t>::type;
+    static constexpr int      BitLength               = 64;
+    static constexpr int      SignificandSize         = std::numeric_limits<double>::digits;    // = p   (includes the hidden bit)
+    static constexpr int      PhysicalSignificandSize = SignificandSize - 1;                    // = p-1 (excludes the hidden bit)
+    static constexpr int      UnbiasedMinExponent     = 1;
+    static constexpr int      UnbiasedMaxExponent     = 2 * std::numeric_limits<double>::max_exponent - 1 - 1;
+    static constexpr int      ExponentBias            = 2 * std::numeric_limits<double>::max_exponent / 2 - 1 + (SignificandSize - 1);
+    static constexpr int      MinExponent             = UnbiasedMinExponent - ExponentBias;
+    static constexpr int      MaxExponent             = UnbiasedMaxExponent - ExponentBias;
+    static constexpr uint64_t HiddenBit               = uint64_t{1} << (SignificandSize - 1);   // = 2^(p-1)
+    static constexpr uint64_t SignificandMask         = HiddenBit - 1;                          // = 2^(p-1) - 1
+    static constexpr uint64_t ExponentMask            = uint64_t{2 * std::numeric_limits<double>::max_exponent - 1} << PhysicalSignificandSize;
+    static constexpr uint64_t SignMask                = uint64_t{1} << (BitLength - 1);
 
-    static constexpr int       SignificandSize         = std::numeric_limits<ieee_type>::digits;  // = p   (includes the hidden bit)
-    static constexpr int       PhysicalSignificandSize = SignificandSize - 1;                     // = p-1 (excludes the hidden bit)
-    static constexpr int       UnbiasedMinExponent     = 1;
-    static constexpr int       UnbiasedMaxExponent     = 2 * std::numeric_limits<Float>::max_exponent - 1 - 1;
-    static constexpr int       ExponentBias            = 2 * std::numeric_limits<Float>::max_exponent / 2 - 1 + (SignificandSize - 1);
-    static constexpr int       MinExponent             = UnbiasedMinExponent - ExponentBias;
-    static constexpr int       MaxExponent             = UnbiasedMaxExponent - ExponentBias;
-    static constexpr bits_type HiddenBit               = bits_type{1} << (SignificandSize - 1);   // = 2^(p-1)
-    static constexpr bits_type SignificandMask         = HiddenBit - 1;                           // = 2^(p-1) - 1
-    static constexpr bits_type ExponentMask            = bits_type{2 * std::numeric_limits<Float>::max_exponent - 1} << PhysicalSignificandSize;
+    uint64_t bits;
+
+    explicit Double(uint64_t bits_) : bits(bits_) {}
+    explicit Double(double value) : bits(ReinterpretBits<uint64_t>(value)) {}
+
+    uint64_t Sign() const {
+        return bits >> (BitLength - 1);
+    }
+
+    uint64_t Exponent() const {
+        return (bits & ExponentMask) >> PhysicalSignificandSize;
+    }
+
+    uint64_t Significand() const {
+        return (bits & SignificandMask);
+    }
+
+    bool IsFinite() const {
+        return (bits & ExponentMask) != ExponentMask;
+    }
+
+    bool IsInf() const {
+        return (bits & ExponentMask) == ExponentMask && (bits & SignificandMask) == 0;
+    }
+
+    bool IsNaN() const {
+        return (bits & ExponentMask) == ExponentMask && (bits & SignificandMask) != 0;
+    }
+
+    bool IsZero() const {
+        return (bits & ~SignMask) == 0;
+    }
+
+    bool SignBit() const {
+        return (bits & SignMask) != 0;
+    }
+
+    double Value() const {
+        return ReinterpretBits<double>(bits);
+    }
+
+    double AbsValue() const {
+        return ReinterpretBits<double>(bits & ~SignMask);
+    }
+
+    double NextValue() const {
+        DTOA_ASSERT(!SignBit());
+        return ReinterpretBits<double>(IsInf() ? bits : bits + 1);
+    }
 };
 
 // Decomposes `value` into `f * 2^e`.
 // The result is not normalized.
 // PRE: `value` must be finite and non-negative, i.e. >= +0.0.
-template <typename Float>
-inline DiyFp DiyFpFromFloat(Float value)
+inline DiyFp DiyFpFromDouble(double value)
 {
-    DTOA_ASSERT(std::isfinite(value));
-    DTOA_ASSERT(!std::signbit(value));
+    Double v(value);
 
-    using Traits = IEEE<Float>;
-    using Bits = typename Traits::bits_type;
+    DTOA_ASSERT(v.IsFinite());
+    DTOA_ASSERT(!v.SignBit());
 
-    auto const bits = ReinterpretBits<Bits>(value);
-    auto const E = bits >> Traits::PhysicalSignificandSize;
-    auto const F = bits & Traits::SignificandMask;
+    auto const E = v.Exponent();
+    auto const F = v.Significand();
 
     // If v is denormal:
     //      value = 0.F * 2^(1 - bias) = (          F) * 2^(1 - bias - (p-1))
@@ -291,8 +333,8 @@ inline DiyFp DiyFpFromFloat(Float value)
     //      value = 1.F * 2^(E - bias) = (2^(p-1) + F) * 2^(E - bias - (p-1))
 
     return (E == 0) // denormal?
-        ? DiyFp(F, Traits::MinExponent)
-        : DiyFp(F + Traits::HiddenBit, static_cast<int>(E) - Traits::ExponentBias);
+        ? DiyFp(F, Double::MinExponent)
+        : DiyFp(F + Double::HiddenBit, static_cast<int>(E) - Double::ExponentBias);
 }
 
 // Compute the boundaries m- and m+ of the floating-point value
@@ -320,40 +362,32 @@ inline DiyFp DiyFpFromFloat(Float value)
 // interval for v.
 // The result is not normalized.
 // PRE: `value` must be finite and non-negative.
-template <typename Float>
-inline DiyFp UpperBoundary(Float value)
+inline DiyFp UpperBoundary(double value)
 {
-    auto const v = DiyFpFromFloat(value);
+    auto const v = DiyFpFromDouble(value);
     return DiyFp(2*v.f + 1, v.e - 1);
 }
 
-template <typename Float>
-inline bool LowerBoundaryIsCloser(Float value)
+inline bool LowerBoundaryIsCloser(double value)
 {
-    DTOA_ASSERT(std::isfinite(value));
-    DTOA_ASSERT(!std::signbit(value));
+    Double v(value);
 
-    using Traits = IEEE<Float>;
-    using Bits = typename Traits::bits_type;
+    DTOA_ASSERT(v.IsFinite());
+    DTOA_ASSERT(!v.SignBit());
 
-    auto const bits = ReinterpretBits<Bits>(value);
-    auto const E = bits >> Traits::PhysicalSignificandSize;
-    auto const F = bits & Traits::SignificandMask;
-
-    return F == 0 && E > 1;
+    return v.Significand() == 0 && v.Exponent() > 1;
 }
 
 // Returns the lower boundary of `value`, i.e. the lower bound of the rounding
 // interval for `value`.
 // The result is not normalized.
 // PRE: `value` must be finite and strictly positive.
-template <typename Float>
-inline DiyFp LowerBoundary(Float value)
+inline DiyFp LowerBoundary(double value)
 {
-    DTOA_ASSERT(std::isfinite(value));
+    DTOA_ASSERT(Double(value).IsFinite());
     DTOA_ASSERT(value > 0);
 
-    auto const v = DiyFpFromFloat(value);
+    auto const v = DiyFpFromDouble(value);
     return LowerBoundaryIsCloser(value)
         ? DiyFp(4*v.f - 1, v.e - 2)
         : DiyFp(2*v.f - 1, v.e - 1);
@@ -368,13 +402,12 @@ struct Boundaries {
 // Compute the (normalized) DiyFp representing the input number 'value' and its
 // boundaries.
 // PRE: 'value' must be finite and positive
-template <typename Float>
-inline Boundaries ComputeBoundaries(Float value)
+inline Boundaries ComputeBoundaries(double value)
 {
-    DTOA_ASSERT(std::isfinite(value));
+    DTOA_ASSERT(Double(value).IsFinite());
     DTOA_ASSERT(value > 0);
 
-    auto const v = DiyFpFromFloat(value);
+    auto const v = DiyFpFromDouble(value);
 
     // Compute the boundaries of v.
 #if 0
@@ -971,7 +1004,7 @@ inline void Grisu2DigitGen(char* buffer, int& length, int& exponent, DiyFp L, Di
             DTOA_ASSERT(rest <= delta);
 
             // rn = d[n]...d[0] * 2^-e + p2
-            uint32_t const dn = static_cast<uint32_t>(buffer[k - 1 - n] - '0');
+            uint32_t const dn = static_cast<uint32_t>(buffer[(k - 1) - n] - '0');
             uint64_t const rn = dn * ten_kappa + rest;
 
             if (rn > delta)
@@ -1064,28 +1097,15 @@ inline void Grisu2(char* buffer, int& length, int& exponent, DiyFp m_minus, DiyF
 // length is the length of the buffer (number of decimal digits)
 // The buffer must be large enough, i.e. >= max_digits10.
 // PRE: value must be finite and strictly positive.
-template <typename Float>
-inline void Grisu2(char* buffer, int& length, int& exponent, Float value)
+inline void Grisu2(char* buffer, int& length, int& exponent, double value)
 {
-    static_assert(DiyFp::SignificandSize >= std::numeric_limits<Float>::digits + 3,
+    static_assert(DiyFp::SignificandSize >= Double::SignificandSize + 3,
         "Grisu2 requires at least three extra bits of precision");
 
-    DTOA_ASSERT(std::isfinite(value));
+    DTOA_ASSERT(Double(value).IsFinite());
     DTOA_ASSERT(value > 0);
 
-#if 0
-    // If the neighbors (and boundaries) of 'value' are always computed for
-    // double-precision numbers, all float's can be recovered using strtod
-    // (and strtof). However, the resulting decimal representations are not
-    // exactly "short".
-    //
-    // If the neighbors are computed for single-precision numbers, there is a
-    // single float (7.0385307e-26f) which can't be recovered using strtod.
-    // (The resulting double precision is off by 1 ulp.)
-    auto const boundaries = base_conv::ComputeBoundaries(static_cast<double>(value));
-#else
     auto const boundaries = base_conv::ComputeBoundaries(value);
-#endif
 
     return Grisu2(buffer, length, exponent, boundaries.m_minus, boundaries.v, boundaries.m_plus);
 }
@@ -1210,13 +1230,12 @@ inline char* FormatExponential(char* buffer, int length, int decimal_point)
 // Note: The input `value` must be strictly positive
 // Note: The buffer must be large enough (>= kDtoaPositiveMaxLength)
 // Note: The result is _not_ null-terminated
-template <typename Fp>
-inline char* PositiveDtoa(char* next, char* last, Fp value, bool force_trailing_dot_zero = false)
+inline char* PositiveDtoa(char* next, char* last, double value, bool force_trailing_dot_zero = false)
 {
     DTOA_ASSERT(last - next >= kDtoaPositiveMaxLength);
     static_cast<void>(last); // Fix warning
 
-    DTOA_ASSERT(std::isfinite(value));
+    DTOA_ASSERT(Double(value).IsFinite());
     DTOA_ASSERT(value > 0);
 
     // Compute v = buffer * 10^exponent.
@@ -1228,7 +1247,7 @@ inline char* PositiveDtoa(char* next, char* last, Fp value, bool force_trailing_
     base_conv::Grisu2(next, length, exponent, value);
 
     // Grisu2 generates at most max_digits10 decimal digits.
-    DTOA_ASSERT(length <= std::numeric_limits<Fp>::max_digits10);
+    DTOA_ASSERT(length <= std::numeric_limits<double>::max_digits10);
 
     // The position of the decimal point relative to the start of the buffer.
     int const decimal_point = length + exponent;
@@ -1248,9 +1267,9 @@ inline char* PositiveDtoa(char* next, char* last, Fp value, bool force_trailing_
     bool const use_fixed = kMinExp < decimal_point && decimal_point <= kMaxExp;
 #else
     // NB:
-    // Integers <= 2^p = kMaxVal are exactly representable as Fp's.
+    // Integers <= 2^p = kMaxVal are exactly representable as Float's.
     constexpr auto kMinExp = -6;
-    constexpr auto kMaxVal = static_cast<Fp>(uint64_t{1} << std::numeric_limits<Fp>::digits); // <= 16 digits
+    constexpr auto kMaxVal = static_cast<double>(uint64_t{1} << Double::SignificandSize); // <= 16 digits
 
     bool const use_fixed = kMinExp < decimal_point && value <= kMaxVal;
 #endif
@@ -1286,11 +1305,10 @@ constexpr int kDtoaMaxLength = kDtoaPositiveMaxLength + 1;
 //       Max(1 + kDtoaPositiveMaxLength, len(nan_string), 1 + len(inf_string))
 //       is sufficient.
 // Note: The result is _not_ null-terminated.
-template <typename Fp>
 inline char* Dtoa(
     char*       next,
     char*       last,
-    Fp          value,
+    double      value,
     bool        force_trailing_dot_zero = false,
     char const* nan_string = "NaN",
     char const* inf_string = "Infinity")
@@ -1299,26 +1317,28 @@ inline char* Dtoa(
     DTOA_ASSERT(strlen(nan_string) <= size_t{kDtoaPositiveMaxLength});
     DTOA_ASSERT(strlen(inf_string) <= size_t{kDtoaPositiveMaxLength});
 
-    if (!std::isfinite(value))
+    Double v(value);
+
+    if (!v.IsFinite())
     {
-        if (std::isnan(value))
+        if (v.Significand() != 0)
             return StrCopy(next, last, nan_string);
-        if (value < 0)
+        if (v.SignBit())
             *next++ = '-';
         return StrCopy(next, last, inf_string);
     }
 
-    if (value == 0)
+    if (v.IsZero())
     {
-        if (std::signbit(value))
+        if (v.SignBit())
             return StrCopy(next, last, "-0.0");
         *next++ = '0';
         return next;
     }
 
-    if (value < 0)
+    if (v.SignBit())
     {
-        value = -value;
+        value = v.AbsValue();
         *next++ = '-';
     }
 
