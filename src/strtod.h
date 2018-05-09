@@ -27,6 +27,9 @@
 
 #include "dtoa.h"
 
+#ifdef DTOA_UNNAMED_NAMESPACE
+namespace {
+#endif
 namespace base_conv {
 
 // Maximum number of significant digits in decimal representation.
@@ -37,12 +40,6 @@ namespace base_conv {
 // bigger one unless the tail consists of zeros, so we don't need to preserve
 // all the digits.
 constexpr int kMaxSignificantDigits = 767 + 1;
-
-// To simplify the implementation we use an extra digit to indicate whether the
-// tail consists of zeros or not. If the tail consists of zeros, we ignore the
-// extra digit, otherwise it will be set to a non-zero value (which is enough
-// to guarantee correct rounding.)
-constexpr int kMaxSignificantDecimalDigits = kMaxSignificantDigits + 1;
 
 //==================================================================================================
 // DecimalToDouble
@@ -614,6 +611,17 @@ inline void AssignZero(DiyInt& x)
     x.exponent = 0;
 }
 
+inline void AssignU32(DiyInt& x, uint32_t value)
+{
+    AssignZero(x);
+
+    if (value == 0)
+        return;
+
+    x.bigits[0] = value;
+    x.size = 1;
+}
+
 inline void AssignU64(DiyInt& x, uint64_t value)
 {
     AssignZero(x);
@@ -626,22 +634,22 @@ inline void AssignU64(DiyInt& x, uint64_t value)
     x.size = (x.bigits[1] == 0) ? 1 : 2;
 }
 
-inline void MulU32(DiyInt& x, uint32_t value)
+// x := A * x + B
+inline void MulAddU32(DiyInt& x, uint32_t A, uint32_t B = 0)
 {
-    if (value == 1)
+    DTOA_ASSERT(B == 0 || x.exponent == 0);
+
+    if (A == 1 && B == 0)
         return;
-    if (value == 0) {
-        AssignZero(x);
+    if (A == 0 || x.size == 0) {
+        AssignU32(x, B);
         return;
     }
 
-    if (x.size == 0)
-        return;
-
-    uint32_t carry = 0;
+    uint32_t carry = B;
     for (int i = 0; i < x.size; ++i)
     {
-        uint64_t const p = uint64_t{x.bigits[i]} * value + carry;
+        uint64_t const p = uint64_t{x.bigits[i]} * A + carry;
         x.bigits[i]      = static_cast<uint32_t>(p);
         carry            = static_cast<uint32_t>(p >> DiyInt::BigitSize);
     }
@@ -650,28 +658,6 @@ inline void MulU32(DiyInt& x, uint32_t value)
     {
         DTOA_ASSERT(x.size < DiyInt::Capacity);
         x.bigits[x.size++] = carry;
-    }
-}
-
-inline void AddU32(DiyInt& x, uint32_t value)
-{
-    DTOA_ASSERT(x.exponent == 0);
-
-    if (value == 0)
-        return;
-
-    uint32_t carry = value;
-    for (int i = 0; i < x.size; ++i)
-    {
-        uint64_t const p = uint64_t{x.bigits[i]} + carry;
-        x.bigits[i]      = static_cast<uint32_t>(p);
-        carry            = static_cast<uint32_t>(p >> DiyInt::BigitSize);
-    }
-
-    if (carry != 0)
-    {
-        DTOA_ASSERT(x.size < DiyInt::Capacity);
-        x.bigits[x.size++] = static_cast<uint32_t>(carry);
     }
 }
 
@@ -707,22 +693,19 @@ inline void AssignDecimalDigits(DiyInt& x, char const* digits, int num_digits)
 #if 0
     while (num_digits >= 9)
     {
-        MulU32(x, 1000000000);
-        AddU32(x, ReadU32(digits, 9));
+        MulAddU32(x, 1000000000, ReadU32(digits, 9));
         digits     += 9;
         num_digits -= 9;
     }
     if (num_digits > 0)
     {
-        MulU32(x, kPow10[num_digits]);
-        AddU32(x, ReadU32(digits, num_digits));
+        MulAddU32(x, kPow10[num_digits], ReadU32(digits, num_digits));
     }
 #else
     while (num_digits > 0)
     {
         int const n = Min(num_digits, 9);
-        MulU32(x, kPow10[n]);
-        AddU32(x, ReadU32(digits, n));
+        MulAddU32(x, kPow10[n], ReadU32(digits, n));
         digits     += n;
         num_digits -= n;
     }
@@ -787,18 +770,18 @@ inline void MulPow5(DiyInt& x, int exp)
 #if 0
     while (exp >= 13)
     {
-        MulU32(x, 1220703125);
+        MulAddU32(x, 1220703125);
         exp -= 13;
     }
     if (exp > 0)
     {
-        MulU32(x, kPow5[exp]);
+        MulAddU32(x, kPow5[exp]);
     }
 #else
     while (exp > 0)
     {
         int const n = Min(exp, 13);
-        MulU32(x, kPow5[n]);
+        MulAddU32(x, kPow5[n]);
         exp -= n;
     }
 #endif
@@ -835,19 +818,24 @@ inline int Compare(DiyInt const& lhs, DiyInt const& rhs)
 // PRE: num_digits + exponent <= kMaxDecimalPower + 1
 // PRE: num_digits + exponent >  kMinDecimalPower
 // PRE: num_digits            <= kMaxSignificantDecimalDigits
-inline int CompareBufferWithDiyFp(char const* digits, int num_digits, int exponent, DiyFp v)
+inline int CompareBufferWithDiyFp(char const* digits, int num_digits, bool nonzero_tail, int exponent, DiyFp v)
 {
     DTOA_ASSERT(num_digits + exponent <= kMaxDecimalPower + 1);
     DTOA_ASSERT(num_digits + exponent >= kMinDecimalPower + 1);
-    DTOA_ASSERT(num_digits            <= kMaxSignificantDecimalDigits);
+    DTOA_ASSERT(num_digits            <= kMaxSignificantDigits);
 
     DiyInt lhs;
     DiyInt rhs;
 
     AssignDecimalDigits(lhs, digits, num_digits);
+    if (nonzero_tail) // XXX: Merge with AssignDecimalDigits?!
+    {
+        MulAddU32(lhs, 10, 1);
+        exponent--;
+    }
     AssignU64(rhs, v.f);
 
-    DTOA_ASSERT(lhs.size <= (2555 + 31) / 32); // bits <= log_2(10^(num_digits - 1)) <= log_2(10^769) = 2555
+    DTOA_ASSERT(lhs.size <= (2555 + 31) / 32); // bits <= log_2(10^769) = 2555
     DTOA_ASSERT(rhs.size <= (  64 + 31) / 32); // bits <= 64
 
     int lhs_exp5 = 0;
@@ -933,12 +921,7 @@ inline double NextFloat(double v)
 
 inline bool ComputeGuess(double& result, char const* digits, int num_digits, int exponent)
 {
-    if (num_digits == 0) {
-        result = 0;
-        return true;
-    }
-
-    DTOA_ASSERT(num_digits <= kMaxSignificantDecimalDigits);
+    DTOA_ASSERT(num_digits <= kMaxSignificantDigits);
     DTOA_ASSERT(DigitValue(digits[0]) > 0);
     DTOA_ASSERT(DigitValue(digits[num_digits - 1]) > 0);
 
@@ -996,9 +979,8 @@ inline int CountTrailingZeros(char const* digits, int num_digits)
 //
 // PRE: digits must contain only ASCII characters in the range '0'...'9'.
 // PRE: num_digits >= 0
-// PRE: num_digits <= kMaxSignificandDecimalDigits
 // PRE: num_digits + exponent must not overflow.
-inline double DecimalToDouble(char const* digits, int num_digits, int exponent)
+inline double DecimalToDouble(char const* digits, int num_digits, bool nonzero_tail, int exponent)
 {
     DTOA_ASSERT(num_digits >= 0);
     DTOA_ASSERT(exponent <= INT_MAX - num_digits);
@@ -1015,6 +997,19 @@ inline double DecimalToDouble(char const* digits, int num_digits, int exponent)
     exponent   += tz;
 #endif
 
+#if 1
+    if (num_digits == 0) {
+        return 0.0;
+    }
+
+    if (num_digits > kMaxSignificantDigits)
+    {
+        DTOA_ASSERT(digits[num_digits - 1] != '0');
+        num_digits = kMaxSignificantDigits;
+        nonzero_tail = true;
+    }
+#endif
+
     double v;
     if (impl::ComputeGuess(v, digits, num_digits, exponent)) {
         return v;
@@ -1027,7 +1022,7 @@ inline double DecimalToDouble(char const* digits, int num_digits, int exponent)
     //  ---+--------+----+-------------+---
     //              B
 
-    int const cmp = impl::CompareBufferWithDiyFp(digits, num_digits, exponent, impl::UpperBoundary(v));
+    int const cmp = impl::CompareBufferWithDiyFp(digits, num_digits, nonzero_tail, exponent, impl::UpperBoundary(v));
     if (cmp < 0 || (cmp == 0 && impl::SignificandIsEven(v))) {
         return v;
     }
@@ -1263,17 +1258,7 @@ inline bool StringToDouble(double& result, char const* next, char const* last)
     }
 
 L_parsing_done:
-    if (nonzero_tail)
-    {
-        // Set the last digit to be non-zero.
-        // This is sufficient to guarantee correct rounding.
-        DTOA_ASSERT(num_digits == kMaxSignificantDigits);
-        DTOA_ASSERT(num_digits < kBufferSize);
-        digits[num_digits++] = '1';
-        --exponent;
-    }
-
-    double const value = DecimalToDouble(digits, num_digits, exponent);
+    double const value = DecimalToDouble(digits, num_digits, nonzero_tail, exponent);
     DTOA_ASSERT(!impl::Double(value).SignBit());
 
     result = is_neg ? -value : value;
@@ -1281,6 +1266,9 @@ L_parsing_done:
 }
 
 } // namespace base_conv
+#ifdef DTOA_UNNAMED_NAMESPACE
+} // namespace
+#endif
 
 /*
 Copyright 2006-2011, the V8 project authors. All rights reserved.

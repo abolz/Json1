@@ -35,6 +35,9 @@
 #define DTOA_ASSERT(X) assert(X)
 #endif
 
+#ifdef DTOA_UNNAMED_NAMESPACE
+namespace {
+#endif
 namespace base_conv {
 
 //==================================================================================================
@@ -109,8 +112,7 @@ L_3_digits:
         buf = Utoa100(buf, q);
 L_1_digit:
         buf[0] = static_cast<char>('0' + n);
-        buf++;
-        return buf;
+        return buf + 1;
     }
 
     if (n < 100)
@@ -158,32 +160,29 @@ inline char* I32ToString(char* buf, int32_t i)
 
 inline char* U64ToString(char* buf, uint64_t n)
 {
-    auto Utoa_9digits = [](char* buf, uint32_t digits)
+    auto Utoa_9digits = [](char* ptr, uint32_t k)
     {
-        uint32_t n = digits;
         uint32_t q;
 
 //L_9_digits:
-        q = n / 10000000;
-        n = n % 10000000;
-        buf = Utoa100(buf, q);
+        q = k / 10000000;
+        k = k % 10000000;
+        ptr = Utoa100(ptr, q);
 //L_7_digits:
-        q = n / 100000;
-        n = n % 100000;
-        buf = Utoa100(buf, q);
+        q = k / 100000;
+        k = k % 100000;
+        ptr = Utoa100(ptr, q);
 //L_5_digits:
-        q = n / 1000;
-        n = n % 1000;
-        buf = Utoa100(buf, q);
+        q = k / 1000;
+        k = k % 1000;
+        ptr = Utoa100(ptr, q);
 //L_3_digits:
-        q = n / 10;
-        n = n % 10;
-        buf = Utoa100(buf, q);
+        q = k / 10;
+        k = k % 10;
+        ptr = Utoa100(ptr, q);
 //L_1_digits:
-        buf[0] = static_cast<char>('0' + n);
-        buf++;
-
-        return buf;
+        ptr[0] = static_cast<char>('0' + k);
+        return ptr + 1;
     };
 
     if (n <= UINT32_MAX)
@@ -1535,6 +1534,9 @@ inline char* DoubleToString(char* next, char* last, double value, bool emit_trai
 }
 
 } // namespace base_conv
+#ifdef DTOA_UNNAMED_NAMESPACE
+} // namespace
+#endif
 
 /*
 Copyright (c) 2009 Florian Loitsch

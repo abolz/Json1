@@ -111,9 +111,8 @@ static bool StringToDouble(double& result, char const* next, char const* last, O
     }
 
     constexpr int kMaxSignificantDigits = base_conv::kMaxSignificantDigits;
-    constexpr int kMaxSignificantDecimalDigits = base_conv::kMaxSignificantDecimalDigits;
 
-    char digits[kMaxSignificantDecimalDigits];
+    char digits[kMaxSignificantDigits];
     int  num_digits = 0;
     int  exponent = 0;
     bool nonzero_tail = false;
@@ -310,23 +309,14 @@ static bool StringToDouble(double& result, char const* next, char const* last, O
     }
 
 L_parsing_done:
-    if (nonzero_tail)
-    {
-        // Set the last digit to be non-zero.
-        // This is sufficient to guarantee correct rounding.
-        JSON_ASSERT(num_digits == kMaxSignificantDigits);
-        JSON_ASSERT(num_digits < kMaxSignificantDecimalDigits);
-        digits[num_digits++] = '1';
-        --exponent;
-    }
-
-    double value = base_conv::DecimalToDouble(digits, num_digits, exponent);
+    double value = base_conv::DecimalToDouble(digits, num_digits, nonzero_tail, exponent);
     JSON_ASSERT(!std::signbit(value));
 
     result = is_neg ? -value : value;
     return true;
 }
 
+#if 0
 static double ReadDouble_unguarded(char const* digits, int num_digits)
 {
     int64_t result = 0;
@@ -340,6 +330,7 @@ static double ReadDouble_unguarded(char const* digits, int num_digits)
 
     return static_cast<double>(result);
 }
+#endif
 
 double json::numbers::StringToNumber(char const* first, char const* last, NumberClass nc)
 {
@@ -374,6 +365,11 @@ double json::numbers::StringToNumber(char const* first, char const* last, Number
             ++first_digit;
         }
 
+#if 1
+        JSON_ASSERT(last - first_digit <= INT_MAX);
+        double result = base_conv::DecimalToDouble(first_digit, static_cast<int>(last - first_digit), /*nonzero_tail*/ false, 0);
+        return is_neg ? -result : result;
+#else
         // 10^15 < 2^53 = 9007199254740992 < 10^16
         if (last - first_digit <= 16)
         {
@@ -382,10 +378,11 @@ double json::numbers::StringToNumber(char const* first, char const* last, Number
 
             if (last - first_digit < 16 || *first_digit <= '8' /*|| std::memcmp(first_digit, "9007199254740992", 16) <= 0*/)
             {
-                double const result = ReadDouble_unguarded(first_digit, static_cast<int>(last - first_digit));
+                double result = ReadDouble_unguarded(first_digit, static_cast<int>(last - first_digit));
                 return is_neg ? -result : result;
             }
         }
+#endif
     }
 #endif
 
