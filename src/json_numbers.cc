@@ -116,7 +116,7 @@ static bool StringToDouble(double& result, char const* next, char const* last, O
     char digits[kMaxSignificantDecimalDigits];
     int  num_digits = 0;
     int  exponent = 0;
-    bool nonzero_digit_dropped = false;
+    bool nonzero_tail = false;
 
     bool is_neg = false;
     if (*next == '-')
@@ -163,7 +163,7 @@ static bool StringToDouble(double& result, char const* next, char const* last, O
             else
             {
                 ++exponent;
-                nonzero_digit_dropped = nonzero_digit_dropped || *next != '0';
+                nonzero_tail = nonzero_tail || *next != '0';
             }
             ++next;
             if (next == last)
@@ -236,7 +236,7 @@ static bool StringToDouble(double& result, char const* next, char const* last, O
             }
             else
             {
-                nonzero_digit_dropped = nonzero_digit_dropped || *next != '0';
+                nonzero_tail = nonzero_tail || *next != '0';
             }
             ++next;
             if (next == last)
@@ -310,8 +310,7 @@ static bool StringToDouble(double& result, char const* next, char const* last, O
     }
 
 L_parsing_done:
-#if 1
-    if (nonzero_digit_dropped)
+    if (nonzero_tail)
     {
         // Set the last digit to be non-zero.
         // This is sufficient to guarantee correct rounding.
@@ -320,7 +319,6 @@ L_parsing_done:
         digits[num_digits++] = '1';
         --exponent;
     }
-#endif
 
     double value = base_conv::DecimalToDouble(digits, num_digits, exponent);
     JSON_ASSERT(!std::signbit(value));

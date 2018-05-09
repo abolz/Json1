@@ -1068,7 +1068,7 @@ inline bool StringToDouble(double& result, char const* next, char const* last)
     char digits[kBufferSize];
     int  num_digits = 0;
     int  exponent = 0;
-    bool nonzero_digit_dropped = false;
+    bool nonzero_tail = false;
 
     bool is_neg = false;
     if (*next == '-')
@@ -1113,7 +1113,7 @@ inline bool StringToDouble(double& result, char const* next, char const* last)
             else
             {
                 ++exponent;
-                nonzero_digit_dropped = nonzero_digit_dropped || *next != '0';
+                nonzero_tail = nonzero_tail || *next != '0';
             }
             ++next;
             if (next == last)
@@ -1186,7 +1186,7 @@ inline bool StringToDouble(double& result, char const* next, char const* last)
             }
             else
             {
-                nonzero_digit_dropped = nonzero_digit_dropped || *next != '0';
+                nonzero_tail = nonzero_tail || *next != '0';
             }
             ++next;
             if (next == last)
@@ -1263,8 +1263,7 @@ inline bool StringToDouble(double& result, char const* next, char const* last)
     }
 
 L_parsing_done:
-#if 0
-    if (nonzero_digit_dropped)
+    if (nonzero_tail)
     {
         // Set the last digit to be non-zero.
         // This is sufficient to guarantee correct rounding.
@@ -1273,7 +1272,6 @@ L_parsing_done:
         digits[num_digits++] = '1';
         --exponent;
     }
-#endif
 
     double const value = DecimalToDouble(digits, num_digits, exponent);
     DTOA_ASSERT(!impl::Double(value).SignBit());
