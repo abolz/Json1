@@ -85,7 +85,7 @@ Value::Value(Type t)
         data_.object = new Object{};
         break;
     default:
-        assert(false && "invalid type"); // LCOV_EXCL_LINE
+        JSON_ASSERT(false && "invalid type"); // LCOV_EXCL_LINE
         t = Type::undefined;
         break;
     }
@@ -213,7 +213,7 @@ void Value::_clear_allocated()
     case Type::null:
     case Type::boolean:
     case Type::number:
-        assert(false && "invalid function call");
+        JSON_ASSERT(false && "invalid function call");
         break;
     case Type::string:
         delete data_.string;
@@ -373,7 +373,7 @@ bool Value::equal_to(Value const& rhs) const noexcept
     case Type::object:
         return get_object() == rhs.get_object();
     default:
-        assert(false && "invalid type"); // LCOV_EXCL_LINE
+        JSON_ASSERT(false && "invalid type"); // LCOV_EXCL_LINE
         return {};
     }
 }
@@ -410,7 +410,7 @@ bool Value::less_than(Value const& rhs) const noexcept
     case Type::object:
         return get_object() < rhs.get_object();
     default:
-        assert(false && "invalid type"); // LCOV_EXCL_LINE
+        JSON_ASSERT(false && "invalid type"); // LCOV_EXCL_LINE
         return {};
     }
 }
@@ -427,7 +427,7 @@ size_t Value::hash() const noexcept
     switch (type())
     {
     case Type::undefined:
-        assert(false && "cannot compute hash value for 'undefined'");
+        JSON_ASSERT(false && "cannot compute hash value for 'undefined'");
         return std::numeric_limits<size_t>::max(); // -1
     case Type::null:
         return 0;
@@ -458,7 +458,7 @@ size_t Value::hash() const noexcept
             return h;
         }
     default:
-        assert(false && "invalid type"); // LCOV_EXCL_LINE
+        JSON_ASSERT(false && "invalid type"); // LCOV_EXCL_LINE
         return {};
     }
 }
@@ -477,7 +477,7 @@ size_t Value::size() const noexcept
     case Type::null:
     case Type::boolean:
     case Type::number:
-        assert(false && "cannot read property 'size' of undefined, null, boolean or number"); // LCOV_EXCL_LINE
+        JSON_ASSERT(false && "cannot read property 'size' of undefined, null, boolean or number"); // LCOV_EXCL_LINE
         return 0;
     case Type::string:
         return get_string().size();
@@ -486,7 +486,7 @@ size_t Value::size() const noexcept
     case Type::object:
         return get_object().size();
     default:
-        assert(false && "invalid type"); // LCOV_EXCL_LINE
+        JSON_ASSERT(false && "invalid type"); // LCOV_EXCL_LINE
         return {};
     }
 }
@@ -499,7 +499,7 @@ bool Value::empty() const noexcept
     case Type::null:
     case Type::boolean:
     case Type::number:
-        assert(false && "cannot read property 'empty' of undefined, null, boolean or number"); // LCOV_EXCL_LINE
+        JSON_ASSERT(false && "cannot read property 'empty' of undefined, null, boolean or number"); // LCOV_EXCL_LINE
         return true; // i.e. size() == 0
     case Type::string:
         return get_string().empty();
@@ -508,14 +508,14 @@ bool Value::empty() const noexcept
     case Type::object:
         return get_object().empty();
     default:
-        assert(false && "invalid type"); // LCOV_EXCL_LINE
+        JSON_ASSERT(false && "invalid type"); // LCOV_EXCL_LINE
         return {};
     }
 }
 
 Array& Value::_get_or_assign_array()
 {
-    assert(is_undefined() || is_array());
+    JSON_ASSERT(is_undefined() || is_array());
     if (!is_array()) {
         assign(array_tag);
     }
@@ -527,7 +527,7 @@ Value& Value::operator[](size_t index)
     auto& arr = _get_or_assign_array();
     if (arr.size() <= index)
     {
-        assert(index < SIZE_MAX);
+        JSON_ASSERT(index < SIZE_MAX);
         arr.resize(index + 1);
     }
     return arr[index];
@@ -536,7 +536,7 @@ Value& Value::operator[](size_t index)
 Value const& Value::operator[](size_t index) const noexcept
 {
 #if JSON_VALUE_ALLOW_UNDEFINED_ACCESS
-    assert(is_undefined() || is_array());
+    JSON_ASSERT(is_undefined() || is_array());
     if (is_array())
 #endif
     {
@@ -580,7 +580,7 @@ void Value::pop_back()
 Value::element_iterator Value::erase(size_t index)
 {
     auto& arr = get_array();
-    assert(index < arr.size());
+    JSON_ASSERT(index < arr.size());
     return arr.erase(arr.begin() + static_cast<intptr_t>(index));
 }
 
@@ -598,7 +598,7 @@ Value::element_iterator Value::erase(const_element_iterator first, const_element
 
 Object& Value::_get_or_assign_object()
 {
-    assert(is_undefined() || is_object());
+    JSON_ASSERT(is_undefined() || is_object());
     if (!is_object()) {
         assign(object_tag);
     }
@@ -646,10 +646,10 @@ bool Value::to_boolean() const noexcept
         return !get_string().empty();
     case Type::array:
     case Type::object:
-        assert(false && "to_boolean must not be called for arrays or objects"); // LCOV_EXCL_LINE
+        JSON_ASSERT(false && "to_boolean must not be called for arrays or objects"); // LCOV_EXCL_LINE
         return {};
     default:
-        assert(false && "invalid type"); // LCOV_EXCL_LINE
+        JSON_ASSERT(false && "invalid type"); // LCOV_EXCL_LINE
         return {};
     }
 }
@@ -675,10 +675,10 @@ double Value::to_number() const noexcept
         }
     case Type::array:
     case Type::object:
-        assert(false && "to_number must not be called for arrays or objects"); // LCOV_EXCL_LINE
+        JSON_ASSERT(false && "to_number must not be called for arrays or objects"); // LCOV_EXCL_LINE
         return {};
     default:
-        assert(false && "invalid type"); // LCOV_EXCL_LINE
+        JSON_ASSERT(false && "invalid type"); // LCOV_EXCL_LINE
         return {};
     }
 }
@@ -701,8 +701,8 @@ double Value::to_integer() const noexcept
 // such that abs(k) < abs(y) and x-k = q * y for some integer q.
 static double Modulo(double x, double y)
 {
-    assert(std::isfinite(x));
-    assert(std::isfinite(y) && y > 0.0);
+    JSON_ASSERT(std::isfinite(x));
+    JSON_ASSERT(std::isfinite(y) && y > 0.0);
 
     double m = std::fmod(x, y);
     if (m < 0.0) {
@@ -852,17 +852,17 @@ String Value::to_string() const
         {
             char buf[32];
             char* first = &buf[0];
-            char* last = numbers::NumberToString(first, first + 32, get_number(), /*emit_trailing_dot_zero*/ false);
+            char* last = numbers::NumberToString(first, first + 32, get_number(), /*force_trailing_dot_zero*/ false);
             return String(first, last);
         }
     case Type::string:
         return get_string();
     case Type::array:
     case Type::object:
-        assert(false && "to_string must not be called for arrays or objects"); // LCOV_EXCL_LINE
+        JSON_ASSERT(false && "to_string must not be called for arrays or objects"); // LCOV_EXCL_LINE
         return {};
     default:
-        assert(false && "invalid type"); // LCOV_EXCL_LINE
+        JSON_ASSERT(false && "invalid type"); // LCOV_EXCL_LINE
         return {};
     }
 }
@@ -939,8 +939,8 @@ struct ParseValueCallbacks /*final*/ : ParseCallbacks
 
     ParseStatus HandleEndElement(size_t& count, Options const& /*options*/) override
     {
-        assert(!stack.empty());
-        assert(count != 0);
+        JSON_ASSERT(!stack.empty());
+        JSON_ASSERT(count != 0);
 
         if (count >= kMaxElements)
         {
@@ -987,9 +987,9 @@ struct ParseValueCallbacks /*final*/ : ParseCallbacks
 
     ParseStatus HandleEndMember(size_t& count, Options const& /*options*/) override
     {
-        assert(!keys.empty());
-        assert(!stack.empty());
-        assert(count != 0);
+        JSON_ASSERT(!keys.empty());
+        JSON_ASSERT(!stack.empty());
+        JSON_ASSERT(count != 0);
 
         if (count >= kMaxMembers)
         {
@@ -1006,9 +1006,9 @@ private:
         if (num_elements == 0)
             return {};
 
-        assert(num_elements <= SIZE_MAX - 1);
-        assert(num_elements <= PTRDIFF_MAX);
-        assert(stack.size() >= 1 + num_elements);
+        JSON_ASSERT(num_elements <= SIZE_MAX - 1);
+        JSON_ASSERT(num_elements <= PTRDIFF_MAX);
+        JSON_ASSERT(stack.size() >= 1 + num_elements);
 
         auto const count = static_cast<std::ptrdiff_t>(num_elements);
 
@@ -1028,11 +1028,11 @@ private:
         if (num_members == 0)
             return {};
 
-        assert(num_members <= keys.size());
-        assert(num_members <= SIZE_MAX - 1);
-        assert(num_members <= PTRDIFF_MAX);
-        assert(stack.size() >= 1 + num_members);
-        assert(keys.size() >= num_members);
+        JSON_ASSERT(num_members <= keys.size());
+        JSON_ASSERT(num_members <= SIZE_MAX - 1);
+        JSON_ASSERT(num_members <= PTRDIFF_MAX);
+        JSON_ASSERT(stack.size() >= 1 + num_members);
+        JSON_ASSERT(keys.size() >= num_members);
 
         auto const count = static_cast<std::ptrdiff_t>(num_members);
 
@@ -1067,7 +1067,7 @@ ParseResult json::parse(Value& value, char const* next, char const* last, Option
     auto const res = json::parse(cb, next, last, options);
     if (res.ec == ParseStatus::success)
     {
-        assert(cb.stack.size() == 1);
+        JSON_ASSERT(cb.stack.size() == 1);
 
 //      value.swap(cb.stack.back());
         value = std::move(cb.stack.back());
@@ -1167,7 +1167,7 @@ static bool StringifyArray(std::string& str, Array const& value, Options const& 
     {
         if (options.indent_width > 0)
         {
-            assert(curr_indent <= INT_MAX - options.indent_width);
+            JSON_ASSERT(curr_indent <= INT_MAX - options.indent_width);
             curr_indent += options.indent_width;
 
             for (;;)
@@ -1221,7 +1221,7 @@ static bool StringifyObject(std::string& str, Object const& value, Options const
     {
         if (options.indent_width > 0)
         {
-            assert(curr_indent <= INT_MAX - options.indent_width);
+            JSON_ASSERT(curr_indent <= INT_MAX - options.indent_width);
             curr_indent += options.indent_width;
 
             for (;;)
@@ -1279,7 +1279,7 @@ static bool StringifyValue(std::string& str, Value const& value, Options const& 
     switch (value.type())
     {
     case Type::undefined:
-        assert(false && "cannot stringify 'undefined'"); // LCOV_EXCL_LINE
+        JSON_ASSERT(false && "cannot stringify 'undefined'"); // LCOV_EXCL_LINE
         return StringifyNull(str);
     case Type::null:
         return StringifyNull(str);
@@ -1294,7 +1294,7 @@ static bool StringifyValue(std::string& str, Value const& value, Options const& 
     case Type::object:
         return StringifyObject(str, value.get_object(), options, curr_indent);
     default:
-        assert(false && "invalid type"); // LCOV_EXCL_LINE
+        JSON_ASSERT(false && "invalid type"); // LCOV_EXCL_LINE
         return {};
     }
 }

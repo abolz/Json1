@@ -23,21 +23,14 @@
 #include "json_options.h"
 #include "json_unicode.h"
 
-#ifndef JSON_CXX_HAS_IF_CONSTEXPR
-#define JSON_CXX_HAS_IF_CONSTEXPR 0
-#endif
-
 #include <cassert>
 #include <cstdint>
-#if JSON_CXX_HAS_IF_CONSTEXPR
 #include <iterator>
 #include <type_traits>
-#endif
 
 namespace json {
 namespace strings {
 
-#if JSON_CXX_HAS_IF_CONSTEXPR
 namespace impl
 {
     template <typename It>
@@ -47,7 +40,6 @@ namespace impl
         !std::is_convertible<typename std::iterator_traits<It>::iterator_category, std::forward_iterator_tag >::value
     >;
 }
-#endif
 
 //==================================================================================================
 //
@@ -161,7 +153,7 @@ UnescapeStringResult<It> UnescapeString(It next, It last, /*char quote_char,*/ F
 
                     uint32_t U = 0;
                     auto const end = json::unicode::DecodeTrimmedUCNSequence(next, last, U);
-                    //assert(end != next);
+                    //JSON_ASSERT(end != next);
                     next = end;
 
                     if (U != json::unicode::kInvalidCodepoint)
@@ -184,17 +176,16 @@ UnescapeStringResult<It> UnescapeString(It next, It last, /*char quote_char,*/ F
 
             uint32_t U = 0;
             next = json::unicode::DecodeUTF8Sequence(next, last, U);
-            //assert(next != f);
+            //JSON_ASSERT(next != f);
 
             if (U != json::unicode::kInvalidCodepoint)
             {
-#if JSON_CXX_HAS_IF_CONSTEXPR
-                if constexpr (json::strings::impl::IsInputIterator<It>::value)
+                constexpr bool inpit = json::strings::impl::IsInputIterator<It>::value;
+                if (inpit)
                 {
                     json::unicode::EncodeUTF8(U, [&](uint8_t code_unit) { yield(static_cast<char>(code_unit)); });
                 }
                 else
-#endif
                 {
                     // The range [f, next) already contains a valid UTF-8 encoding of U.
                     for ( ; f != next; ++f) {
@@ -287,7 +278,7 @@ EscapeStringResult<It> EscapeString(It next, It last, Fn yield)
 
             uint32_t U = 0;
             next = json::unicode::DecodeUTF8Sequence(next, last, U);
-            //assert(next != f);
+            //JSON_ASSERT(next != f);
 
             if (U != json::unicode::kInvalidCodepoint)
             {
@@ -318,13 +309,12 @@ EscapeStringResult<It> EscapeString(It next, It last, Fn yield)
                 }
                 else
                 {
-#if JSON_CXX_HAS_IF_CONSTEXPR
-                    if constexpr (json::strings::impl::IsInputIterator<It>::value)
+                    constexpr bool inpit = json::strings::impl::IsInputIterator<It>::value;
+                    if (inpit)
                     {
                         json::unicode::EncodeUTF8(U, [&](uint8_t code_unit) { yield(static_cast<char>(code_unit)); });
                     }
                     else
-#endif
                     {
                         // The UTF-8 sequence is valid. No need to re-encode.
                         for ( ; f != next; ++f) {

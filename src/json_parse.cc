@@ -24,6 +24,10 @@
 #include <cstdint>
 #include <cstring>
 
+#ifndef JSON_ASSERT
+#define JSON_ASSERT(X) assert(X)
+#endif
+
 using namespace json;
 
 //--------------------------------------------------------------------------------------------------
@@ -94,7 +98,7 @@ static bool IsIdentifierBody (char ch) { return (GetCharClass(ch) & CC_Identifie
 template <typename It>
 static It SkipWhitespace(It f, It l)
 {
-#if 1
+#if 0
     while (l - f >= 4)
     {
         if (!IsWhitespace(f[0])) return f + 0;
@@ -115,6 +119,8 @@ static It SkipWhitespace(It f, It l)
 //--------------------------------------------------------------------------------------------------
 //
 //--------------------------------------------------------------------------------------------------
+
+namespace {
 
 template <typename It>
 struct ScanNumberResult
@@ -238,6 +244,8 @@ static ScanNumberResult<It> ScanNumber(It first, It last, Options const& options
 
     return {next, is_float ? NumberClass::floating_point : NumberClass::integer};
 }
+
+} // namespace
 
 //--------------------------------------------------------------------------------------------------
 //
@@ -435,15 +443,14 @@ L_again:
 
 Token Lexer::LexString(char const* p)
 {
-    assert(p != end);
-    assert(*p == '"');
+    JSON_ASSERT(p != end);
+    JSON_ASSERT(*p == '"');
 
     ptr = ++p; // skip " or '
 
     unsigned mask = 0;
     for (;;)
     {
-#if 1
         while (end - p >= 4)
         {
             unsigned const m0 = GetCharClass(p[0]);
@@ -464,7 +471,6 @@ Token Lexer::LexString(char const* p)
             mask |= m2; ++p;   if ((m2 & CC_StringSpecial) != 0)   { goto L_check; }
             mask |= m3; ++p; /*if ((m3 & CC_StringSpecial) != 0)*/ { goto L_check; }
         }
-#endif
 
         for (;;)
         {
@@ -489,7 +495,7 @@ L_check:
             return tok;
         }
 
-        assert(ch == '\\');
+        JSON_ASSERT(ch == '\\');
         ++p;
         if (p == end)
             break;
@@ -518,8 +524,8 @@ Token Lexer::LexIdentifier(char const* p)
 
 Token Lexer::LexComment(char const* p)
 {
-    assert(p != end);
-    assert(*p == '/');
+    JSON_ASSERT(p != end);
+    JSON_ASSERT(*p == '/');
 
     ++p;
     if (p == end)
@@ -613,7 +619,7 @@ Parser::Parser(ParseCallbacks& cb_, Options const& options_)
 
 ParseStatus Parser::ParseString()
 {
-    assert(token.kind == TokenKind::string);
+    JSON_ASSERT(token.kind == TokenKind::string);
 
     if (Failed ec = cb.HandleString(token.ptr, token.end, token.needs_cleaning, options))
         return ec;
@@ -626,7 +632,7 @@ ParseStatus Parser::ParseString()
 
 ParseStatus Parser::ParseNumber()
 {
-    assert(token.kind == TokenKind::number);
+    JSON_ASSERT(token.kind == TokenKind::number);
 
     if (token.number_class == NumberClass::invalid)
         return ParseStatus::invalid_number;
@@ -642,8 +648,8 @@ ParseStatus Parser::ParseNumber()
 
 ParseStatus Parser::ParseIdentifier()
 {
-    assert(token.kind == TokenKind::identifier);
-    assert(token.end - token.ptr > 0 && "internal error");
+    JSON_ASSERT(token.kind == TokenKind::identifier);
+    JSON_ASSERT(token.end - token.ptr > 0 && "internal error");
 
     auto const f = token.ptr;
     auto const l = token.end;
@@ -722,13 +728,13 @@ ParseStatus Parser::ParseValue()
 
     // parse 'value'
     if (token.kind == TokenKind::l_brace)
-        goto L_parse_object;
+        goto L_begin_object;
     if (token.kind == TokenKind::l_square)
-        goto L_parse_array;
+        goto L_begin_array;
 
     return ParsePrimitive();
 
-L_parse_object:
+L_begin_object:
     //
     //  object
     //      {}
@@ -739,7 +745,7 @@ L_parse_object:
     //  pair
     //      string : value
     //
-    assert(token.kind == TokenKind::l_brace);
+    JSON_ASSERT(token.kind == TokenKind::l_brace);
 
     if (stack_size >= kMaxDepth)
         return ParseStatus::max_depth_reached;
@@ -773,16 +779,16 @@ L_parse_object:
 
             // parse 'value'
             if (token.kind == TokenKind::l_brace)
-                goto L_parse_object;
+                goto L_begin_object;
             if (token.kind == TokenKind::l_square)
-                goto L_parse_array;
+                goto L_begin_array;
 
             if (Failed ec = ParsePrimitive())
                 return ec;
 
-L_parse_end_member:
-            assert(stack_size != 0);
-            assert(stack[stack_size - 1].structure == Structure::object);
+L_end_member:
+            JSON_ASSERT(stack_size != 0);
+            JSON_ASSERT(stack[stack_size - 1].structure == Structure::object);
             stack[stack_size - 1].count++;
 
             if (Failed ec = cb.HandleEndMember(stack[stack_size - 1].count, options))
@@ -807,9 +813,9 @@ L_parse_end_member:
 
     // skip '}'
     token = lexer.Lex(options);
-    goto L_pop;
+    goto L_end_structured;
 
-L_parse_array:
+L_begin_array:
     //
     //  array
     //      []
@@ -818,7 +824,7 @@ L_parse_array:
     //      value
     //      value , elements
     //
-    assert(token.kind == TokenKind::l_square);
+    JSON_ASSERT(token.kind == TokenKind::l_square);
 
     if (stack_size >= kMaxDepth)
         return ParseStatus::max_depth_reached;
@@ -837,16 +843,16 @@ L_parse_array:
         {
             // parse 'value'
             if (token.kind == TokenKind::l_brace)
-                goto L_parse_object;
+                goto L_begin_object;
             if (token.kind == TokenKind::l_square)
-                goto L_parse_array;
+                goto L_begin_array;
 
             if (Failed ec = ParsePrimitive())
                 return ec;
 
-L_parse_end_element:
-            assert(stack_size != 0);
-            assert(stack[stack_size - 1].structure == Structure::array);
+L_end_element:
+            JSON_ASSERT(stack_size != 0);
+            JSON_ASSERT(stack[stack_size - 1].structure == Structure::array);
             stack[stack_size - 1].count++;
 
             if (Failed ec = cb.HandleEndElement(stack[stack_size - 1].count, options))
@@ -871,19 +877,19 @@ L_parse_end_element:
 
     // skip ']'
     token = lexer.Lex(options);
-    goto L_pop;
+    goto L_end_structured;
 
-L_pop:
-    assert(stack_size != 0);
+L_end_structured:
+    JSON_ASSERT(stack_size != 0);
     stack_size--;
 
     if (stack_size == 0)
         return ParseStatus::success;
 
     if (stack[stack_size - 1].structure == Structure::object)
-        goto L_parse_end_member;
+        goto L_end_member;
     else
-        goto L_parse_end_element;
+        goto L_end_element;
 }
 
 } // namespace
@@ -894,8 +900,8 @@ L_pop:
 
 ParseResult json::parse(ParseCallbacks& cb, char const* next, char const* last, Options const& options)
 {
-    assert(next != nullptr);
-    assert(last != nullptr);
+    JSON_ASSERT(next != nullptr);
+    JSON_ASSERT(last != nullptr);
 
     if (options.skip_bom && last - next >= 3)
     {
@@ -920,12 +926,14 @@ ParseResult json::parse(ParseCallbacks& cb, char const* next, char const* last, 
         {
             ec = ParseStatus::expected_eof;
         }
+#if 0
         else if (options.allow_trailing_characters && parser.token.kind == TokenKind::comma)
         {
             // Skip commas at end of value.
             // Allows to parse strings like "true,1,[1]"
             parser.token = parser.lexer.Lex(options);
         }
+#endif
     }
 
     //

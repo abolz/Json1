@@ -31,15 +31,17 @@
 #include <utility>
 #include <vector>
 
-#define JSON_VALUE_HAS_EXPLICIT_OPERATOR_T                      0
-#define JSON_VALUE_HAS_IMPLICIT_INITIALIZER_LIST_CONSTRUCTOR    0
-#define JSON_VALUE_UNDEFINED_IS_UNORDERED                       0 // undefined OP x ==> false, undefined != x ==> true
-#define JSON_VALUE_ALLOW_UNDEFINED_ACCESS                       0
+#define JSON_VALUE_UNDEFINED_IS_UNORDERED   0 // undefined OP x ==> false, undefined != x ==> true
+#define JSON_VALUE_ALLOW_UNDEFINED_ACCESS   0
 
 #if __cplusplus >= 201703 || __cpp_inline_variables >= 201606
 #define JSON_INLINE_VARIABLE inline
 #else
 #define JSON_INLINE_VARIABLE
+#endif
+
+#ifndef JSON_ASSERT
+#define JSON_ASSERT(X) assert(X)
 #endif
 
 namespace json {
@@ -196,30 +198,6 @@ template <> struct DefaultTraits<String            > : DefaultTraits_string  {};
 template <> struct DefaultTraits<Array             > : DefaultTraits_array   {};
 template <> struct DefaultTraits<Object            > : DefaultTraits_object  {};
 
-template <>
-struct DefaultTraits<char const*>
-{
-    using tag = Tag_string;
-    template <typename V> static decltype(auto) to_json(V&& in) { return std::forward<V>(in); }
-    template <typename V> static decltype(auto) from_json(V&& in)
-    {
-        static_assert(std::is_lvalue_reference<V>::value, "Dangling pointer");
-        return in.get_string().c_str();
-    }
-};
-
-template <>
-struct DefaultTraits<char*>
-{
-    using tag = Tag_string;
-    template <typename V> static decltype(auto) to_json(V&& in) { return std::forward<V>(in); }
-    template <typename V> static decltype(auto) from_json(V&& in)
-    {
-        static_assert(std::is_lvalue_reference<V>::value, "Dangling pointer");
-        return in.get_string().empty() ? static_cast<char*>(nullptr) : &in.get_string()[0];
-    }
-};
-
 template <typename It>
 inline decltype(auto) safe_make_move_iterator(It it, std::true_type /*dont_move*/)
 {
@@ -249,105 +227,6 @@ inline decltype(auto) safe_make_move_iterator(It it)
 
     return json::impl::safe_make_move_iterator(it, dont_move{});
 }
-
-#if 1
-// DefaultTraits for 'array'-like types
-template <typename T>
-struct DefaultTraits<T,
-    std::enable_if_t< // to_json:
-                      std::is_constructible<Array::value_type, decltype(*std::declval<T const&>().begin())>::value
-                      && std::is_constructible<Array, decltype(std::declval<T const&>().begin()), decltype(std::declval<T const&>().end())>::value
-#if 1
-                      // from_json:
-                      && std::is_convertible< decltype(std::declval<T&>().size()), size_t >::value
-                      && AlwaysTrue< decltype(std::declval<T&>().reserve( std::declval<size_t>() )) >::value
-                      && AlwaysTrue< decltype(std::declval<T&>().emplace_back( std::declval<typename T::value_type>() )) >::value
-#endif
-                      >
-    >
-{
-    using tag = Tag_array;
-
-    template <typename V>
-    static decltype(auto) to_json(V&& in)
-    {
-        auto I = json::impl::safe_make_move_iterator<V>(in.begin());
-        auto E = json::impl::safe_make_move_iterator<V>(in.end());
-
-        return Array(I, E);
-    }
-
-#if 1
-    template <typename V>
-    static decltype(auto) from_json(V&& in)
-    {
-        auto&& arr = in.get_array();
-        auto I = json::impl::safe_make_move_iterator<V>(arr.begin());
-        auto E = json::impl::safe_make_move_iterator<V>(arr.end());
-
-        T out;
-        out.reserve(arr.size());
-        for ( ; I != E; ++I)
-        {
-            out.emplace_back(I->template as<typename T::value_type>());
-        }
-
-        return out;
-    }
-#endif
-};
-#endif
-
-#if 0
-// DefaultTraits for 'object'-like types
-template <typename T>
-struct DefaultTraits<T,
-    std::enable_if_t< // to_json:
-                      std::is_constructible<Object::value_type, String, decltype(std::declval<T const&>().begin()->second)>::value
-                      && std::is_constructible<Object, decltype(std::declval<T const&>().begin()), decltype(std::declval<T const&>().end())>::value
-                      // from_json:
-                      // ...
-                      >
-    >
-{
-    using tag = Tag_object;
-
-    template <typename V>
-    static decltype(auto) to_json(V&& in)
-    {
-        auto I = json::impl::safe_make_move_iterator<V>(in.begin());
-        auto E = json::impl::safe_make_move_iterator<V>(in.end());
-
-        Object out;
-        for ( ; I != E; ++I)
-        {
-            out[Value(I->first).to_string()] = I->second;
-        }
-
-        return out;
-    }
-
-    template <typename V>
-    static decltype(auto) from_json(V&& in)
-    {
-        auto&& obj = in.get_object();
-        auto I = json::impl::safe_make_move_iterator<V>(obj.begin());
-        auto E = json::impl::safe_make_move_iterator<V>(obj.end());
-
-        T out;
-        for ( ; I != E; ++I)
-        {
-#if 0
-            out[Value(I->first).template as<typename T::key_type>()] = I->second.template as<typename T::mapped_type>();
-#else
-            out[Value(I->first).template to<typename T::key_type>()] = I->second.template as<typename T::mapped_type>();
-#endif
-        }
-
-        return out;
-    }
-};
-#endif
 
 } // namespace impl
 
@@ -391,81 +270,6 @@ using TargetTypeFor = typename impl::TargetType<TagFor<T>::value>::type;
 
 template <typename T>
 using ToJsonResultTypeFor = decltype(( TraitsFor<T>::to_json(std::declval<T>()) ));
-
-namespace impl {
-
-template <typename T, typename /*Enable*/ = void>
-struct CheckHasTag : std::false_type
-{
-    static_assert(AlwaysFalse<T>::value, R"(
-
-Invalid (or missing) json::Traits<> specialization:
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-A specialization of json::Traits<T> must exist and must have a member type named 'tag',
-
-    which must be one of {Tag_null, Tag_boolean, Tag_number, Tag_string, Tag_array, Tag_object}.
-
-)");
-};
-
-template <typename T>
-struct CheckHasTag<T,
-    std::enable_if_t< std::is_same<TagFor<T>, Tag_null>::value
-                      || std::is_same<TagFor<T>, Tag_boolean>::value
-                      || std::is_same<TagFor<T>, Tag_number>::value
-                      || std::is_same<TagFor<T>, Tag_string>::value
-                      || std::is_same<TagFor<T>, Tag_array>::value
-                      || std::is_same<TagFor<T>, Tag_object>::value
-                      >
-    >
-    : std::true_type
-{
-};
-
-template <typename T, typename /*Enable*/ = void>
-struct CheckHasToJson : std::false_type
-{
-    static_assert(AlwaysFalse<T>::value, R"(
-
-Invalid (or missing) json::Traits<> specialization:
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-json::Traits<T> must have a static member function 'to_json',
-
-    which must be callable with an argument of type 'T',
-
-    and must return a json::Value
-             or the result must be convertible to TargetType<T>
-             or TargetType<T> must be explicitly constructible from the result (in this case one needs to call 'json::Value's explicit constructor).
-
-)");
-};
-
-template <typename T>
-struct CheckHasToJson<T,
-    std::enable_if_t< std::is_same<Value, std::decay_t<ToJsonResultTypeFor<T>>>::value
-                      || std::is_constructible<TargetTypeFor<T>, ToJsonResultTypeFor<T>>::value
-                      >
-    >
-    : std::true_type
-{
-};
-
-} // namespace impl
-
-// In case you get an error like
-//      error: conversion from 'T' to non-scalar type 'json::Value' requested
-// or
-//      error C2440: 'initializing': cannot convert from 'T' to 'json::Value'
-// you can try to instantiate CheckToJsonTraits<T> to get a more detailed error message.
-template <typename T>
-struct TestConversionToJson
-    : std::integral_constant<bool, impl::CheckHasTag<T>::value
-                                   && impl::CheckHasToJson<T>::value
-                                   >
-{
-};
 
 class Value final
 {
@@ -602,13 +406,6 @@ public:
     {
     }
 
-#if JSON_VALUE_HAS_IMPLICIT_INITIALIZER_LIST_CONSTRUCTOR
-    Value(std::initializer_list<std::pair<String, Value>> il)
-        : Value(Tag_object{}, il)
-    {
-    }
-#endif
-
 public:
     // undefined
 
@@ -724,91 +521,91 @@ public:
 
     bool& get_boolean() & noexcept
     {
-        assert(is_boolean());
+        JSON_ASSERT(is_boolean());
         return data_.boolean;
     }
 
     bool const& get_boolean() const& noexcept
     {
-        assert(is_boolean());
+        JSON_ASSERT(is_boolean());
         return data_.boolean;
     }
 
     bool get_boolean() && noexcept
     {
-        assert(is_boolean());
+        JSON_ASSERT(is_boolean());
         return data_.boolean;
     }
 
     double& get_number() & noexcept
     {
-        assert(is_number());
+        JSON_ASSERT(is_number());
         return data_.number;
     }
 
     double const& get_number() const& noexcept
     {
-        assert(is_number());
+        JSON_ASSERT(is_number());
         return data_.number;
     }
 
     double get_number() && noexcept
     {
-        assert(is_number());
+        JSON_ASSERT(is_number());
         return data_.number;
     }
 
     String& get_string() & noexcept
     {
-        assert(is_string());
+        JSON_ASSERT(is_string());
         return *data_.string;
     }
 
     String const& get_string() const& noexcept
     {
-        assert(is_string());
+        JSON_ASSERT(is_string());
         return *data_.string;
     }
 
     String get_string() && noexcept
     {
-        assert(is_string());
+        JSON_ASSERT(is_string());
         return std::move(*data_.string);
     }
 
     Array& get_array() & noexcept
     {
-        assert(is_array());
+        JSON_ASSERT(is_array());
         return *data_.array;
     }
 
     Array const& get_array() const& noexcept
     {
-        assert(is_array());
+        JSON_ASSERT(is_array());
         return *data_.array;
     }
 
     Array get_array() && noexcept
     {
-        assert(is_array());
+        JSON_ASSERT(is_array());
         return std::move(*data_.array);
     }
 
     Object& get_object() & noexcept
     {
-        assert(is_object());
+        JSON_ASSERT(is_object());
         return *data_.object;
     }
 
     Object const& get_object() const& noexcept
     {
-        assert(is_object());
+        JSON_ASSERT(is_object());
         return *data_.object;
     }
 
     Object get_object() && noexcept
     {
-        assert(is_object());
+        JSON_ASSERT(is_object());
         return std::move(*data_.object);
     }
 
@@ -819,16 +616,6 @@ public:
     template <typename T> T as() &       { return TraitsFor<T>::from_json(*this); }
     template <typename T> T as() const&& { return TraitsFor<T>::from_json(static_cast<Value const&&>(*this)); }
     template <typename T> T as() &&      { return TraitsFor<T>::from_json(static_cast<Value&&      >(*this)); }
-
-#if JSON_VALUE_HAS_EXPLICIT_OPERATOR_T
-    template <typename T> explicit operator T() const&  { return this->as<T>(); }
-#if 0
-    // These are disabled to let g++ generate "conversion sequence is better" warnings...
-    template <typename T> explicit operator T() &       { return this->as<T>(); }
-    template <typename T> explicit operator T() const&& { return static_cast<Value const&&>(*this).as<T>(); }
-#endif
-    template <typename T> explicit operator T() &&      { return static_cast<Value&&      >(*this).as<T>(); }
-#endif
 
     // Compare this value to another. Strict equality (i.e. types must match).
     bool equal_to(Value const& rhs) const noexcept;
@@ -1093,7 +880,7 @@ public:
     Value const& operator[](T&& key) const noexcept
     {
 #if JSON_VALUE_ALLOW_UNDEFINED_ACCESS
-        assert(is_undefined() || is_object());
+        JSON_ASSERT(is_undefined() || is_object());
         if (is_object())
 #endif
         {
@@ -1193,33 +980,6 @@ public:
     uint8_t  to_uint8() const noexcept;
     uint8_t  to_uint8_clamped() const noexcept;
     String   to_string() const;
-
-#if 0
-private:
-    template <typename T> auto to(Tag_boolean, T*) const noexcept { return to_boolean(); }
-    template <typename T> auto to(Tag_number,  T*) const noexcept { return to_number();  }
-    template <typename T> auto to(Tag_string,  T*) const          { return to_string();  }
-
-    inline auto to(Tag_number, int32_t* ) const noexcept { return to_int32();  }
-    inline auto to(Tag_number, uint32_t*) const noexcept { return to_uint32(); }
-    inline auto to(Tag_number, int16_t* ) const noexcept { return to_int16();  }
-    inline auto to(Tag_number, uint16_t*) const noexcept { return to_uint16(); }
-    inline auto to(Tag_number, int8_t*  ) const noexcept { return to_int8();   }
-    inline auto to(Tag_number, uint8_t* ) const noexcept { return to_uint8();  }
-
-public:
-    template <typename T>
-    auto to() const noexcept(noexcept(to(TagFor<T>{}, static_cast<T*>(nullptr))))
-    {
-        return to(TagFor<T>{}, static_cast<T*>(nullptr));
-    }
-
-    template <>
-    auto to<Value>() const noexcept
-    {
-        return *this;
-    }
-#endif
 };
 
 template <typename T> inline T cast(Value const& val) { return val.template as<T>(); }
@@ -1447,6 +1207,201 @@ bool operator<=(L const& lhs, R const& rhs) noexcept
 
     return !(rhs < lhs);
 }
+
+namespace impl {
+
+template <>
+struct DefaultTraits<char const*>
+{
+    using tag = Tag_string;
+    template <typename V> static decltype(auto) to_json(V&& in) { return std::forward<V>(in); }
+    template <typename V> static decltype(auto) from_json(V&& in)
+    {
+        static_assert(std::is_lvalue_reference<V>::value, "Dangling pointer");
+        return in.get_string().c_str();
+    }
+};
+
+template <>
+struct DefaultTraits<char*>
+{
+    using tag = Tag_string;
+    template <typename V> static decltype(auto) to_json(V&& in) { return std::forward<V>(in); }
+    template <typename V> static decltype(auto) from_json(V&& in)
+    {
+        static_assert(std::is_lvalue_reference<V>::value, "Dangling pointer");
+        return in.get_string().empty() ? static_cast<char*>(nullptr) : &in.get_string()[0];
+    }
+};
+
+#if 1
+template <typename T>
+using IsArray = std::integral_constant<bool,
+    // to_json:
+        std::is_constructible<Array::value_type, decltype(*std::declval<T const&>().begin())>::value
+        && std::is_constructible<Array, decltype(std::declval<T const&>().begin()), decltype(std::declval<T const&>().end())>::value
+    // from_json:
+        && AlwaysTrue< decltype(std::declval<T&>().emplace( std::declval<T&>().end(), std::declval<typename T::value_type>() )) >::value
+    >;
+
+// DefaultTraits for 'array'-like types
+template <typename T>
+struct DefaultTraits<T, std::enable_if_t<IsArray<T>::value>>
+{
+    using tag = Tag_array;
+
+    template <typename V>
+    static decltype(auto) to_json(V&& in)
+    {
+        auto I = json::impl::safe_make_move_iterator<V>(in.begin());
+        auto E = json::impl::safe_make_move_iterator<V>(in.end());
+
+        return Array(I, E);
+    }
+
+    template <typename V>
+    static decltype(auto) from_json(V&& in)
+    {
+        auto&& arr = in.get_array();
+        auto I = json::impl::safe_make_move_iterator<V>(arr.begin());
+        auto E = json::impl::safe_make_move_iterator<V>(arr.end());
+
+        T out;
+        for ( ; I != E; ++I)
+        {
+            out.emplace(out.end(), I->template as<typename T::value_type>());
+        }
+
+        return out;
+    }
+};
+#endif
+
+#if 1
+template <typename T>
+using IsObject = std::integral_constant<bool,
+        !IsArray<T>::value
+    // to_json:
+        && std::is_constructible<Object::value_type, String, decltype(std::declval<T const&>().begin()->second)>::value
+        && std::is_constructible<Object, decltype(std::declval<T const&>().begin()), decltype(std::declval<T const&>().end())>::value
+    // from_json:
+        && std::is_constructible<typename T::key_type, String>::value
+        && AlwaysTrue< decltype(std::declval<T&>().emplace( std::declval<String>(), std::declval<typename T::mapped_type>() )) >::value
+    >;
+
+// DefaultTraits for 'object'-like types
+template <typename T>
+struct DefaultTraits<T, std::enable_if_t<IsObject<T>::value>>
+{
+    using tag = Tag_object;
+
+    template <typename V>
+    static decltype(auto) to_json(V&& in)
+    {
+        auto I = json::impl::safe_make_move_iterator<V>(in.begin());
+        auto E = json::impl::safe_make_move_iterator<V>(in.end());
+
+        Object out;
+        for ( ; I != E; ++I)
+        {
+            out[Value(I->first).to_string()] = I->second;
+        }
+
+        return out;
+    }
+
+    template <typename V>
+    static decltype(auto) from_json(V&& in)
+    {
+        auto&& obj = in.get_object();
+        auto I = json::impl::safe_make_move_iterator<V>(obj.begin());
+        auto E = json::impl::safe_make_move_iterator<V>(obj.end());
+
+        T out;
+        for ( ; I != E; ++I)
+        {
+            out.emplace(Value(I->first).to_string(), I->second.template as<typename T::mapped_type>());
+        }
+
+        return out;
+    }
+};
+#endif
+
+} // namespace impl
+
+namespace impl {
+
+template <typename T, typename /*Enable*/ = void>
+struct CheckHasTag : std::false_type
+{
+    static_assert(AlwaysFalse<T>::value, R"(
+
+Invalid (or missing) json::Traits<> specialization:
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A specialization of json::Traits<T> must exist and must have a member type named 'tag',
+
+    which must be one of {Tag_null, Tag_boolean, Tag_number, Tag_string, Tag_array, Tag_object}.
+
+)");
+};
+
+template <typename T>
+struct CheckHasTag<T,
+    std::enable_if_t< std::is_same<TagFor<T>, Tag_null>::value
+                      || std::is_same<TagFor<T>, Tag_boolean>::value
+                      || std::is_same<TagFor<T>, Tag_number>::value
+                      || std::is_same<TagFor<T>, Tag_string>::value
+                      || std::is_same<TagFor<T>, Tag_array>::value
+                      || std::is_same<TagFor<T>, Tag_object>::value
+                      >
+    >
+    : std::true_type
+{
+};
+
+template <typename T, typename /*Enable*/ = void>
+struct CheckHasToJson : std::false_type
+{
+    static_assert(AlwaysFalse<T>::value, R"(
+
+Invalid (or missing) json::Traits<> specialization:
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+json::Traits<T> must have a static member function 'to_json',
+
+    which must be callable with an argument of type 'T',
+
+    and must return a json::Value
+             or the result must be convertible to TargetType<T>
+             or TargetType<T> must be explicitly constructible from the result (in this case one needs to call 'json::Value's explicit constructor).
+
+)");
+};
+
+template <typename T>
+struct CheckHasToJson<T,
+    std::enable_if_t< std::is_same<Value, std::decay_t<ToJsonResultTypeFor<T>>>::value
+                      || std::is_constructible<TargetTypeFor<T>, ToJsonResultTypeFor<T>>::value
+                      >
+    >
+    : std::true_type
+{
+};
+
+} // namespace impl
+
+// In case you get an error like
+//      error: conversion from 'T' to non-scalar type 'json::Value' requested
+// or
+//      error C2440: 'initializing': cannot convert from 'T' to 'json::Value'
+// you can try to instantiate CheckToJsonTraits<T> to get a more detailed error message.
+template <typename T>
+struct TestConversionToJson
+    : std::integral_constant<bool, impl::CheckHasTag<T>::value && impl::CheckHasToJson<T>::value>
+{
+};
 
 //==================================================================================================
 // parse

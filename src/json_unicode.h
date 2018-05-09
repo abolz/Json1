@@ -26,6 +26,10 @@
 #include <cstdint>
 #include <iterator>
 
+#ifndef JSON_ASSERT
+#define JSON_ASSERT(X) assert(X)
+#endif
+
 namespace json {
 namespace unicode {
 
@@ -73,7 +77,7 @@ inline int GetUTF8SequenceLengthFromLeadByte(char ch, uint32_t& U)
 
 inline int GetUTF8SequenceLengthFromCodepoint(uint32_t U)
 {
-    assert(IsValidCodepoint(U));
+    JSON_ASSERT(IsValidCodepoint(U));
 
     if (U <=   0x7F) { return 1; }
     if (U <=  0x7FF) { return 2; }
@@ -89,12 +93,11 @@ inline bool IsUTF8OverlongSequence(uint32_t U, int slen)
 template <typename It>
 It DecodeUTF8Sequence(It next, It last, uint32_t& U)
 {
-    assert(next != last);
+    JSON_ASSERT(next != last);
 
     int const slen = GetUTF8SequenceLengthFromLeadByte(*next, U);
     ++next;
 
-#if 0
     if (slen == 0)
     {
         U = kInvalidCodepoint; // Invalid lead byte
@@ -110,7 +113,6 @@ It DecodeUTF8Sequence(It next, It last, uint32_t& U)
         }
 
         auto const cb = *next;
-        ++next;
 
         if (!IsUTF8Trail(cb))
         {
@@ -119,21 +121,8 @@ It DecodeUTF8Sequence(It next, It last, uint32_t& U)
         }
 
         U = (U << 6) | (static_cast<uint8_t>(cb) & 0x3F);
-    }
-#else
-    if (slen == 0 || last - next < slen - 1)
-    {
-        U = kInvalidCodepoint; // Invalid lead byte or incomplete UTF-8 sequence
-        return FindNextUTF8Sequence(next, last);
-    }
-
-    for (int i = slen - 1; i != 0; --i)
-    {
-        auto const cb = *next;
         ++next;
-        U = (U << 6) | (IsUTF8Trail(cb) ? (static_cast<uint8_t>(cb) & 0x3F) : kInvalidCodepoint);
     }
-#endif
 
     if (!IsValidCodepoint(U) || IsUTF8OverlongSequence(U, slen))
     {
@@ -147,7 +136,7 @@ It DecodeUTF8Sequence(It next, It last, uint32_t& U)
 template <typename Put8>
 void EncodeUTF8(uint32_t U, Put8 put)
 {
-    assert(IsValidCodepoint(U));
+    JSON_ASSERT(IsValidCodepoint(U));
 
     if (U <= 0x7F)
     {
@@ -182,7 +171,7 @@ bool ForEachUTF8EncodedCodepoint(It next, It last, Put32 put)
         uint32_t U = 0;
 
         auto const next1 = DecodeUTF8Sequence(next, last, U);
-        assert(next != next1);
+        JSON_ASSERT(next != next1);
         next = next1;
 
         if (!put(U))
@@ -197,7 +186,7 @@ bool ForEachUTF8EncodedCodepoint(It next, It last, Put32 put)
 template <typename It>
 It DecodeUTF16Sequence(It next, It last, uint32_t& U)
 {
-    assert(next != last);
+    JSON_ASSERT(next != last);
 
     uint32_t const W1 = static_cast<uint16_t>(*next);
     ++next;
@@ -231,7 +220,7 @@ It DecodeUTF16Sequence(It next, It last, uint32_t& U)
 template <typename Put16>
 void EncodeUTF16(uint32_t U, Put16 put)
 {
-    assert(IsValidCodepoint(U));
+    JSON_ASSERT(IsValidCodepoint(U));
 
     if (U < 0x10000)
     {
@@ -255,7 +244,7 @@ bool ForEachUTF16EncodedCodepoint(It next, It last, Put32 put)
         uint32_t U = 0;
 
         auto const next1 = DecodeUTF16Sequence(next, last, U);
-        assert(next != next1);
+        JSON_ASSERT(next != next1);
         next = next1;
 
         if (!put(U))
@@ -310,7 +299,6 @@ inline int HexDigitValue(char ch)
 }
 #endif
 
-#if 0
 template <typename It>
 inline char ParseChar(It& first, It last)
 {
@@ -330,7 +318,6 @@ inline int ParseHexDigit(It& first, It last)
     ++first;
     return h;
 }
-#endif
 
 // Reads a hexadecimal number of the form "HHHH".
 // Stores the result in W on success.
@@ -339,7 +326,7 @@ bool ReadHex16(It& first, It last, uint32_t& W)
 {
     auto f = first;
 
-#if 0
+#if 1
     auto const h0 = ParseHexDigit(f, last);
     auto const h1 = ParseHexDigit(f, last);
     auto const h2 = ParseHexDigit(f, last);
@@ -374,7 +361,7 @@ bool ReadUCN(It& first, It last, uint32_t& W)
 {
     auto f = first;
 
-#if 0
+#if 1
     auto const c0 = ParseChar(f, last);
     auto const c1 = ParseChar(f, last);
     auto const h0 = ParseHexDigit(f, last);
@@ -409,7 +396,7 @@ bool ReadUCN(It& first, It last, uint32_t& W)
 template <typename It>
 It DecodeTrimmedUCNSequence(It next, It last, uint32_t& U)
 {
-    assert(next != last);
+    JSON_ASSERT(next != last);
 
     uint32_t W1;
     if (!ReadHex16(next, last, W1))
@@ -451,7 +438,7 @@ It DecodeTrimmedUCNSequence(It next, It last, uint32_t& U)
 template <typename It>
 It DecodeUCNSequence(It next, It last, uint32_t& U)
 {
-    assert(next != last);
+    JSON_ASSERT(next != last);
 
     uint32_t W1;
     if (!ReadUCN(next, last, W1))
