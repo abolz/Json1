@@ -20,6 +20,8 @@
 
 #include "json_parse.h"
 
+#include "json_charclass.h"
+
 #include <cassert>
 #include <cstdint>
 #include <cstring>
@@ -34,70 +36,11 @@ using namespace json;
 //
 //--------------------------------------------------------------------------------------------------
 
-#define W 0x01  // whitespace  : '\t', '\n', '\r', ' '
-#define D 0x02  // digit       : '0'...'9'
-                // letter      : 'a'...'z', 'A'...'Z'
-                // number-body : IsDigit, 'E', 'e', '.', '+', '-'
-#define I 0x10  // ident-body  : IsDigit, IsLetter, '_', '$'
-                // hex-digit   : IsDigit, 'a'...'f', 'A'...'F'
-                // esc-char    : '"', '\\', '/', 'b', 'f', 'n', 'r', 't', 'u'
-#define S 0x40  // quote or bs : '"', '\'', '`', '\\'
-#define C 0x80  // needs cleaning (strings)
-
-enum ECharClass : unsigned {
-    CC_None             = 0,
-    CC_Whitespace       = W,
-    CC_Digit            = D,
-    CC_IdentifierBody   = I,
-    CC_StringSpecial    = S,
-    CC_NeedsCleaning    = C,
-};
-
-static constexpr uint8_t const kCharClass[] = {
-//  NUL     SOH     STX     ETX     EOT     ENQ     ACK     BEL     BS      HT      LF      VT      FF      CR      SO      SI
-    C,      C,      C,      C,      C,      C,      C,      C,      C,      W|C,    W|C,    C,      C,      W|C,    C,      C,
-//  DLE     DC1     DC2     DC3     DC4     NAK     SYN     ETB     CAN     EM      SUB     ESC     FS      GS      RS      US
-    C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,
-//  space   !       "       #       $       %       &       '       (       )       *       +       ,       -       .       /
-    W,      0,      S,      0,      I,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-//  0       1       2       3       4       5       6       7       8       9       :       ;       <       =       >       ?
-    D|I,    D|I,    D|I,    D|I,    D|I,    D|I,    D|I,    D|I,    D|I,    D|I,    0,      0,      0,      0,      0,      0,
-//  @       A       B       C       D       E       F       G       H       I       J       K       L       M       N       O
-    0,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,
-//  P       Q       R       S       T       U       V       W       X       Y       Z       [       \       ]       ^       _
-    I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      0,      S|C,    0,      0,      I,
-//  `       a       b       c       d       e       f       g       h       i       j       k       l       m       n       o
-    0,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,
-//  p       q       r       s       t       u       v       w       x       y       z       {       |       }       ~       DEL
-    I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      0,      0,      0,      0,      0,
-    C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,
-    C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,
-    C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,
-    C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,
-    C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,
-    C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,
-    C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,
-    C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,
-};
-
-static unsigned GetCharClass(char ch)
-{
-    return kCharClass[static_cast<unsigned char>(ch)];
-}
-
-#undef C
-#undef S
-#undef I
-#undef D
-#undef W
-
-static bool IsWhitespace     (char ch) { return (GetCharClass(ch) & CC_Whitespace    ) != 0; }
-static bool IsDigit          (char ch) { return (GetCharClass(ch) & CC_Digit         ) != 0; }
-static bool IsIdentifierBody (char ch) { return (GetCharClass(ch) & CC_IdentifierBody) != 0; }
-
 template <typename It>
 static It SkipWhitespace(It f, It l)
 {
+    using namespace json::charclass;
+
 #if 0
     while (l - f >= 4)
     {
@@ -130,9 +73,9 @@ struct ScanNumberResult
 };
 
 template <typename It>
-static ScanNumberResult<It> ScanNumber(It first, It last, Options const& options)
+static ScanNumberResult<It> ScanNumber(It next, It last, Options const& options)
 {
-    It next = first;
+    using namespace json::charclass;
 
     if (next == last)
         return {next, NumberClass::invalid};
@@ -443,6 +386,8 @@ L_again:
 
 Token Lexer::LexString(char const* p)
 {
+    using namespace json::charclass;
+
     JSON_ASSERT(p != end);
     JSON_ASSERT(*p == '"');
 
@@ -453,10 +398,10 @@ Token Lexer::LexString(char const* p)
     {
         while (end - p >= 4)
         {
-            unsigned const m0 = GetCharClass(p[0]);
-            unsigned const m1 = GetCharClass(p[1]);
-            unsigned const m2 = GetCharClass(p[2]);
-            unsigned const m3 = GetCharClass(p[3]);
+            unsigned const m0 = CharClass(p[0]);
+            unsigned const m1 = CharClass(p[1]);
+            unsigned const m2 = CharClass(p[2]);
+            unsigned const m3 = CharClass(p[3]);
 
             unsigned const mm = m0 | m1 | m2 | m3;
             if ((mm & CC_StringSpecial) == 0)
@@ -477,7 +422,7 @@ Token Lexer::LexString(char const* p)
             if (p == end)
                 goto L_incomplete;
 
-            unsigned const m0 = GetCharClass(*p);
+            unsigned const m0 = CharClass(*p);
             mask |= m0;
             if ((m0 & CC_StringSpecial) != 0)
                 goto L_check;
@@ -515,6 +460,8 @@ Token Lexer::LexNumber(char const* p, Options const& options)
 
 Token Lexer::LexIdentifier(char const* p)
 {
+    using namespace json::charclass;
+
     for ( ; p != end && IsIdentifierBody(*p); ++p)
     {
     }

@@ -65,19 +65,20 @@ namespace impl
 //      '\u' four-hex-digits
 //
 
-//enum class UnescapeStringStatus {
-//    success,
-//    unescaped_control_character,
-//    incomplete_ucn_sequence,
-//    incomplete_utf8_sequence,
-//    invalid_unicode,
-//};
+enum class UnescapeStringStatus {
+    success,
+    unescaped_control_character,
+    invalid_escaped_character,
+    invalid_ucn_sequence,
+    invalid_utf8_sequence,
+    incomplete,
+};
 
 template <typename It>
 struct UnescapeStringResult
 {
     It next;
-    bool ok;
+    UnescapeStringStatus status;
 };
 
 template <typename It, typename Fn>
@@ -95,7 +96,7 @@ UnescapeStringResult<It> UnescapeString(It next, It last, /*char quote_char,*/ F
 
         if (uc < 0x20) // unescaped control character
         {
-            return {next, false};
+            return {next, UnescapeStringStatus::unescaped_control_character};
         }
         else if (uc < 0x80) // ASCII printable or DEL
         {
@@ -110,7 +111,7 @@ UnescapeStringResult<It> UnescapeString(It next, It last, /*char quote_char,*/ F
 
             ++next; // skip '\'
             if (next == last)
-                return {next, false};
+                return {next, UnescapeStringStatus::incomplete};
 
             switch (*next)
             {
@@ -149,7 +150,7 @@ UnescapeStringResult<It> UnescapeString(It next, It last, /*char quote_char,*/ F
             case 'u':
                 {
                     if (++next == last)
-                        return {f, false};
+                        return {f, UnescapeStringStatus::incomplete};
 
                     uint32_t U = 0;
                     auto const end = json::unicode::DecodeTrimmedUCNSequence(next, last, U);
@@ -162,12 +163,12 @@ UnescapeStringResult<It> UnescapeString(It next, It last, /*char quote_char,*/ F
                     }
                     else
                     {
-                        return {f, false};
+                        return {f, UnescapeStringStatus::invalid_utf8_sequence};
                     }
                 }
                 break;
             default:
-                return {next, false}; // invalid escaped character
+                return {next, UnescapeStringStatus::invalid_escaped_character}; // invalid escaped character
             }
         }
         else // (possibly) the start of a UTF-8 sequence.
@@ -195,19 +196,24 @@ UnescapeStringResult<It> UnescapeString(It next, It last, /*char quote_char,*/ F
             }
             else
             {
-                return {f, false};
+                return {f, UnescapeStringStatus::invalid_utf8_sequence};
             }
         }
     }
 
-    return {next, true};
+    return {next, UnescapeStringStatus::success};
 }
+
+enum class EscapeStringStatus {
+    success,
+    invalid_utf8_sequence,
+};
 
 template <typename It>
 struct EscapeStringResult
 {
     It next;
-    bool ok;
+    EscapeStringStatus status;
 };
 
 template <typename It, typename Fn>
@@ -325,12 +331,12 @@ EscapeStringResult<It> EscapeString(It next, It last, Fn yield)
             }
             else
             {
-                return {next, false};
+                return {next, EscapeStringStatus::invalid_utf8_sequence};
             }
         }
     }
 
-    return {next, true};
+    return {next, EscapeStringStatus::success};
 }
 
 } // namespace strings

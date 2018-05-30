@@ -20,6 +20,8 @@
 
 #include "json_numbers.h"
 
+#include "json_charclass.h"
+
 #include "dtoa.h"
 #include "strtod.h"
 
@@ -37,11 +39,167 @@
 using namespace json;
 using namespace json::numbers;
 
-#define FAST_INT 0
-
 //==================================================================================================
 // NumberToString
 //==================================================================================================
+
+static char* U32ToString(char* buf, uint32_t n)
+{
+    using base_conv::impl::Utoa100;
+
+    uint32_t q;
+
+    if (n >= 1000000000)
+    {
+//L_10_digits:
+        q = n / 100000000;
+        n = n % 100000000;
+        buf = Utoa100(buf, q);
+L_8_digits:
+        q = n / 1000000;
+        n = n % 1000000;
+        buf = Utoa100(buf, q);
+L_6_digits:
+        q = n / 10000;
+        n = n % 10000;
+        buf = Utoa100(buf, q);
+L_4_digits:
+        q = n / 100;
+        n = n % 100;
+        buf = Utoa100(buf, q);
+L_2_digits:
+        buf = Utoa100(buf, n);
+        return buf;
+    }
+
+    if (n >= 100000000)
+    {
+//L_9_digits:
+        q = n / 10000000;
+        n = n % 10000000;
+        buf = Utoa100(buf, q);
+L_7_digits:
+        q = n / 100000;
+        n = n % 100000;
+        buf = Utoa100(buf, q);
+L_5_digits:
+        q = n / 1000;
+        n = n % 1000;
+        buf = Utoa100(buf, q);
+L_3_digits:
+        q = n / 10;
+        n = n % 10;
+        buf = Utoa100(buf, q);
+L_1_digit:
+        buf[0] = static_cast<char>('0' + n);
+        return buf + 1;
+    }
+
+    if (n < 100)
+    {
+        if (n >= 10)
+            goto L_2_digits;
+        else
+            goto L_1_digit;
+    }
+    else if (n < 10000)
+    {
+        if (n >= 1000)
+            goto L_4_digits;
+        else
+            goto L_3_digits;
+    }
+    else if (n < 1000000)
+    {
+        if (n >= 100000)
+            goto L_6_digits;
+        else
+            goto L_5_digits;
+    }
+    else
+    {
+        if (n >= 10000000)
+            goto L_8_digits;
+        else
+            goto L_7_digits;
+    }
+}
+
+static char* U64ToString(char* buf, uint64_t n)
+{
+    using base_conv::impl::Utoa100;
+
+    auto Utoa_9digits = [](char* ptr, uint32_t k)
+    {
+        uint32_t q;
+
+//L_9_digits:
+        q = k / 10000000;
+        k = k % 10000000;
+        ptr = Utoa100(ptr, q);
+//L_7_digits:
+        q = k / 100000;
+        k = k % 100000;
+        ptr = Utoa100(ptr, q);
+//L_5_digits:
+        q = k / 1000;
+        k = k % 1000;
+        ptr = Utoa100(ptr, q);
+//L_3_digits:
+        q = k / 10;
+        k = k % 10;
+        ptr = Utoa100(ptr, q);
+//L_1_digits:
+        ptr[0] = static_cast<char>('0' + k);
+        return ptr + 1;
+    };
+
+    if (n <= UINT32_MAX)
+        return U32ToString(buf, static_cast<uint32_t>(n));
+
+    // n = hi * 10^9 + lo < 10^20,   where hi < 10^11, lo < 10^9
+    uint64_t const hi = n / 1000000000;
+    uint64_t const lo = n % 1000000000;
+
+    if (hi <= UINT32_MAX)
+    {
+        buf = U32ToString(buf, static_cast<uint32_t>(hi));
+    }
+    else
+    {
+        // 2^32 < hi = hi1 * 10^9 + hi0 < 10^11,   where hi1 < 10^2, 10^9 <= hi0 < 10^9
+        uint32_t const hi1 = static_cast<uint32_t>(hi / 1000000000);
+        uint32_t const hi0 = static_cast<uint32_t>(hi % 1000000000);
+        if (hi1 >= 10)
+        {
+            buf = Utoa100(buf, hi1);
+        }
+        else
+        {
+            DTOA_ASSERT(hi1 != 0);
+            buf[0] = static_cast<char>('0' + hi1);
+            buf++;
+        }
+        buf = Utoa_9digits(buf, hi0);
+    }
+
+    // lo has exactly 9 digits.
+    // (Which might all be zero...)
+    return Utoa_9digits(buf, static_cast<uint32_t>(lo));
+}
+
+static char* I64ToString(char* buf, int64_t i)
+{
+    uint64_t n = static_cast<uint64_t>(i);
+    if (i < 0)
+    {
+        buf[0] = '-';
+        buf++;
+        n = 0u - n;
+    }
+
+    return U64ToString(buf, n);
+}
 
 char* json::numbers::NumberToString(char* next, char* last, double value, bool emit_trailing_dot_zero)
 {
@@ -74,7 +232,7 @@ char* json::numbers::NumberToString(char* next, char* last, double value, bool e
         const int64_t i = static_cast<int64_t>(value);
         if (static_cast<double>(i) == value)
         {
-            return base_conv::I64ToString(next, i);
+            return I64ToString(next, i);
         }
     }
 #else
@@ -85,7 +243,7 @@ char* json::numbers::NumberToString(char* next, char* last, double value, bool e
 #endif
 #endif
 
-    return base_conv::DoubleToString(next, last, value, emit_trailing_dot_zero, "NaN", "Infinity");
+    return base_conv::Dtoa(next, last, value, emit_trailing_dot_zero, "NaN", "Infinity");
 }
 
 //==================================================================================================
@@ -94,6 +252,8 @@ char* json::numbers::NumberToString(char* next, char* last, double value, bool e
 
 static bool StringToDouble(double& result, char const* next, char const* last, Options const& options)
 {
+    using namespace json::charclass;
+
     // Inputs larger than kMaxInt (currently) can not be handled.
     // To avoid overflow in integer arithmetic.
     static constexpr int const kMaxInt = INT_MAX / 4;
@@ -150,7 +310,7 @@ static bool StringToDouble(double& result, char const* next, char const* last, O
             return true;
         }
     }
-    else if ('1' <= *next && *next <= '9')
+    else if (IsDigit(*next))
     {
         // Copy significant digits of the integer part (if any) to the buffer.
         for (;;)
@@ -169,7 +329,7 @@ static bool StringToDouble(double& result, char const* next, char const* last, O
             {
                 goto L_parsing_done;
             }
-            if (*next < '0' || *next > '9')
+            if (!IsDigit(*next))
             {
                 break;
             }
@@ -226,7 +386,7 @@ static bool StringToDouble(double& result, char const* next, char const* last, O
 
         // There is a fractional part.
         // We don't emit a '.', but adjust the exponent instead.
-        while ('0' <= *next && *next <= '9')
+        while (IsDigit(*next))
         {
             if (num_digits < kMaxSignificantDigits)
             {
@@ -269,7 +429,7 @@ static bool StringToDouble(double& result, char const* next, char const* last, O
             }
         }
 
-        if (*next < '0' || *next > '9')
+        if (!IsDigit(*next))
         {
             // XXX:
             // Recover? Parse as if exponent = 0?
@@ -279,14 +439,14 @@ static bool StringToDouble(double& result, char const* next, char const* last, O
         int num = 0;
         for (;;)
         {
-            int const digit = *next - '0';
+            int const digit = HexDigitValue(*next);
 
 //          if (num > kMaxInt / 10 || digit > kMaxInt - 10 * num)
             if (num > kMaxInt / 10 - 9)
             {
                 // Overflow.
                 // Skip the rest of the exponent (ignored).
-                for (++next; next != last && '0' <= *next && *next <= '9'; ++next)
+                for (++next; next != last && IsDigit(*next); ++next)
                 {
                 }
                 num = kMaxInt;
@@ -299,7 +459,7 @@ static bool StringToDouble(double& result, char const* next, char const* last, O
             {
                 break;
             }
-            if (*next < '0' || *next > '9')
+            if (!IsDigit(*next))
             {
                 break; // trailing junk
             }
@@ -309,28 +469,27 @@ static bool StringToDouble(double& result, char const* next, char const* last, O
     }
 
 L_parsing_done:
-    double value = base_conv::DecimalToDouble(digits, num_digits, nonzero_tail, exponent);
+    double const value = base_conv::DecimalToDouble(digits, num_digits, exponent, nonzero_tail);
     JSON_ASSERT(!std::signbit(value));
 
     result = is_neg ? -value : value;
     return true;
 }
 
-#if 0
-static double ReadDouble_unguarded(char const* digits, int num_digits)
+inline double ReadDouble_unguarded(char const* digits, int num_digits)
 {
+    using namespace json::charclass;
+
     int64_t result = 0;
 
     for (int i = 0; i != num_digits; ++i)
     {
-        JSON_ASSERT(digits[i] >= '0');
-        JSON_ASSERT(digits[i] <= '9');
-        result = 10 * result + (digits[i] - '0');
+        JSON_ASSERT(IsDigit(digits[i]));
+        result = 10 * result + HexDigitValue(digits[i]);
     }
 
     return static_cast<double>(result);
 }
-#endif
 
 double json::numbers::StringToNumber(char const* first, char const* last, NumberClass nc)
 {
@@ -367,18 +526,19 @@ double json::numbers::StringToNumber(char const* first, char const* last, Number
 
 #if 1
         JSON_ASSERT(last - first_digit <= INT_MAX);
-        double result = base_conv::DecimalToDouble(first_digit, static_cast<int>(last - first_digit), /*nonzero_tail*/ false, 0);
+        double const result = base_conv::DecimalToDouble(first_digit, static_cast<int>(last - first_digit), /*exponent*/ 0);
         return is_neg ? -result : result;
 #else
         // 10^15 < 2^53 = 9007199254740992 < 10^16
         if (last - first_digit <= 16)
         {
-            JSON_ASSERT(*first_digit >= '0');
-            JSON_ASSERT(*first_digit <= '9');
+            using namespace json::charclass;
 
-            if (last - first_digit < 16 || *first_digit <= '8' /*|| std::memcmp(first_digit, "9007199254740992", 16) <= 0*/)
+            JSON_ASSERT(IsDigit(*first_digit));
+
+            if (last - first_digit < 16 || HexDigitValue(*first_digit) <= 8 /*|| std::memcmp(first_digit, "9007199254740992", 16) <= 0*/)
             {
-                double result = ReadDouble_unguarded(first_digit, static_cast<int>(last - first_digit));
+                double const result = ReadDouble_unguarded(first_digit, static_cast<int>(last - first_digit));
                 return is_neg ? -result : result;
             }
         }
@@ -399,7 +559,9 @@ double json::numbers::StringToNumber(char const* first, char const* last, Number
 bool json::numbers::StringToNumber(double& result, char const* first, char const* last, Options const& options)
 {
     if (StringToDouble(result, first, last, options))
+    {
         return true;
+    }
 
     result = std::numeric_limits<double>::quiet_NaN();
     return false;
@@ -409,7 +571,9 @@ double json::numbers::ParseFloat(char const* first, char const* last)
 {
     double d;
     if (StringToDouble(d, first, last, Options{}))
+    {
         return d;
+    }
 
     return std::numeric_limits<double>::quiet_NaN();
 }

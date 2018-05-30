@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include "json_charclass.h"
 #include "json_options.h"
 
 #include <cassert>
@@ -256,77 +257,39 @@ bool ForEachUTF16EncodedCodepoint(It next, It last, Put32 put)
 #endif
 
 #if 0
-inline int HexDigitValue(char ch)
-{
-#define N -1
-    static constexpr int8_t const kDigitValue[256] = {
-    //  NUL     SOH     STX     ETX     EOT     ENQ     ACK     BEL     BS      HT      LF      VT      FF      CR      SO      SI
-        N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,
-    //  DLE     DC1     DC2     DC3     DC4     NAK     SYN     ETB     CAN     EM      SUB     ESC     FS      GS      RS      US
-        N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,
-    //  space   !       "       #       $       %       &       '       (       )       *       +       ,       -       .       /
-        N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,
-    //  0       1       2       3       4       5       6       7       8       9       :       ;       <       =       >       ?
-        0,      1,      2,      3,      4,      5,      6,      7,      8,      9,      N,      N,      N,      N,      N,      N,
-    //  @       A       B       C       D       E       F       G       H       I       J       K       L       M       N       O
-        N,      10,     11,     12,     13,     14,     15,     N,      N,      N,      N,      N,      N,      N,      N,      N,
-    //  P       Q       R       S       T       U       V       W       X       Y       Z       [       \       ]       ^       _
-        N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,
-    //  `       a       b       c       d       e       f       g       h       i       j       k       l       m       n       o
-        N,      10,     11,     12,     13,     14,     15,     N,      N,      N,      N,      N,      N,      N,      N,      N,
-    //  p       q       r       s       t       u       v       w       x       y       z       {       |       }       ~       DEL
-        N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,
-        N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,
-        N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,
-        N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,
-        N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,
-        N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,
-        N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,
-        N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,
-        N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,      N,
-    };
-#undef N
-
-    return kDigitValue[static_cast<unsigned char>(ch)];
-}
-#else
-inline int HexDigitValue(char ch)
-{
-    if ('0' <= ch && ch <= '9') { return ch - '0'; }
-    if ('A' <= ch && ch <= 'F') { return ch - 'A' + 10; }
-    if ('a' <= ch && ch <= 'f') { return ch - 'a' + 10; }
-    return -1;
-}
-#endif
-
 template <typename It>
 inline char ParseChar(It& first, It last)
 {
     if (first == last)
         return '\0';
-    auto const ch = *first;
+    auto const res = *first;
     ++first;
-    return ch;
+    return res;
 }
 
 template <typename It>
 inline int ParseHexDigit(It& first, It last)
 {
+    using namespace json::charclass;
+
     if (first == last)
         return -1;
-    auto const h = HexDigitValue(*first);
+    auto const res = HexDigitValue(*first);
     ++first;
-    return h;
+    return res;
 }
+#endif
 
 // Reads a hexadecimal number of the form "HHHH".
 // Stores the result in W on success.
 template <typename It>
 bool ReadHex16(It& first, It last, uint32_t& W)
 {
+    using namespace json::charclass;
+
     auto f = first;
 
-#if 1
+#if 0
     auto const h0 = ParseHexDigit(f, last);
     auto const h1 = ParseHexDigit(f, last);
     auto const h2 = ParseHexDigit(f, last);
@@ -359,9 +322,11 @@ bool ReadHex16(It& first, It last, uint32_t& W)
 template <typename It>
 bool ReadUCN(It& first, It last, uint32_t& W)
 {
+    using namespace json::charclass;
+
     auto f = first;
 
-#if 1
+#if 0
     auto const c0 = ParseChar(f, last);
     auto const c1 = ParseChar(f, last);
     auto const h0 = ParseHexDigit(f, last);

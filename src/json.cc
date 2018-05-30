@@ -912,7 +912,7 @@ struct ParseValueCallbacks /*final*/ : ParseCallbacks
                 str.push_back(ch);
             });
 
-            if (!res.ok)
+            if (res.status != strings::UnescapeStringStatus::success)
                 return ParseStatus::invalid_string;
 
             stack.emplace_back(std::move(str));
@@ -974,7 +974,7 @@ struct ParseValueCallbacks /*final*/ : ParseCallbacks
                 keys.back().push_back(ch);
             });
 
-            if (!res.ok)
+            if (res.status != strings::UnescapeStringStatus::success)
                 return ParseStatus::invalid_string; // return ParseStatus::invalid_key;
         }
         else
@@ -1154,7 +1154,7 @@ static bool StringifyString(std::string& str, String const& value, Options const
     auto const res = strings::EscapeString(first, last, [&](char ch) { str += ch; });
     str += '"';
 
-    return res.ok;
+    return res.status == strings::EscapeStringStatus::success;
 }
 
 static bool StringifyArray(std::string& str, Array const& value, Options const& options, int curr_indent)

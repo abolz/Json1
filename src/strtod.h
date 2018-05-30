@@ -18,83 +18,61 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// Derived from the double-conversion library:
-// https://github.com/google/double-conversion
-//
-// The original license can be found at the end of this file.
-
 #pragma once
 
 #include "dtoa.h"
 
-#ifdef DTOA_UNNAMED_NAMESPACE
-namespace {
-#endif
 namespace base_conv {
-
-// Maximum number of significant digits in decimal representation.
-// The longest possible double in decimal representation is
-// (2^53 - 1) * 5^1074 / 10^1074, which has (767 digits).
-// If we parse a number whose first digits are equal to a mean of 2 adjacent
-// doubles (that could have up to 768 digits) the result must be rounded to the
-// bigger one unless the tail consists of zeros, so we don't need to preserve
-// all the digits.
-constexpr int kMaxSignificantDigits = 767 + 1;
 
 //==================================================================================================
 // DecimalToDouble
+//
+// Derived from the double-conversion library:
+// https://github.com/google/double-conversion
+//
+// The original license can be found at the end of this file.
+//
+// [1] Clinger, "How to read floating point numbers accurately",
+//     PLDI '90 Proceedings of the ACM SIGPLAN 1990 conference on Programming language design and
+//     implementation, Pages 92-101
 //==================================================================================================
+
+// Maximum number of significant digits in decimal representation.
+//
+// The longest possible double in decimal representation is (2^53 - 1) * 5^1074 / 10^1074,
+// which has 767 digits.
+// If we parse a number whose first digits are equal to a mean of 2 adjacent doubles (that
+// could have up to 768 digits) the result must be rounded to the bigger one unless the tail
+// consists of zeros, so we don't need to preserve all the digits.
+constexpr int kMaxSignificantDigits = 767 + 1;
 
 namespace impl {
 
 inline constexpr int Min(int x, int y) { return y < x ? y : x; }
 inline constexpr int Max(int x, int y) { return y < x ? x : y; }
 
+inline bool IsDigit(char ch)
+{
+    return '0' <= ch && ch <= '9';
+}
+
 inline int DigitValue(char ch)
 {
-    DTOA_ASSERT(ch >= '0');
-    DTOA_ASSERT(ch <= '9');
+    DTOA_ASSERT(IsDigit(ch));
     return ch - '0';
 }
 
-// Returns `f * 2^e`.
-// Note: the significand is truncated to Double::Precision bits.
-inline double DoubleFromDiyFp(uint64_t f, int e)
-{
-    while (f > Double::HiddenBit + Double::SignificandMask) {
-        f >>= 1;
-        DTOA_ASSERT(e != INT_MAX);
-        e++;
-    }
-    if (e > Double::MaxExponent) {
-        return std::numeric_limits<double>::infinity();
-    }
-    if (e < Double::MinExponent) {
-        return 0.0;
-    }
-    while (e > Double::MinExponent && (f & Double::HiddenBit) == 0) {
-        f <<= 1;
-        e--;
-    }
-
-    uint64_t const exponent = (e == Double::MinExponent && (f & Double::HiddenBit) == 0)
-        ? 0 // (subnormal)
-        : static_cast<uint64_t>(e + Double::ExponentBias);
-
-    uint64_t const bits = (exponent << Double::SignificandSize) | (f & Double::SignificandMask);
-    return ReinterpretBits<double>(bits);
-}
+//--------------------------------------------------------------------------------------------------
+// StrtodFast
+//--------------------------------------------------------------------------------------------------
 
 // Double operations detection based on target architecture.
-// Linux uses a 80bit wide floating point stack on x86. This induces double
-// rounding, which in turn leads to wrong results.
-// An easy way to test if the floating-point operations are correct is to
-// evaluate: 89255.0/1e22. If the floating-point stack is 64 bits wide then
-// the result is equal to 89255e-22.
+// Linux uses a 80bit wide floating point stack on x86. This induces double rounding, which in
+// turn leads to wrong results.
+// An easy way to test if the floating-point operations are correct is to evaluate: 89255.0/1e22.
+// If the floating-point stack is 64 bits wide then the result is equal to 89255e-22.
 // The best way to test this, is to create a division-function and to compare
-// the output of the division with the expected result. (Inlining must be
-// disabled.)
-// On Linux,x86 89255e-22 != Div_double(89255.0/1e22)
+// the output of the division with the expected result. (Inlining must be disabled.)
 #if defined(_M_X64)              || \
     defined(__x86_64__)          || \
     defined(__ARMEL__)           || \
@@ -122,9 +100,11 @@ inline double DoubleFromDiyFp(uint64_t f, int e)
 #if defined(_WIN32)
 // Windows uses a 64bit wide floating point stack.
 #define DTOA_CORRECT_DOUBLE_OPERATIONS 1
+#else
+#define DTOA_CORRECT_DOUBLE_OPERATIONS 0
 #endif // _WIN32
 #elif defined(__mc68000__)
-// Not supported.
+#define DTOA_CORRECT_DOUBLE_OPERATIONS 0
 #else
 #error Target architecture was not detected as supported by Double-Conversion.
 #endif
@@ -143,21 +123,18 @@ inline bool StrtodFast(char const* /*digits*/, int /*num_digits*/, int /*exponen
 // (which has a 53bit significand) without loss of precision.
 constexpr int kMaxExactDoubleIntegerDecimalDigits = 15;
 
-inline double ReadDouble_unsafe(char const* digits, int num_digits)
+inline double ReadDouble(char const* digits, int num_digits)
 {
-    DTOA_ASSERT(num_digits >= 0);
-    DTOA_ASSERT(num_digits <= kMaxExactDoubleIntegerDecimalDigits);
-
-    int64_t result = 0;
-
+    int64_t value = 0;
     for (int i = 0; i < num_digits; ++i)
     {
-        result = 10 * result + DigitValue(digits[i]);
+        value = 10 * value + DigitValue(digits[i]);
     }
 
-    return static_cast<double>(result);
+    return static_cast<double>(value);
 }
 
+// XXX: std::optional<double>
 inline bool StrtodFast(char const* digits, int num_digits, int exponent, double& result)
 {
     static constexpr int kMaxExactPowerOfTen = 22;
@@ -201,7 +178,7 @@ inline bool StrtodFast(char const* digits, int num_digits, int exponent, double&
     int const remaining_digits = kMaxExactDoubleIntegerDecimalDigits - num_digits; // 0 <= rd <= 15
     if (-kMaxExactPowerOfTen <= exponent && exponent <= remaining_digits + kMaxExactPowerOfTen)
     {
-        auto d = ReadDouble_unsafe(digits, num_digits);
+        double d = ReadDouble(digits, num_digits);
         if (exponent < 0)
         {
             d /= kExactPowersOfTen[-exponent];
@@ -229,6 +206,33 @@ inline bool StrtodFast(char const* digits, int num_digits, int exponent, double&
 
 #endif // DTOA_CORRECT_DOUBLE_OPERATIONS
 
+//--------------------------------------------------------------------------------------------------
+// StrtodApprox
+//--------------------------------------------------------------------------------------------------
+
+struct DiyFpWithError // value = (x.f + delta) * 2^x.e, where |delta| <= error
+{
+    // We don't want to deal with fractions and therefore work with a common denominator.
+    static constexpr int kDenominatorLog = 1;
+    static constexpr int kDenominator = 1 << kDenominatorLog;
+
+    DiyFp x;
+    uint64_t error;
+};
+
+// Normalize x
+// and scale the error, so that the error is in ULP(x)
+inline void Normalize(DiyFpWithError& num)
+{
+    int const s = CountLeadingZeros64(num.x.f);
+
+    DTOA_ASSERT(((num.error << s) >> s) == num.error);
+
+    num.x.f   <<= s;
+    num.x.e    -= s;
+    num.error <<= s;
+}
+
 // 2^64 = 18446744073709551616 > 10^19
 // Any integer with at most 19 decimal digits will hence fit into an uint64_t.
 constexpr int kMaxUint64DecimalDigits = 19;
@@ -239,15 +243,18 @@ constexpr int kMaxUint64DecimalDigits = 19;
 // Otherwise it has been rounded and has an error of at most 1/2 ulp.
 //
 // The returned DiyFp is not normalized.
-inline DiyFp ReadDiyFp(char const* digits, int num_digits, int& read_digits)
+inline DiyFpWithError ReadDiyFp(char const* digits, int num_digits, int& read_digits)
 {
     DTOA_ASSERT(num_digits > 0);
-    DTOA_ASSERT(DigitValue(digits[num_digits - 1]) > 0); // The buffer has been trimmed.
+    DTOA_ASSERT(DigitValue(digits[0]) > 0);                 // The buffer has been trimmed.
+//  DTOA_ASSERT(DigitValue(digits[num_digits - 1]) > 0);    // The buffer has been trimmed.
 
     uint64_t significand = 0;
+    uint64_t error = 0;
 
-    int const max_len = num_digits < kMaxUint64DecimalDigits ? num_digits : kMaxUint64DecimalDigits;
+    int const max_len = Min(num_digits, kMaxUint64DecimalDigits);
     int i = 0;
+
     for ( ; i < max_len; ++i)
     {
         significand = 10 * significand + static_cast<uint32_t>(DigitValue(digits[i]));
@@ -258,13 +265,15 @@ inline DiyFp ReadDiyFp(char const* digits, int num_digits, int& read_digits)
         if (DigitValue(digits[i]) >= 5)
         {
             // Round up.
-            DTOA_ASSERT(significand != UINT64_MAX);
             ++significand;
         }
+
+        // The error is <= 1/2 ULP.
+        error = DiyFpWithError::kDenominator / 2;
     }
 
     read_digits = i;
-    return {significand, 0};
+    return {DiyFp(significand, 0), error};
 }
 
 // Returns a cached power of ten x ~= 10^k such that
@@ -293,6 +302,7 @@ inline CachedPower GetCachedPowerForDecimalExponent(int e)
 inline DiyFp GetAdjustmentPowerOfTen(int exponent)
 {
     static_assert(kCachedPowersDecExpStep <= 8, "internal error");
+
     static constexpr DiyFp kPowers[] = {
         { 0x8000000000000000, -63 }, // == 10^0 (unused)
         { 0xA000000000000000, -60 }, // == 10^1
@@ -309,13 +319,14 @@ inline DiyFp GetAdjustmentPowerOfTen(int exponent)
     return kPowers[exponent];
 }
 
-// Max double: 1.7976931348623157 x 10^308
-// Min non-zero double: 4.9406564584124654 x 10^-324
+// Max double: 1.7976931348623157 * 10^308
 // Any x >= 10^309 is interpreted as +infinity.
+constexpr int kMaxDecimalPower = 309;
+
+// Min non-zero double: 4.9406564584124654 * 10^-324
 // Any x <= 10^-324 is interpreted as 0.
 // Note that 2.5e-324 (despite being smaller than the min double) will be read
 // as non-zero (equal to the min non-zero double).
-constexpr int kMaxDecimalPower =  309;
 constexpr int kMinDecimalPower = -324;
 
 // Returns the significand size for a given order of magnitude.
@@ -325,17 +336,45 @@ constexpr int kMinDecimalPower = -324;
 //
 // This function returns the number of significant binary digits v will have
 // once it's encoded into a 'double'. In almost all cases this is equal to
-// Double::Precision. The only exceptions are subnormals. They start with
+// Double::SignificandSize. The only exceptions are subnormals. They start with
 // leading zeroes and their effective significand-size is hence smaller.
 inline int EffectiveSignificandSize(int order)
 {
-    if (order >= Double::MinExponent + Double::Precision)
-        return Double::Precision;
+    using Double = IEEE<double>;
+
+    if (order >= Double::MinExponent + Double::SignificandSize)
+        return Double::SignificandSize;
 
     if (order <= Double::MinExponent)
         return 0;
 
     return order - Double::MinExponent;
+}
+
+// Returns `f * 2^e`.
+inline double LoadDouble(uint64_t f, int e)
+{
+    using Double = IEEE<double>;
+
+    DTOA_ASSERT(f <= Double::HiddenBit + Double::SignificandMask);
+    DTOA_ASSERT(e <= Double::MinExponent || (f & Double::HiddenBit) != 0);
+
+    if (e > Double::MaxExponent)
+    {
+        return std::numeric_limits<double>::infinity();
+    }
+    if (e < Double::MinExponent)
+    {
+        return 0.0;
+    }
+
+    uint64_t const exponent = (e == Double::MinExponent && (f & Double::HiddenBit) == 0)
+        ? 0 // subnormal
+        : static_cast<uint64_t>(e + Double::ExponentBias);
+
+    uint64_t const bits = (exponent << Double::PhysicalSignificandSize) | (f & Double::SignificandMask);
+
+    return ReinterpretBits<double>(bits);
 }
 
 // Use DiyFp's to approximate digits * 10^exponent.
@@ -348,232 +387,275 @@ inline int EffectiveSignificandSize(int order)
 // PRE: num_digits + exponent >  kMinDecimalPower
 inline bool StrtodApprox(char const* digits, int num_digits, int exponent, double& result)
 {
-    static_assert(DiyFp::Precision == 64,
-        "We use uint64_ts. This only works if the DiyFp uses uint64_ts too.");
+    using Double = IEEE<double>;
 
+    static_assert(DiyFp::SignificandSize == 64,
+        "We use uint64's. This only works if the DiyFp uses uint64's too.");
+
+    DTOA_ASSERT(num_digits > 0);
+    DTOA_ASSERT(DigitValue(digits[0]) > 0);
     DTOA_ASSERT(num_digits + exponent <= kMaxDecimalPower);
     DTOA_ASSERT(num_digits + exponent >  kMinDecimalPower);
 
-    //
-    // Compute an approximation 'input' for B = digits * 10^exponent
-    // using DiyFp's.
+    // Compute an approximation 'input' for B = digits * 10^exponent using DiyFp's.
     // And keep track of the error.
     //
     //                       <-- error -->
     //                               B = digits * 10^exponent
     //  ---------(-----------|-------+---)------------------------------------
-    //                       input
-    //                       ~= digits * 10^exponent
-    //
+    //                       x
+    //                       ~= (f * 2^e) * 10^exponent
+
+    constexpr int kLogULP = DiyFpWithError::kDenominatorLog;
+    constexpr int kULP = DiyFpWithError::kDenominator;
 
     int read_digits;
-    auto input = ReadDiyFp(digits, num_digits, read_digits);
+    DiyFpWithError input = ReadDiyFp(digits, num_digits, read_digits);
+    // x = f * 2^0
 
-    int const remaining_decimals = num_digits - read_digits; // 0 <= rd < num_digits
+    // Normalize x and scale the error, such that 'error' is in ULP(x).
+    Normalize(input);
 
-    // Move the remaining decimals into the exponent.
-    exponent += remaining_decimals;
+    // Move the remaining decimals into the (decimal) exponent.
+    exponent += num_digits - read_digits;
 
+    // XXX: ???
     if (exponent < kCachedPowersMinDecExp)
     {
         result = 0.0;
         return true;
     }
 
-    // Since we may have dropped some digits, 'input' may not be accurate.
-    // If 'remaining_decimals' is different from 0 than we did round and the
-    // error is at most 1/2 ulp (unit in the last place).
-    // We don't want to deal with fractions and therefore work with fixed-point
-    // numbers.
-    constexpr int kDenominatorLog = 3;
-    constexpr int kDenominator = 1 << kDenominatorLog;
+    // If the input is exact, error == 0.
+    // If the input is inexact, we have read 19 digits, i.e., f >= 10^(19-1) > 2^59.
+    // The scaling factor in the normalization step above therefore is <= 2^(63-59) = 2^4.
+    DTOA_ASSERT(input.error <= 16 * (kULP / 2));
 
-    // error is in ULP(input); scaled by kDenominator
-    uint64_t error = (remaining_decimals == 0) ? 0 : kDenominator / 2;
-
-    // Normalize 'input' (i.e. multiply by a power of 2) and scale the error
-    // accordingly.
-    {
-        int const old_e = input.e;
-        input = Normalize(input);   // input = (f * 2^s) * 2^(e - s)
-        int const s = old_e - input.e;
-        error <<= s;                // error * 2^e = (error * 2^s) * 2^(e - s)
-    }
-
-    // input = f * 2^e, where 2^(q-1) <= f < 2^q
-
-    // Multiply input by 10^exponent.
-    // And keep track of the error.
+    // Let x and y be normalized floating-point numbers
     //
-    // The error introduced by a multiplication of a * b equals
-    //      error = error_a + error_b + error_ab / 2^q + 1/2,
-    // where
-    //      error_ab = error_a * error_b,
+    //      x = f_x * 2^e_x,    2^(q-1) <= f_x < 2^q
+    //      y = f_y * 2^e_y,    2^(q-1) <= f_y < 2^q
     //
-    // The resulting error is in ULP(a*b), error_a and error_b are in ULP(a)
-    // and ULP(b) resp.
-    // All values are scaled by kDenominator.
+    // Then
+    //
+    //      z = Multiply(x,y) = f_z * 2^e_z
+    //
+    // returns the floating-point number closest to the product x*y. The result z is
+    // not neccessarily normalized, but the error is bounded by 1/2 ulp, i.e.,
+    //
+    //      |x*y - z| <= 1/2 ulp
+    //
+    // or
+    //
+    //      x*y = (f_z + eps_z) * 2^e_z,    |eps_z| <= 1/2, e_z = e_x + e_y + q.
+    //
+    // If x and y are approximations to real numbers X and Y, i.e.,
+    //
+    //      X = (f_x + eps_x) * 2^e_x,      |eps_x| <= err_x,
+    //      Y = (f_y + eps_y) * 2^e_y,      |eps_y| <= err_y,
+    //
+    // then the error introduced by a multiplication Multiply(x,y) is (see [1])
+    //
+    //      |X*Y - z| <= 1/2 + err_x + err_y + (err_x * err_y - err_x - err_y) / 2^q
+    //
+    // And if err_x < 1 (or err_y < 1), then
+    //
+    //      |X*Y - z| <= 1/2 + (err_x + err_y)
 
     auto const cached = GetCachedPowerForDecimalExponent(exponent);
     auto const cached_power = DiyFp(cached.f, cached.e);
 
-    // Not all powers-of-ten are cached. If cached.k != exponent
-    // we need to multiply `input` by the difference first. This may introduce
-    // an additional error.
+    // Not all powers-of-ten are cached.
+    // If cached.k != exponent we need to multiply 'x' by the difference first.
+    // This may introduce an additional error.
+
     if (cached.k != exponent)
     {
         auto const adjustment_exponent = exponent - cached.k;
         auto const adjustment_power = GetAdjustmentPowerOfTen(adjustment_exponent);
 
-        auto const input_f_old = input.f;
-        input = Multiply(input, adjustment_power);
-        // input ~= digits * 10^adjustment_exponent
+        DTOA_ASSERT(IsNormalized(input.x));
+        DTOA_ASSERT(IsNormalized(adjustment_power));
+
+        input.x = Multiply(input.x, adjustment_power);
+        // x ~= digits * 10^adjustment_exponent
 
         // Adjust error.
-        // The adjustment_power is exact (error_b = error_ab = 0).
+        // The adjustment_power is exact (err_y = 0).
         // There is hence only an additional error of (at most) 1/2.
 
         if (num_digits + adjustment_exponent <= kMaxUint64DecimalDigits)
         {
-            // input and adjustment_power are exact.
-            // The product digits * 10^adjustment_exponent fits into an uint64_t.
-            // input * adjustment_power is therefore exact, too.
-
-            // (Assert the lower 64-bits of the product are 0.)
-            DTOA_ASSERT(input_f_old * adjustment_power.f == 0);
-            static_cast<void>(input_f_old);
+            // x and adjustment_power are exact.
+            // The product (digits * 10^adjustment_exponent) fits into an uint64_t.
+            // x * adjustment_power is therefore exact, too, and there is no additional error.
         }
         else
         {
-            error += kDenominator / 2;
+            input.error += kULP / 2;
+
+            DTOA_ASSERT(input.error <= 16 * (kULP / 2) + (kULP / 2));
+            DTOA_ASSERT(input.error <= 17 * (kULP / 2));
         }
+
+        // The result of the multiplication might not be normalized.
+        // Normalize 'x' again and scale the error.
+        Normalize(input);
+
+        // Since both factors are normalized, input.f >= 2^(q-2), and the scaling
+        // factor in the normalization step above is bounded by 2^1.
+        DTOA_ASSERT(input.error <= (16 * (kULP / 2) + (kULP / 2)) * 2);
+        DTOA_ASSERT(input.error <= 34 * (kULP / 2));
     }
 
-    input = Multiply(input, cached_power);
-    // input ~= digits * 10^exponent
+    DTOA_ASSERT(IsNormalized(input.x));
+    DTOA_ASSERT(IsNormalized(cached_power));
+
+    input.x = Multiply(input.x, cached_power);
+    // x ~= digits * 10^exponent
 
     // Adjust the error.
-    // Substituting 'a' with 'input' and 'b' with 'cached_power' we have
-    //   error_b  = 0.5  (all cached powers have an error of less than 1/2 ulp),
-    //   error_ab = 0 or 1/kDenominator > error_a*error_b/2^64
-    uint64_t const error_a = error;
-    uint64_t const error_b = kDenominator / 2;
-    uint64_t const error_ab = (error_a == 0 ? 0 : 1); // We round up to 1.
+    // Since all cached powers have an error of less than 1/2 ulp, err_y = 1/2,
+    // and the error is therefore less than 1/2 + (err_x + err_y).
 
-    error = error_a + error_b + error_ab + kDenominator / 2;
+    input.error += kULP / 2 + kULP / 2;
+
+    DTOA_ASSERT(input.error <= ((16 * (kULP / 2) + (kULP / 2)) * 2) + (kULP / 2) + (kULP / 2));
+    DTOA_ASSERT(input.error <= 36 * (kULP / 2));
 
     // The result of the multiplication might not be normalized.
-    // Normalize 'input' again and scale the error.
-    {
-        int const old_e = input.e;
-        input = Normalize(input);   // input = (f * 2^s) * 2^(e - s)
-        int const s = old_e - input.e;
-        error <<= s;                // error * 2^e = (error * 2^s) * 2^(e - s)
-    }
+    // Normalize 'x' again and scale the error.
+    Normalize(input);
 
-    //
-    // We now have an approximation input = f * 2^e ~= digits * 10^exponent.
+    // Since both factors were normalized, the scaling factor in the
+    // normalization step above is again bounded by 2^1.
+    DTOA_ASSERT(input.error <= (((16 * (kULP / 2) + (kULP / 2)) * 2) + (kULP / 2) + (kULP / 2)) * 2);
+    DTOA_ASSERT(input.error <= 72 * (kULP / 2));
+
+    // We now have an approximation x = f * 2^e ~= digits * 10^exponent.
     //
     //                       <-- error -->
     //                               B = digits * 10^exponent
     //  ---------(-----------|-------+---)------------------------------------
-    //                       input
+    //                       x
     //                       ~= digits * 10^exponent
     //
-    // When converting f * 2^e, which has a q-bit significand, into an IEEE
-    // double-precision number, we need to drop some 'extra_bits' bits of
-    // precision.
+    // B = (x.f + delta) * 2^x.e, where |delta| <= error / kULP
     //
+    // When converting f * 2^e, which has a q-bit significand, into an IEEE
+    // double-precision number, we need to drop some 'excess_bits' bits of
+    // precision.
 
-    int const order_of_magnitude = DiyFp::Precision + input.e;
+    int const prec = EffectiveSignificandSize(DiyFp::SignificandSize + input.x.e);
+    DTOA_ASSERT(prec >= 0);
+    DTOA_ASSERT(prec <= 53);
 
-    int const effective_significand_size = EffectiveSignificandSize(order_of_magnitude);
-    DTOA_ASSERT(effective_significand_size >= 0);
-    DTOA_ASSERT(effective_significand_size <= 53);
+    int excess_bits = DiyFp::SignificandSize - prec;
+    DTOA_ASSERT(excess_bits >= 11);
+    DTOA_ASSERT(excess_bits <= 64);
 
-    int extra_bits = DiyFp::Precision - effective_significand_size;
-    DTOA_ASSERT(extra_bits >= 11);
-    DTOA_ASSERT(extra_bits <= 64);
-
-    if (extra_bits + kDenominatorLog >= DiyFp::Precision)
+    if (excess_bits > DiyFp::SignificandSize - kLogULP - 1)
     {
-        // This can only happen for very small subnormals. In this case 'half'
-        // (see below) multiplied by kDenominator exceeds the range of an
-        // uint64_t.
-        // Simply shift everything to the right.
-        // And adjust the error.
+        // In this case 'half' (see below) multiplied by kULP exceeds the range of an uint64_t.
+        // This can only happen for very small subnormals (when extra_bits is large).
 
-        // input = f * 2^e ~= (f div 2^s) * 2^(e + s)
-        int const s = extra_bits - (DiyFp::Precision - kDenominatorLog - 1);
-        input.f >>= s;
-        input.e  += s;
+        int const s = excess_bits - (DiyFp::SignificandSize - kLogULP - 1);
+        DTOA_ASSERT(s > 0);
 
-        // error * 2^e ~= (error div 2^s) * 2^(e + s)
-        error >>= s;
+        uint64_t const discarded_bits = input.x.f & ((uint64_t{1} << s) - 1);
 
-        // We add kDenominator for the lost precision of input.f
-        error += kDenominator;  // kDenominator = 1 ulp
-        // We add 1 for the lost precision of error,
-        error += 1;             // 1 = 1/kDenominator ulp
+        // x = f * 2^e ~= floor(f / 2^s) * 2^(e + s)
+        input.x.f >>= s;
+        input.x.e  += s;
 
-        extra_bits = DiyFp::Precision - kDenominatorLog - 1;
+#if 1
+        // Move the discarded bits into the error: (f + err) * 2^e = (f - d + err + d) * 2^e
+        input.error += discarded_bits;
+        // Scale the error such that input.error is in ULP(input.x) again.
+        input.error >>= s;
+        // And add 1 so that input.error is still an upper bound.
+        input.error += 1;
+
+        // error = ((error + discarded_bits) div 2^s) + 1
+        //       < ((error + 2^s           ) div 2^s) + 1
+        //       = ((error div 2^s) + 1    )          + 1
+        //      <= (error div 2) + 2
+#else
+        input.error = (input.error >> s) + 2;
+#endif
+
+        excess_bits = DiyFp::SignificandSize - kLogULP - 1;
     }
 
+    // n = excess_bits
     //
-    // f = (f div 2^p) * 2^p + (f mod 2^p)
-    //   = (p1       ) * 2^p + (p2       )
+    // f = (f div 2^n) * 2^n + (f mod 2^n)
+    //   = (p1       ) * 2^n + (p2       )
     //
-    //                             f = p1 * 2^p + p2
+    //                             f = p1 * 2^n + p2
     //   <--- p2 ------------------>
     //                 <-- error --+-- error -->
     // --|-------------(-----------+------|----)---------------------------|--
-    //   p1 * 2^p                                                 (p1 + 1) * 2^p
+    //   p1 * 2^n                                                 (p1 + 1) * 2^n
     //   <------------- half ------------->
-    //                  = 2^p / 2
+    //                  = 2^n / 2
     //
-    // The correct double now is either p1 * 2^(e + p) or (p1 + 1) * 2^(e + p).
+    // The correct double now is either p1 * 2^(e + n) or (p1 + 1) * 2^(e + n).
+    // See [1], Theorem 11.
+    //
     // In case p2 + error < half, we can safely round down. If p2 - error > half
     // we can safely round up. Otherwise, we are too inaccurate. In this case
     // we round down, so the returned double is either the correct double or the
     // double just below the correct double. In this case we return false, so
     // that the we can fall back to a more precise algorithm.
-    //
 
-    DTOA_ASSERT(extra_bits >= 11);
-    DTOA_ASSERT(extra_bits <  64);
-    DTOA_ASSERT(extra_bits <  DiyFp::Precision - kDenominatorLog);
+    DTOA_ASSERT(excess_bits >= 11);
+    DTOA_ASSERT(excess_bits <  64);
+    DTOA_ASSERT(excess_bits <= DiyFp::SignificandSize - kLogULP - 1);
 
-    uint64_t p2   = input.f & ((uint64_t{1} << extra_bits) - 1);
-    uint64_t half = uint64_t{1} << (extra_bits - 1);
-    // 'error' is scaled by kDenominator.
-    // In order to compare 'p2' and 'half' with 'error', these values need to be
-    // scaled, too.
-    DTOA_ASSERT(p2   <= UINT64_MAX / kDenominator);
-    DTOA_ASSERT(half <= UINT64_MAX / kDenominator);
-    p2   *= kDenominator;
-    half *= kDenominator;
+    uint64_t const two_n = uint64_t{1} << excess_bits;
 
-    // Truncate the significand to p = Float::Precision bits and move the
-    // remaining bits into the exponent.
-    input.f >>= extra_bits;
-    input.e  += extra_bits;
+    uint64_t p2   = input.x.f & (two_n - 1);
+    uint64_t half = two_n / 2;
 
-    DTOA_ASSERT(error > 0);
-    DTOA_ASSERT(half >= error);
-    DTOA_ASSERT(half <= UINT64_MAX - error);
+    // error is scaled by kULP.
+    // In order to compare p2 and half with error, these values need to be scaled, too.
+    DTOA_ASSERT(p2   <= UINT64_MAX / kULP);
+    DTOA_ASSERT(half <= UINT64_MAX / kULP);
+    p2   *= kULP;
+    half *= kULP;
 
-    // Since 'error' is non-zero, we can safely use '<=' and '>=' in the
-    // comparisons below.
+    // Truncate the significand to p = q - n bits and move the discarded bits into the (binary) exponent.
+    input.x.f >>= excess_bits;
+    input.x.e  += excess_bits;
+
+    DTOA_ASSERT(input.error > 0);
+    DTOA_ASSERT(half >= input.error);
+
+    // Note:
+    // Since error is non-zero, we can safely use '<=' and '>=' in the comparisons below.
 
     bool success;
-    if (p2 >= half + error)
+    if (p2 >= half + input.error)
     {
         // Round up.
-        DTOA_ASSERT(input.f != UINT64_MAX);
-        ++input.f;
         success = true;
+
+        ++input.x.f;
+
+        // Rounding up may overflow the p-bit significand.
+        // But in this case the significand is 2^53 and we don't loose any
+        // bits by normalizing 'input' (we just move a factor of 2 into the
+        // binary exponent).
+        if (input.x.f > Double::HiddenBit + Double::SignificandMask)
+        {
+            DTOA_ASSERT(input.x.f == (Double::HiddenBit << 1));
+
+            input.x.f >>= 1;
+            input.x.e  += 1;
+        }
     }
-    else if (p2 <= half - error)
+    else if (p2 <= half - input.error)
     {
         // Round down.
         success = true;
@@ -586,9 +668,44 @@ inline bool StrtodApprox(char const* digits, int num_digits, int exponent, doubl
         success = false;
     }
 
-    result = DoubleFromDiyFp(input.f, input.e);
+    result = LoadDouble(input.x.f, input.x.e);
     return success;
 }
+
+inline bool ComputeGuess(double& result, char const* digits, int num_digits, int exponent)
+{
+    DTOA_ASSERT(num_digits > 0);
+    DTOA_ASSERT(num_digits <= kMaxSignificantDigits);
+    DTOA_ASSERT(DigitValue(digits[0]) > 0);
+//  DTOA_ASSERT(DigitValue(digits[num_digits - 1]) > 0);
+
+    // Any v >= 10^309 is interpreted as +Infinity.
+    if (num_digits + exponent >= kMaxDecimalPower + 1)
+    {
+        result = std::numeric_limits<double>::infinity();
+        return true;
+    }
+
+    // Any v <= 10^-324 is interpreted as 0.
+    if (num_digits + exponent <= kMinDecimalPower)
+    {
+        result = 0;
+        return true;
+    }
+
+    if (StrtodFast(digits, num_digits, exponent, result))
+        return true;
+    if (StrtodApprox(digits, num_digits, exponent, result))
+        return true;
+    if (result == std::numeric_limits<double>::infinity())
+        return true;
+
+    return false;
+}
+
+//--------------------------------------------------------------------------------------------------
+// StrtodBignum
+//--------------------------------------------------------------------------------------------------
 
 struct DiyInt // bigits * 2^exponent
 {
@@ -640,8 +757,11 @@ inline void MulAddU32(DiyInt& x, uint32_t A, uint32_t B = 0)
     DTOA_ASSERT(B == 0 || x.exponent == 0);
 
     if (A == 1 && B == 0)
+    {
         return;
-    if (A == 0 || x.size == 0) {
+    }
+    if (A == 0 || x.size == 0)
+    {
         AssignU32(x, B);
         return;
     }
@@ -690,18 +810,6 @@ inline void AssignDecimalDigits(DiyInt& x, char const* digits, int num_digits)
 
     AssignZero(x);
 
-#if 0
-    while (num_digits >= 9)
-    {
-        MulAddU32(x, 1000000000, ReadU32(digits, 9));
-        digits     += 9;
-        num_digits -= 9;
-    }
-    if (num_digits > 0)
-    {
-        MulAddU32(x, kPow10[num_digits], ReadU32(digits, num_digits));
-    }
-#else
     while (num_digits > 0)
     {
         int const n = Min(num_digits, 9);
@@ -709,33 +817,35 @@ inline void AssignDecimalDigits(DiyInt& x, char const* digits, int num_digits)
         digits     += n;
         num_digits -= n;
     }
-#endif
 }
 
 inline void MulPow2(DiyInt& x, int exp) // aka left-shift
 {
+    DTOA_ASSERT(exp >= 0);
+
     if (x.size == 0)
         return;
-
-    DTOA_ASSERT(exp >= 0);
     if (exp == 0)
         return;
 
     int const bigit_shift = exp / DiyInt::BigitSize;
     int const bit_shift   = exp % DiyInt::BigitSize;
 
-    uint32_t carry = 0;
-    for (int i = 0; i < x.size; ++i)
+    if (bit_shift > 0)
     {
-        uint32_t const h = x.bigits[i] >> (DiyInt::BigitSize - bit_shift);
-        x.bigits[i]      = x.bigits[i] << bit_shift | carry;
-        carry            = h;
-    }
+        uint32_t carry = 0;
+        for (int i = 0; i < x.size; ++i)
+        {
+            uint32_t const h = x.bigits[i] >> (DiyInt::BigitSize - bit_shift);
+            x.bigits[i]      = x.bigits[i] << bit_shift | carry;
+            carry            = h;
+        }
 
-    if (carry != 0)
-    {
-        DTOA_ASSERT(x.size < DiyInt::Capacity);
-        x.bigits[x.size++] = carry;
+        if (carry != 0)
+        {
+            DTOA_ASSERT(x.size < DiyInt::Capacity);
+            x.bigits[x.size++] = carry;
+        }
     }
 
     x.exponent += bigit_shift;
@@ -767,24 +877,12 @@ inline void MulPow5(DiyInt& x, int exp)
     if (exp == 0)
         return;
 
-#if 0
-    while (exp >= 13)
-    {
-        MulAddU32(x, 1220703125);
-        exp -= 13;
-    }
-    if (exp > 0)
-    {
-        MulAddU32(x, kPow5[exp]);
-    }
-#else
     while (exp > 0)
     {
         int const n = Min(exp, 13);
         MulAddU32(x, kPow5[n]);
         exp -= n;
     }
-#endif
 }
 
 inline int Compare(DiyInt const& lhs, DiyInt const& rhs)
@@ -794,20 +892,16 @@ inline int Compare(DiyInt const& lhs, DiyInt const& rhs)
     int const n1 = lhs.size + e1;
     int const n2 = rhs.size + e2;
 
-    if (n1 < n2)
-        return -1;
-    if (n1 > n2)
-        return +1;
+    if (n1 < n2) return -1;
+    if (n1 > n2) return +1;
 
     for (int i = n1 - 1; i >= Min(e1, e2); --i)
     {
         uint32_t const b1 = (i - e1) >= 0 ? lhs.bigits[i - e1] : 0;
         uint32_t const b2 = (i - e2) >= 0 ? rhs.bigits[i - e2] : 0;
 
-        if (b1 < b2)
-            return -1;
-        if (b1 > b2)
-            return +1;
+        if (b1 < b2) return -1;
+        if (b1 > b2) return +1;
     }
 
     return 0;
@@ -817,9 +911,10 @@ inline int Compare(DiyInt const& lhs, DiyInt const& rhs)
 //
 // PRE: num_digits + exponent <= kMaxDecimalPower + 1
 // PRE: num_digits + exponent >  kMinDecimalPower
-// PRE: num_digits            <= kMaxSignificantDecimalDigits
-inline int CompareBufferWithDiyFp(char const* digits, int num_digits, bool nonzero_tail, int exponent, DiyFp v)
+// PRE: num_digits            <= kMaxSignificantDigits
+inline int CompareBufferWithDiyFp(char const* digits, int num_digits, int exponent, bool nonzero_tail, DiyFp v)
 {
+    DTOA_ASSERT(num_digits > 0);
     DTOA_ASSERT(num_digits + exponent <= kMaxDecimalPower + 1);
     DTOA_ASSERT(num_digits + exponent >= kMinDecimalPower + 1);
     DTOA_ASSERT(num_digits            <= kMaxSignificantDigits);
@@ -828,7 +923,7 @@ inline int CompareBufferWithDiyFp(char const* digits, int num_digits, bool nonze
     DiyInt rhs;
 
     AssignDecimalDigits(lhs, digits, num_digits);
-    if (nonzero_tail) // XXX: Merge with AssignDecimalDigits?!
+    if (nonzero_tail)
     {
         MulAddU32(lhs, 10, 1);
         exponent--;
@@ -863,6 +958,12 @@ inline int CompareBufferWithDiyFp(char const* digits, int num_digits, bool nonze
         lhs_exp2 -= v.e;
     }
 
+#if 1
+    if (lhs_exp5 > 0 || rhs_exp5 > 0)
+    {
+        MulPow5((lhs_exp5 > 0) ? lhs : rhs, (lhs_exp5 > 0) ? lhs_exp5 : rhs_exp5);
+    }
+#else
     if (lhs_exp5 > 0) // rhs >= digits
     {
         MulPow5(lhs, lhs_exp5);
@@ -881,12 +982,24 @@ inline int CompareBufferWithDiyFp(char const* digits, int num_digits, bool nonze
         DTOA_ASSERT(lhs.size <= (2555        + 31) / 32);
         DTOA_ASSERT(rhs.size <= (  64 + 2536 + 31) / 32); // 2536 = log_2(5^(324 - 1 + 769)) ---- XXX: 2504
     }
+#endif
 
 #if 0
+    // Cancel common factors of 2.
+    int const min_exp2 = Min(lhs_exp2, rhs_exp2);
+    lhs_exp2 -= min_exp2;
+    rhs_exp2 -= min_exp2;
+
     MulPow2(lhs, lhs_exp2);
     MulPow2(rhs, rhs_exp2);
 #else
-    // Cancel common factors of 2.
+#if 1
+    int const diff_exp2 = lhs_exp2 - rhs_exp2;
+    if (diff_exp2 != 0)
+    {
+        MulPow2((diff_exp2 > 0) ? lhs : rhs, (diff_exp2 > 0) ? diff_exp2 : -diff_exp2);
+    }
+#else
     if (lhs_exp2 > rhs_exp2)
     {
         MulPow2(lhs, lhs_exp2 - rhs_exp2);
@@ -896,19 +1009,23 @@ inline int CompareBufferWithDiyFp(char const* digits, int num_digits, bool nonze
         MulPow2(rhs, rhs_exp2 - lhs_exp2);
     }
 #endif
+#endif
 
     DTOA_ASSERT(lhs.size <= (2555        + 32 + 31) / 32);
     DTOA_ASSERT(rhs.size <= (  64 + 2536 + 32 + 31) / 32);
 
-    //printf("lhs[%3d + %3d = %3d] -- rhs[%3d + %3d = %3d]\n", lhs.size, lhs.exponent, lhs.size + lhs.exponent, rhs.size, rhs.exponent, rhs.size + rhs.exponent);
-
     return Compare(lhs, rhs);
 }
+
+//--------------------------------------------------------------------------------------------------
+// DecimalToDouble
+//--------------------------------------------------------------------------------------------------
 
 // Returns whether the significand f of v = f * 2^e is even.
 inline bool SignificandIsEven(double v)
 {
-//  return (DiyFpFromDouble(v).f & 1) == 0;
+    using Double = IEEE<double>;
+
     return (Double(v).PhysicalSignificand() & 1) == 0;
 }
 
@@ -916,38 +1033,9 @@ inline bool SignificandIsEven(double v)
 // If v is +Infinity returns v.
 inline double NextFloat(double v)
 {
+    using Double = IEEE<double>;
+
     return Double(v).NextValue();
-}
-
-inline bool ComputeGuess(double& result, char const* digits, int num_digits, int exponent)
-{
-    DTOA_ASSERT(num_digits <= kMaxSignificantDigits);
-    DTOA_ASSERT(DigitValue(digits[0]) > 0);
-    DTOA_ASSERT(DigitValue(digits[num_digits - 1]) > 0);
-
-    // Any v >= 10^309 is interpreted as +Infinity.
-    if (num_digits + exponent >= kMaxDecimalPower + 1) {
-        result = std::numeric_limits<double>::infinity();
-        return true;
-    }
-
-    // Any v <= 10^-324 is interpreted as 0.
-    if (num_digits + exponent <= kMinDecimalPower) {
-        result = 0;
-        return true;
-    }
-
-    if (StrtodFast(digits, num_digits, exponent, result)) {
-        return true;
-    }
-    if (StrtodApprox(digits, num_digits, exponent, result)) {
-        return true;
-    }
-    if (result == std::numeric_limits<double>::infinity()) {
-        return true;
-    }
-
-    return false;
 }
 
 inline int CountLeadingZeros(char const* digits, int num_digits)
@@ -958,6 +1046,7 @@ inline int CountLeadingZeros(char const* digits, int num_digits)
     for ( ; i < num_digits && digits[i] == '0'; ++i)
     {
     }
+
     return i;
 }
 
@@ -969,10 +1058,9 @@ inline int CountTrailingZeros(char const* digits, int num_digits)
     for ( ; i > 0 && digits[i - 1] == '0'; --i)
     {
     }
+
     return num_digits - i;
 }
-
-} // namespace impl
 
 // Convert the decimal representation 'digits * 10^exponent' into an IEEE
 // double-precision number.
@@ -980,38 +1068,39 @@ inline int CountTrailingZeros(char const* digits, int num_digits)
 // PRE: digits must contain only ASCII characters in the range '0'...'9'.
 // PRE: num_digits >= 0
 // PRE: num_digits + exponent must not overflow.
-inline double DecimalToDouble(char const* digits, int num_digits, bool nonzero_tail, int exponent)
+inline double DecimalToDouble(char const* digits, int num_digits, int exponent, bool nonzero_tail)
 {
     DTOA_ASSERT(num_digits >= 0);
     DTOA_ASSERT(exponent <= INT_MAX - num_digits);
 
-#if 1
     // Ignore leading zeros
-    int const lz = impl::CountLeadingZeros(digits, num_digits);
+    int const lz = CountLeadingZeros(digits, num_digits);
     digits     += lz;
     num_digits -= lz;
 
     // Move trailing zeros into the exponent
-    int const tz = impl::CountTrailingZeros(digits, num_digits);
+    int const tz = CountTrailingZeros(digits, num_digits);
     num_digits -= tz;
     exponent   += tz;
-#endif
 
-#if 1
-    if (num_digits == 0) {
+    if (num_digits == 0)
+    {
         return 0.0;
     }
 
     if (num_digits > kMaxSignificantDigits)
     {
         DTOA_ASSERT(digits[num_digits - 1] != '0');
-        num_digits = kMaxSignificantDigits;
         nonzero_tail = true;
+
+        // Discard insignificant digits.
+        exponent += num_digits - kMaxSignificantDigits;
+        num_digits = kMaxSignificantDigits;
     }
-#endif
 
     double v;
-    if (impl::ComputeGuess(v, digits, num_digits, exponent)) {
+    if (ComputeGuess(v, digits, num_digits, exponent))
+    {
         return v;
     }
 
@@ -1022,69 +1111,73 @@ inline double DecimalToDouble(char const* digits, int num_digits, bool nonzero_t
     //  ---+--------+----+-------------+---
     //              B
 
-    int const cmp = impl::CompareBufferWithDiyFp(digits, num_digits, nonzero_tail, exponent, impl::UpperBoundary(v));
-    if (cmp < 0 || (cmp == 0 && impl::SignificandIsEven(v))) {
+    int const cmp = CompareBufferWithDiyFp(digits, num_digits, exponent, nonzero_tail, UpperBoundary(v));
+
+    if (cmp < 0 || (cmp == 0 && SignificandIsEven(v)))
+    {
         return v;
     }
-    return impl::NextFloat(v);
-}
 
-//==================================================================================================
-// StringToDouble
-//==================================================================================================
-
-namespace impl {
-
-inline double SignedZero(bool negative)
-{
-    return negative ? -0.0 : 0.0;
+    return NextFloat(v);
 }
 
 } // namespace impl
 
-inline bool StringToDouble(double& result, char const* next, char const* last)
+// Convert the decimal representation 'digits * 10^exponent' into an IEEE
+// double-precision number.
+//
+// PRE: digits must contain only ASCII characters in the range '0'...'9'.
+// PRE: num_digits >= 0
+// PRE: num_digits + exponent must not overflow.
+inline double DecimalToDouble(char const* digits, int num_digits, int exponent, bool nonzero_tail = false)
 {
+    return base_conv::impl::DecimalToDouble(digits, num_digits, exponent, nonzero_tail);
+}
+
+//==================================================================================================
+// Strtod
+//==================================================================================================
+
+inline bool Strtod(double& result, char const* next, char const* last)
+{
+    using base_conv::impl::IsDigit;
+
     // Inputs larger than kMaxInt (currently) can not be handled.
     // To avoid overflow in integer arithmetic.
     constexpr int const kMaxInt = INT_MAX / 4;
 
-    if (next == last) {
+    if (next == last)
+    {
         result = 0; // [Recover.]
         return true;
     }
 
-    if (last - next >= kMaxInt) {
-        result = std::numeric_limits<double>::quiet_NaN();
+    if (last - next >= kMaxInt)
+    {
         return false;
     }
 
-    constexpr int const kBufferSize = kMaxSignificantDigits + 1;
+    double value = +0.0;
 
-    char digits[kBufferSize];
+    char digits[kMaxSignificantDigits]; // The problem is the decimal point
     int  num_digits = 0;
     int  exponent = 0;
     bool nonzero_tail = false;
 
-    bool is_neg = false;
-    if (*next == '-')
+    bool const is_neg = (*next == '-');
+    if (is_neg)
     {
-        is_neg = true;
-
         ++next;
-        if (next == last)
-        {
-            result = impl::SignedZero(is_neg); // Recover.
-            return false;
-        }
     }
     else if (/*allow_leading_plus &&*/ *next == '+')
     {
         ++next;
-        if (next == last)
-        {
-            result = impl::SignedZero(is_neg); // Recover.
-            return false;
-        }
+    }
+
+    if (next == last)
+    {
+//      goto L_done; // Recover.
+        return false;
     }
 
     if (*next == '0')
@@ -1092,11 +1185,10 @@ inline bool StringToDouble(double& result, char const* next, char const* last)
         ++next;
         if (next == last)
         {
-            result = impl::SignedZero(is_neg);
-            return true;
+            goto L_done;
         }
     }
-    else if ('1' <= *next && *next <= '9')
+    else if (IsDigit(*next))
     {
         // Copy significant digits of the integer part (if any) to the buffer.
         for (;;)
@@ -1115,7 +1207,7 @@ inline bool StringToDouble(double& result, char const* next, char const* last)
             {
                 goto L_parsing_done;
             }
-            if (*next < '0' || *next > '9')
+            if (!IsDigit(*next))
             {
                 break;
             }
@@ -1128,6 +1220,7 @@ inline bool StringToDouble(double& result, char const* next, char const* last)
 #endif
     else
     {
+#if 0
         if (/*allow_nan_inf &&*/ last - next >= 3 && std::memcmp(next, "NaN", 3) == 0)
         {
             result = std::numeric_limits<double>::quiet_NaN();
@@ -1136,9 +1229,10 @@ inline bool StringToDouble(double& result, char const* next, char const* last)
 
         if (/*allow_nan_inf &&*/ last - next >= 8 && std::memcmp(next, "Infinity", 8) == 0)
         {
-            result = is_neg ? -std::numeric_limits<double>::infinity() : std::numeric_limits<double>::infinity();
-            return true;
+            result = std::numeric_limits<double>::infinity();
+            goto L_done;
         }
+#endif
 
         return false;
     }
@@ -1161,8 +1255,7 @@ inline bool StringToDouble(double& result, char const* next, char const* last)
                 ++next;
                 if (next == last)
                 {
-                    result = impl::SignedZero(is_neg);
-                    return true;
+                    goto L_done;
                 }
 
                 // Move this 0 into the exponent.
@@ -1172,7 +1265,7 @@ inline bool StringToDouble(double& result, char const* next, char const* last)
 
         // There is a fractional part.
         // We don't emit a '.', but adjust the exponent instead.
-        while ('0' <= *next && *next <= '9')
+        while (IsDigit(*next))
         {
             if (num_digits < kMaxSignificantDigits)
             {
@@ -1199,7 +1292,6 @@ inline bool StringToDouble(double& result, char const* next, char const* last)
         {
             // XXX:
             // Recover? Parse as if exponent = 0?
-            result = std::numeric_limits<double>::quiet_NaN();
             return false;
         }
 
@@ -1212,16 +1304,14 @@ inline bool StringToDouble(double& result, char const* next, char const* last)
             {
                 // XXX:
                 // Recover? Parse as if exponent = 0?
-                result = std::numeric_limits<double>::quiet_NaN();
                 return false;
             }
         }
 
-        if (*next < '0' || *next > '9')
+        if (!IsDigit(*next))
         {
             // XXX:
             // Recover? Parse as if exponent = 0?
-            result = std::numeric_limits<double>::quiet_NaN();
             return false;
         }
 
@@ -1235,7 +1325,7 @@ inline bool StringToDouble(double& result, char const* next, char const* last)
             {
                 // Overflow.
                 // Skip the rest of the exponent (ignored).
-                for (++next; next != last && '0' <= *next && *next <= '9'; ++next)
+                for (++next; next != last && IsDigit(*next); ++next)
                 {
                 }
                 num = kMaxInt;
@@ -1248,7 +1338,7 @@ inline bool StringToDouble(double& result, char const* next, char const* last)
             {
                 break;
             }
-            if (*next < '0' || *next > '9')
+            if (!IsDigit(*next))
             {
                 break; // trailing junk
             }
@@ -1258,17 +1348,16 @@ inline bool StringToDouble(double& result, char const* next, char const* last)
     }
 
 L_parsing_done:
-    double const value = DecimalToDouble(digits, num_digits, nonzero_tail, exponent);
-    DTOA_ASSERT(!impl::Double(value).SignBit());
+    value = base_conv::impl::DecimalToDouble(digits, num_digits, exponent, nonzero_tail);
+    DTOA_ASSERT(!base_conv::impl::IEEEFloat(value).SignBit());
 
+L_done:
     result = is_neg ? -value : value;
+
     return true;
 }
 
 } // namespace base_conv
-#ifdef DTOA_UNNAMED_NAMESPACE
-} // namespace
-#endif
 
 /*
 Copyright 2006-2011, the V8 project authors. All rights reserved.
