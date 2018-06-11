@@ -35,6 +35,9 @@
 #define DTOA_ASSERT(X) assert(X)
 #endif
 
+#if DTOA_UNNAMED_NAMESPACE
+namespace {
+#endif
 namespace base_conv {
 
 //==================================================================================================
@@ -91,10 +94,10 @@ struct DiyFp // f * 2^e
 {
     static constexpr int SignificandSize = 64; // = q
 
-    uint64_t f;
-    int e;
+    uint64_t f = 0;
+    int e = 0;
 
-    constexpr DiyFp() : f(0), e(0) {}
+    constexpr DiyFp() = default;
     constexpr DiyFp(uint64_t f_, int e_) : f(f_), e(e_) {}
 };
 
@@ -335,12 +338,6 @@ struct IEEE
     }
 };
 
-template <typename Float>
-inline IEEE<Float> IEEEFloat(Float v)
-{
-    return IEEE<Float>(v);
-}
-
 // Decomposes `value` into `f * 2^e`.
 // The result is not normalized.
 // PRE: `value` must be finite and non-negative, i.e. >= +0.0.
@@ -396,13 +393,13 @@ template <typename Float>
 inline DiyFp UpperBoundary(Float value)
 {
     auto const v = DiyFpFromFloat(value);
-    return DiyFp(2*v.f + 1, v.e - 1);
+    return DiyFp(4*v.f + 2, v.e - 2);
 }
 
 template <typename Float>
 inline bool LowerBoundaryIsCloser(Float value)
 {
-    auto const v = IEEEFloat(value);
+    IEEE<Float> const v(value);
 
     DTOA_ASSERT(v.IsFinite());
     DTOA_ASSERT(!v.SignBit());
@@ -419,13 +416,11 @@ inline bool LowerBoundaryIsCloser(Float value)
 template <typename Float>
 inline DiyFp LowerBoundary(Float value)
 {
-    DTOA_ASSERT(IEEEFloat(value).IsFinite());
+    DTOA_ASSERT(IEEE<Float>(value).IsFinite());
     DTOA_ASSERT(value > 0);
 
     auto const v = DiyFpFromFloat(value);
-    return LowerBoundaryIsCloser(value)
-        ? DiyFp(4*v.f - 1, v.e - 2)
-        : DiyFp(2*v.f - 1, v.e - 1);
+    return DiyFp(4*v.f - 2 + (LowerBoundaryIsCloser(value) ? 1 : 0), v.e - 2);
 }
 
 struct Boundaries {
@@ -440,21 +435,14 @@ struct Boundaries {
 template <typename Float>
 inline Boundaries ComputeBoundaries(Float value)
 {
-    DTOA_ASSERT(IEEEFloat(value).IsFinite());
+    DTOA_ASSERT(IEEE<Float>(value).IsFinite());
     DTOA_ASSERT(value > 0);
 
     auto const v = DiyFpFromFloat(value);
 
     // Compute the boundaries of v.
-#if 0
-    auto const m_plus = UpperBoundary(value);
-    auto const m_minus = LowerBoundary(value);
-#else
-    auto const m_plus = DiyFp(2*v.f + 1, v.e - 1);
-    auto const m_minus = LowerBoundaryIsCloser(value)
-        ? DiyFp(4*v.f - 1, v.e - 2)
-        : DiyFp(2*v.f - 1, v.e - 1);
-#endif
+    auto const m_plus = DiyFp(4*v.f + 2, v.e - 2);
+    auto const m_minus = DiyFp(4*v.f - 2 + (LowerBoundaryIsCloser(value) ? 1 : 0), v.e - 2);
 
     // Determine the normalized w = v.
     auto const w = Normalize(v);
@@ -808,14 +796,14 @@ L_2_digits:
 // Modifies the generated digits in the buffer to approach (round towards) w.
 //
 // Input:
-//  * digits of H/10^kappa in [buffer, buffer + length)
+//  * digits of H/10^kappa in [digits, digits + num_digits)
 //  * distance    = (H - w) * unit
 //  * delta       = (H - L) * unit
 //  * rest        = (H - buffer * 10^kappa) * unit
 //  * ten_kappa   = 10^kappa * unit
-inline void Grisu2Round(char* buffer, int length, uint64_t distance, uint64_t delta, uint64_t rest, uint64_t ten_kappa)
+inline void Grisu2Round(char* digits, int num_digits, uint64_t distance, uint64_t delta, uint64_t rest, uint64_t ten_kappa)
 {
-    DTOA_ASSERT(length >= 1);
+    DTOA_ASSERT(num_digits >= 1);
     DTOA_ASSERT(distance <= delta);
     DTOA_ASSERT(rest <= delta);
     DTOA_ASSERT(ten_kappa > 0);
@@ -852,7 +840,7 @@ inline void Grisu2Round(char* buffer, int length, uint64_t distance, uint64_t de
     // The tests are written in this order to avoid overflow in unsigned
     // integer arithmetic.
 
-    int digit = buffer[length - 1] - '0';
+    int digit = digits[num_digits - 1] - '0';
 
     while (rest < distance
         && delta - rest >= ten_kappa
@@ -863,19 +851,19 @@ inline void Grisu2Round(char* buffer, int length, uint64_t distance, uint64_t de
         rest += ten_kappa;
     }
 
-    buffer[length - 1] = static_cast<char>('0' + digit);
+    digits[num_digits - 1] = static_cast<char>('0' + digit);
 }
 
-// Generates V = buffer * 10^exponent, such that L <= V <= H.
+// Generates V = digits * 10^exponent, such that L <= V <= H.
 // L and H must be normalized and share the same exponent -60 <= e <= -32.
-inline void Grisu2DigitGen(char* buffer, int& length, int& exponent, DiyFp L, DiyFp w, DiyFp H)
+inline void Grisu2DigitGen(char* digits, int& num_digits, int& exponent, DiyFp L, DiyFp w, DiyFp H)
 {
     static_assert(DiyFp::SignificandSize == 64, "internal error");
     static_assert(kAlpha >= -60, "internal error");
     static_assert(kGamma <= -32, "internal error");
 
     // Generates the digits (and the exponent) of a decimal floating-point
-    // number V = buffer * 10^exponent in the range [L, H].
+    // number V = digits * 10^exponent in the range [L, H].
     // The DiyFp's w, L and H share the same exponent e, which satisfies
     // alpha <= e <= gamma.
     //
@@ -934,7 +922,7 @@ inline void Grisu2DigitGen(char* buffer, int& length, int& exponent, DiyFp L, Di
 
     // The common case is that all the digits of p1 are needed.
     // Optimize for this case and correct later if required.
-    length = static_cast<int>(GenerateIntegralDigits(buffer, p1) - buffer);
+    num_digits = static_cast<int>(GenerateIntegralDigits(digits, p1) - digits);
 
     if (p2 > delta)
     {
@@ -942,7 +930,7 @@ inline void Grisu2DigitGen(char* buffer, int& length, int& exponent, DiyFp L, Di
         // are significand):
         //
         //      H = d[k-1]...d[1]d[0] + p2 * 2^e
-        //        = buffer            + p2 * 2^e
+        //        = digits            + p2 * 2^e
         //
         // Now generate the digits of the fractional part p2 * 2^e.
         //
@@ -970,9 +958,9 @@ inline void Grisu2DigitGen(char* buffer, int& length, int& exponent, DiyFp L, Di
         //
         // i.e.
         //
-        //      H = buffer + p2 * 2^e
-        //        = buffer + 10^-m * (d + r * 2^e)
-        //        = (buffer * 10^m + d) * 10^-m + 10^-m * r * 2^e
+        //      H = digits + p2 * 2^e
+        //        = digits + 10^-m * (d + r * 2^e)
+        //        = (digits * 10^m + d) * 10^-m + 10^-m * r * 2^e
         //
         // and stop as soon as 10^-m * r * 2^e <= delta * 2^e
 
@@ -980,14 +968,14 @@ inline void Grisu2DigitGen(char* buffer, int& length, int& exponent, DiyFp L, Di
         int m = 0;
         for (;;)
         {
-            // !!! DTOA_ASSERT(length < max_digits10) !!!
-            DTOA_ASSERT(length < 17);
+            // !!! DTOA_ASSERT(num_digits < max_digits10) !!!
+            DTOA_ASSERT(num_digits < 17);
 
             //
-            //      H = buffer * 10^-m + 10^-m * (d[-m-1] / 10 + d[-m-2] / 10^2 + ...) * 2^e
-            //        = buffer * 10^-m + 10^-m * (p2                                 ) * 2^e
-            //        = buffer * 10^-m + 10^-m * (1/10 * (10 * p2)                   ) * 2^e
-            //        = buffer * 10^-m + 10^-m * (1/10 * ((10*p2 div 2^-e) * 2^-e + (10*p2 mod 2^-e)) * 2^e
+            //      H = digits * 10^-m + 10^-m * (d[-m-1] / 10 + d[-m-2] / 10^2 + ...) * 2^e
+            //        = digits * 10^-m + 10^-m * (p2                                 ) * 2^e
+            //        = digits * 10^-m + 10^-m * (1/10 * (10 * p2)                   ) * 2^e
+            //        = digits * 10^-m + 10^-m * (1/10 * ((10*p2 div 2^-e) * 2^-e + (10*p2 mod 2^-e)) * 2^e
             //
             DTOA_ASSERT(p2 <= UINT64_MAX / 10);
             p2 *= 10;
@@ -995,18 +983,18 @@ inline void Grisu2DigitGen(char* buffer, int& length, int& exponent, DiyFp L, Di
             uint64_t const r = p2 & (one.f - 1); // r = (10 * p2) mod 2^-e
             DTOA_ASSERT(d <= 9);
             //
-            //      H = buffer * 10^-m + 10^-m * (1/10 * (d * 2^-e + r) * 2^e
-            //        = buffer * 10^-m + 10^-m * (1/10 * (d + r * 2^e))
-            //        = (buffer * 10 + d) * 10^(-m-1) + 10^(-m-1) * r * 2^e
+            //      H = digits * 10^-m + 10^-m * (1/10 * (d * 2^-e + r) * 2^e
+            //        = digits * 10^-m + 10^-m * (1/10 * (d + r * 2^e))
+            //        = (digits * 10 + d) * 10^(-m-1) + 10^(-m-1) * r * 2^e
             //
-            buffer[length++] = static_cast<char>('0' + d); // buffer := buffer * 10 + d
+            digits[num_digits++] = static_cast<char>('0' + d); // digits := digits * 10 + d
             //
             //      H = buffer * 10^(-m-1) + 10^(-m-1) * r * 2^e
             //
             p2 = r;
             m++;
             //
-            //      H = buffer * 10^-m + 10^-m * p2 * 2^e
+            //      H = digits * 10^-m + 10^-m * p2 * 2^e
             //
 
             // Keep the units in sync. (unit *= 10)
@@ -1020,7 +1008,7 @@ inline void Grisu2DigitGen(char* buffer, int& length, int& exponent, DiyFp L, Di
             //                    p2 <= 10^m * delta
             if (p2 <= delta)
             {
-                // V = buffer * 10^-m, with L <= V <= H.
+                // V = digits * 10^-m, with L <= V <= H.
                 exponent = -m;
 
                 rest = p2;
@@ -1056,7 +1044,7 @@ inline void Grisu2DigitGen(char* buffer, int& length, int& exponent, DiyFp L, Di
         //      rest * 2^e <= delta * 2^e
         //
 
-        int const k = length;
+        int const k = num_digits;
         DTOA_ASSERT(k >= 0);
         DTOA_ASSERT(k <= 9);
 
@@ -1075,12 +1063,12 @@ inline void Grisu2DigitGen(char* buffer, int& length, int& exponent, DiyFp L, Di
             DTOA_ASSERT(rest <= delta);
 
             // rn = d[n]...d[0] * 2^-e + p2
-            uint32_t const dn = static_cast<uint32_t>(buffer[k - 1 - n] - '0');
+            uint32_t const dn = static_cast<uint32_t>(digits[k - 1 - n] - '0');
             uint64_t const rn = dn * ten_kappa + rest;
 
             if (rn > delta)
             {
-                length = k - n;
+                num_digits = k - n;
                 exponent = n;
                 break;
             }
@@ -1093,13 +1081,13 @@ inline void Grisu2DigitGen(char* buffer, int& length, int& exponent, DiyFp L, Di
     // The buffer now contains a correct decimal representation of the input
     // number w = buffer * 10^exponent.
 
-    Grisu2Round(buffer, length, distance, delta, rest, ten_kappa);
+    Grisu2Round(digits, num_digits, distance, delta, rest, ten_kappa);
 }
 
 // v = buffer * 10^exponent
 // length is the length of the buffer (number of decimal digits)
 // The buffer must be large enough, i.e. >= max_digits10.
-inline void Grisu2(char* buffer, int& length, int& exponent, DiyFp m_minus, DiyFp v, DiyFp m_plus)
+inline void Grisu2(char* digits, int& num_digits, int& exponent, DiyFp m_minus, DiyFp v, DiyFp m_plus)
 {
     DTOA_ASSERT(v.e == m_minus.e);
     DTOA_ASSERT(v.e == m_plus.e);
@@ -1156,7 +1144,7 @@ inline void Grisu2(char* buffer, int& length, int& exponent, DiyFp m_minus, DiyF
     DiyFp const L(w_minus.f + 1, w_minus.e);
     DiyFp const H(w_plus.f  - 1, w_plus.e );
 
-    Grisu2DigitGen(buffer, length, exponent, L, w, H);
+    Grisu2DigitGen(digits, num_digits, exponent, L, w, H);
     // w = buffer * 10^exponent
 
     // v = w * 10^k
@@ -1168,18 +1156,18 @@ inline void Grisu2(char* buffer, int& length, int& exponent, DiyFp m_minus, DiyF
 
 constexpr int kDoubleToDecimalMaxLength = 17;
 
-// v = buffer * 10^exponent
-// length is the length of the buffer (number of decimal digits)
+// v = digits * 10^exponent
+// num_digits is the length of the buffer (number of decimal digits)
 // PRE: The buffer must be large enough, i.e. >= max_digits10.
 // PRE: value must be finite and strictly positive.
 template <typename Float>
-inline char* DoubleToDecimal(char* next, char* last, int& length, int& exponent, Float value)
+inline char* DoubleToDecimal(char* next, char* last, int& num_digits, int& exponent, Float value)
 {
     static_assert(base_conv::impl::DiyFp::SignificandSize >= std::numeric_limits<Float>::digits + 3,
         "Grisu2 requires at least three extra bits of precision");
 
     DTOA_ASSERT(last - next >= kDoubleToDecimalMaxLength);
-    DTOA_ASSERT(base_conv::impl::IEEEFloat(value).IsFinite());
+    DTOA_ASSERT(base_conv::impl::IEEE<Float>(value).IsFinite());
     DTOA_ASSERT(value > 0);
 
     static_cast<void>(last); // Fix warning
@@ -1198,12 +1186,12 @@ inline char* DoubleToDecimal(char* next, char* last, int& length, int& exponent,
     auto const boundaries = base_conv::impl::ComputeBoundaries(value);
 #endif
 
-    base_conv::impl::Grisu2(next, length, exponent, boundaries.m_minus, boundaries.v, boundaries.m_plus);
+    base_conv::impl::Grisu2(next, num_digits, exponent, boundaries.m_minus, boundaries.v, boundaries.m_plus);
 
-    DTOA_ASSERT(length > 0);
-    DTOA_ASSERT(length <= kDoubleToDecimalMaxLength);
+    DTOA_ASSERT(num_digits > 0);
+    DTOA_ASSERT(num_digits <= kDoubleToDecimalMaxLength);
 
-    return next + length;
+    return next + num_digits;
 }
 
 //==================================================================================================
@@ -1216,7 +1204,7 @@ namespace impl {
 // Returns a pointer to the element following the digits.
 //
 // PRE: -1000 < value < 1000
-inline char* Itoa1000(char* buffer, int value)
+inline char* ExponentToDecimal(char* buffer, int value)
 {
     DTOA_ASSERT(value > -1000);
     DTOA_ASSERT(value <  1000);
@@ -1292,7 +1280,7 @@ inline char* FormatFixed(char* buffer, int length, int decimal_point, bool force
     }
 }
 
-inline char* FormatExponential(char* buffer, int length, int decimal_point)
+inline char* FormatExponential(char* buffer, int length, int exponent, char exponent_char = 'e')
 {
     DTOA_ASSERT(buffer != nullptr);
     DTOA_ASSERT(length >= 1);
@@ -1319,10 +1307,9 @@ inline char* FormatExponential(char* buffer, int length, int decimal_point)
         buffer += 1 + length;
     }
 
-    *buffer++ = 'e';
+    *buffer++ = exponent_char;
 
-    int const exponent = decimal_point - 1;
-    return Itoa1000(buffer, exponent);
+    return ExponentToDecimal(buffer, exponent);
 }
 
 } // namespace impl
@@ -1340,22 +1327,22 @@ template <typename Float>
 inline char* PositiveDtoa(char* next, char* last, Float value, bool force_trailing_dot_zero = false)
 {
     DTOA_ASSERT(last - next >= kPositiveDtoaMaxLength);
-    DTOA_ASSERT(base_conv::impl::IEEEFloat(value).IsFinite());
+    DTOA_ASSERT(base_conv::impl::IEEE<Float>(value).IsFinite());
     DTOA_ASSERT(value > 0);
 
     // Compute v = buffer * 10^exponent.
     // The decimal digits are stored in the buffer, which needs to be
     // interpreted as an unsigned decimal integer.
-    // length is the length of the buffer, i.e. the number of decimal digits.
-    int length = 0;
+    // num_digits is the length of the buffer, i.e. the number of decimal digits.
+    int num_digits = 0;
     int exponent = 0;
-    base_conv::DoubleToDecimal(next, last, length, exponent, value);
+    base_conv::DoubleToDecimal(next, last, num_digits, exponent, value);
 
     // Grisu2 generates at most max_digits10 decimal digits.
-    DTOA_ASSERT(length <= std::numeric_limits<Float>::max_digits10);
+    DTOA_ASSERT(num_digits <= std::numeric_limits<Float>::max_digits10);
 
     // The position of the decimal point relative to the start of the buffer.
-    int const decimal_point = length + exponent;
+    int const decimal_point = num_digits + exponent;
 
     // Just appending the exponent would yield a correct decimal representation
     // for the input value.
@@ -1372,16 +1359,16 @@ inline char* PositiveDtoa(char* next, char* last, Float value, bool force_traili
     bool const use_fixed = kMinExp < decimal_point && decimal_point <= kMaxExp;
 #else
     // NB:
-    // Integers <= 2^p = kMaxVal are exactly representable as Fp's.
+    // Integers <= 2^p = kMaxVal are exactly representable as Float's.
     constexpr auto kMinExp = -6;
-    constexpr auto kMaxVal = static_cast<Fp>(uint64_t{1} << std::numeric_limits<Float>::digits); // <= 16 digits
+    constexpr auto kMaxVal = static_cast<Float>(uint64_t{1} << std::numeric_limits<Float>::digits); // <= 16 digits
 
     bool const use_fixed = kMinExp < decimal_point && value <= kMaxVal;
 #endif
 
     char* const end = use_fixed
-        ? base_conv::impl::FormatFixed(next, length, decimal_point, force_trailing_dot_zero)
-        : base_conv::impl::FormatExponential(next, length, decimal_point);
+        ? base_conv::impl::FormatFixed(next, num_digits, decimal_point, force_trailing_dot_zero)
+        : base_conv::impl::FormatExponential(next, num_digits, decimal_point - 1);
 
     DTOA_ASSERT(end - next <= kPositiveDtoaMaxLength);
     return end;
@@ -1432,7 +1419,7 @@ inline char* Dtoa(
     DTOA_ASSERT(std::strlen(nan_string) <= size_t{kPositiveDtoaMaxLength});
     DTOA_ASSERT(std::strlen(inf_string) <= size_t{kPositiveDtoaMaxLength});
 
-    auto const v = base_conv::impl::IEEEFloat(value);
+    base_conv::impl::IEEE<Float> const v(value);
 
     if (!v.IsFinite())
     {
@@ -1443,24 +1430,30 @@ inline char* Dtoa(
         return base_conv::impl::StrCopy(next, last, inf_string);
     }
 
-    if (v.IsZero())
-    {
-        if (v.SignBit())
-            return base_conv::impl::StrCopy(next, last, "-0.0");
-        *next++ = '0';
-        return next;
-    }
-
     if (v.SignBit())
     {
         value = v.AbsValue();
         *next++ = '-';
     }
 
+    if (v.IsZero())
+    {
+        *next++ = '0';
+        if (force_trailing_dot_zero)
+        {
+            *next++ = '.';
+            *next++ = '0';
+        }
+        return next;
+    }
+
     return base_conv::PositiveDtoa(next, last, value, force_trailing_dot_zero);
 }
 
 } // namespace base_conv
+#if DTOA_UNNAMED_NAMESPACE
+} // namespace
+#endif
 
 /*
 Copyright (c) 2009 Florian Loitsch
