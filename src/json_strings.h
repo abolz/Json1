@@ -31,16 +31,6 @@
 namespace json {
 namespace strings {
 
-namespace impl
-{
-    template <typename It>
-    using IsInputIterator = std::integral_constant<
-        bool,
-        std::is_convertible<typename std::iterator_traits<It>::iterator_category, std::input_iterator_tag>::value &&
-        !std::is_convertible<typename std::iterator_traits<It>::iterator_category, std::forward_iterator_tag >::value
-    >;
-}
-
 //==================================================================================================
 //
 //==================================================================================================
@@ -86,12 +76,6 @@ UnescapeStringResult<It> UnescapeString(It next, It last, /*char quote_char,*/ F
 {
     while (next != last)
     {
-        //if (*next == quote_char)
-        //{
-        //    ++next;
-        //    break;
-        //}
-
         auto const uc = static_cast<unsigned char>(*next);
 
         if (uc < 0x20) // unescaped control character
@@ -111,7 +95,9 @@ UnescapeStringResult<It> UnescapeString(It next, It last, /*char quote_char,*/ F
 
             ++next; // skip '\'
             if (next == last)
+            {
                 return {next, UnescapeStringStatus::incomplete};
+            }
 
             switch (*next)
             {
@@ -150,21 +136,21 @@ UnescapeStringResult<It> UnescapeString(It next, It last, /*char quote_char,*/ F
             case 'u':
                 {
                     if (++next == last)
+                    {
                         return {f, UnescapeStringStatus::incomplete};
+                    }
 
                     uint32_t U = 0;
                     auto const end = json::unicode::DecodeTrimmedUCNSequence(next, last, U);
-                    //JSON_ASSERT(end != next);
+                    JSON_ASSERT(end != next);
                     next = end;
 
-                    if (U != json::unicode::kInvalidCodepoint)
-                    {
-                        json::unicode::EncodeUTF8(U, [&](uint8_t code_unit) { yield(static_cast<char>(code_unit)); });
-                    }
-                    else
+                    if (U == json::unicode::kInvalidCodepoint)
                     {
                         return {f, UnescapeStringStatus::invalid_utf8_sequence};
                     }
+
+                    json::unicode::EncodeUTF8(U, [&](uint8_t code_unit) { yield(static_cast<char>(code_unit)); });
                 }
                 break;
             default:
@@ -177,26 +163,17 @@ UnescapeStringResult<It> UnescapeString(It next, It last, /*char quote_char,*/ F
 
             uint32_t U = 0;
             next = json::unicode::DecodeUTF8Sequence(next, last, U);
-            //JSON_ASSERT(next != f);
+            JSON_ASSERT(next != f);
 
-            if (U != json::unicode::kInvalidCodepoint)
-            {
-                constexpr bool inpit = json::strings::impl::IsInputIterator<It>::value;
-                if (inpit)
-                {
-                    json::unicode::EncodeUTF8(U, [&](uint8_t code_unit) { yield(static_cast<char>(code_unit)); });
-                }
-                else
-                {
-                    // The range [f, next) already contains a valid UTF-8 encoding of U.
-                    for ( ; f != next; ++f) {
-                        yield(*f);
-                    }
-                }
-            }
-            else
+            if (U == json::unicode::kInvalidCodepoint)
             {
                 return {f, UnescapeStringStatus::invalid_utf8_sequence};
+            }
+
+            // The range [f, next) already contains a valid UTF-8 encoding of U.
+            for ( ; f != next; ++f)
+            {
+                yield(*f);
             }
         }
     }
@@ -270,7 +247,8 @@ EscapeStringResult<It> EscapeString(It next, It last, Fn yield)
                 yield('\\');
                 break;
             case '/':   // U+002F
-                if (ch_prev == '<') {
+                if (ch_prev == '<')
+                {
                     yield('\\');
                 }
                 break;
@@ -284,54 +262,45 @@ EscapeStringResult<It> EscapeString(It next, It last, Fn yield)
 
             uint32_t U = 0;
             next = json::unicode::DecodeUTF8Sequence(next, last, U);
-            //JSON_ASSERT(next != f);
+            JSON_ASSERT(next != f);
 
-            if (U != json::unicode::kInvalidCodepoint)
-            {
-                //
-                // Always escape U+2028 (LINE SEPARATOR) and U+2029 (PARAGRAPH
-                // SEPARATOR). No string in JavaScript can contain a literal
-                // U+2028 or a U+2029.
-                //
-                // (See http://timelessrepo.com/json-isnt-a-javascript-subset)
-                //
-                if (U == 0x2028)
-                {
-                    yield('\\');
-                    yield('u');
-                    yield('2');
-                    yield('0');
-                    yield('2');
-                    yield('8');
-                }
-                else if (U == 0x2029)
-                {
-                    yield('\\');
-                    yield('u');
-                    yield('2');
-                    yield('0');
-                    yield('2');
-                    yield('9');
-                }
-                else
-                {
-                    constexpr bool inpit = json::strings::impl::IsInputIterator<It>::value;
-                    if (inpit)
-                    {
-                        json::unicode::EncodeUTF8(U, [&](uint8_t code_unit) { yield(static_cast<char>(code_unit)); });
-                    }
-                    else
-                    {
-                        // The UTF-8 sequence is valid. No need to re-encode.
-                        for ( ; f != next; ++f) {
-                            yield(*f);
-                        }
-                    }
-                }
-            }
-            else
+            if (U == json::unicode::kInvalidCodepoint)
             {
                 return {next, EscapeStringStatus::invalid_utf8_sequence};
+            }
+
+            //
+            // Always escape U+2028 (LINE SEPARATOR) and U+2029 (PARAGRAPH
+            // SEPARATOR). No string in JavaScript can contain a literal
+            // U+2028 or a U+2029.
+            //
+            // (See http://timelessrepo.com/json-isnt-a-javascript-subset)
+            //
+            switch (U)
+            {
+            case 0x2028:
+                yield('\\');
+                yield('u');
+                yield('2');
+                yield('0');
+                yield('2');
+                yield('8');
+                break;
+            case 0x2029:
+                yield('\\');
+                yield('u');
+                yield('2');
+                yield('0');
+                yield('2');
+                yield('9');
+                break;
+            default:
+                // The UTF-8 sequence is valid. No need to re-encode.
+                for ( ; f != next; ++f)
+                {
+                    yield(*f);
+                }
+                break;
             }
         }
     }

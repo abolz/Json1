@@ -164,26 +164,6 @@ void EncodeUTF8(uint32_t U, Put8 put)
 }
 
 #if 0
-template <typename It, typename Put32>
-bool ForEachUTF8EncodedCodepoint(It next, It last, Put32 put)
-{
-    while (next != last)
-    {
-        uint32_t U = 0;
-
-        auto const next1 = DecodeUTF8Sequence(next, last, U);
-        JSON_ASSERT(next != next1);
-        next = next1;
-
-        if (!put(U))
-            return false;
-    }
-
-    return true;
-}
-#endif
-
-#if 0
 template <typename It>
 It DecodeUTF16Sequence(It next, It last, uint32_t& U)
 {
@@ -236,50 +216,6 @@ void EncodeUTF16(uint32_t U, Put16 put)
     }
 }
 
-#if 0
-template <typename It, typename Put32>
-bool ForEachUTF16EncodedCodepoint(It next, It last, Put32 put)
-{
-    while (next != last)
-    {
-        uint32_t U = 0;
-
-        auto const next1 = DecodeUTF16Sequence(next, last, U);
-        JSON_ASSERT(next != next1);
-        next = next1;
-
-        if (!put(U))
-            return false;
-    }
-
-    return true;
-}
-#endif
-
-#if 0
-template <typename It>
-inline char ParseChar(It& first, It last)
-{
-    if (first == last)
-        return '\0';
-    auto const res = *first;
-    ++first;
-    return res;
-}
-
-template <typename It>
-inline int ParseHexDigit(It& first, It last)
-{
-    using namespace json::charclass;
-
-    if (first == last)
-        return -1;
-    auto const res = HexDigitValue(*first);
-    ++first;
-    return res;
-}
-#endif
-
 // Reads a hexadecimal number of the form "HHHH".
 // Stores the result in W on success.
 template <typename It>
@@ -289,13 +225,6 @@ bool ReadHex16(It& first, It last, uint32_t& W)
 
     auto f = first;
 
-#if 0
-    auto const h0 = ParseHexDigit(f, last);
-    auto const h1 = ParseHexDigit(f, last);
-    auto const h2 = ParseHexDigit(f, last);
-    auto const h3 = ParseHexDigit(f, last);
-    first = f;
-#else
     if (std::distance(f, last) < 4) {
         first = last;
         return false;
@@ -306,7 +235,6 @@ bool ReadHex16(It& first, It last, uint32_t& W)
     auto const h2 = HexDigitValue(*f); ++f;
     auto const h3 = HexDigitValue(*f); ++f;
     first = f;
-#endif
 
     if ((h0 | h1 | h2 | h3) >= 0)
     {
@@ -326,15 +254,6 @@ bool ReadUCN(It& first, It last, uint32_t& W)
 
     auto f = first;
 
-#if 0
-    auto const c0 = ParseChar(f, last);
-    auto const c1 = ParseChar(f, last);
-    auto const h0 = ParseHexDigit(f, last);
-    auto const h1 = ParseHexDigit(f, last);
-    auto const h2 = ParseHexDigit(f, last);
-    auto const h3 = ParseHexDigit(f, last);
-    first = f;
-#else
     if (std::distance(f, last) < 6) {
         first = last;
         return false;
@@ -347,7 +266,6 @@ bool ReadUCN(It& first, It last, uint32_t& W)
     auto const h2 = HexDigitValue(*f); ++f;
     auto const h3 = HexDigitValue(*f); ++f;
     first = f;
-#endif
 
     if (c0 == '\\' && c1 == 'u' && (h0 | h1 | h2 | h3) >= 0)
     {

@@ -22,6 +22,7 @@
 
 #include "json_charclass.h"
 
+#define DTOA_UNNAMED_NAMESPACE 1
 #include "dtoa.h"
 #include "strtod.h"
 
@@ -252,6 +253,15 @@ char* json::numbers::NumberToString(char* next, char* last, double value, bool e
 
 static bool StringToDouble(double& result, char const* next, char const* last, Options const& options)
 {
+#if 0
+    if (next == last)
+    {
+        result = 0.0;
+        return true;
+    }
+
+    return base_conv::Strtod(result, next, last) == base_conv::StrtodStatus::success;
+#else
     using namespace json::charclass;
 
     // Inputs larger than kMaxInt (currently) can not be handled.
@@ -474,6 +484,7 @@ L_parsing_done:
 
     result = is_neg ? -value : value;
     return true;
+#endif
 }
 
 inline double ReadDouble_unguarded(char const* digits, int num_digits)
@@ -524,7 +535,7 @@ double json::numbers::StringToNumber(char const* first, char const* last, Number
             ++first_digit;
         }
 
-#if 1
+#if 0
         JSON_ASSERT(last - first_digit <= INT_MAX);
         double const result = base_conv::DecimalToDouble(first_digit, static_cast<int>(last - first_digit), /*exponent*/ 0);
         return is_neg ? -result : result;

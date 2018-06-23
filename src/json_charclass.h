@@ -49,7 +49,7 @@ inline unsigned CharClass(char ch)
 #define S CC_StringSpecial
 #define C CC_NeedsCleaning
 
-    static constexpr uint8_t const kMap[] = {
+static constexpr uint8_t const kMap[] = {
     //  NUL     SOH     STX     ETX     EOT     ENQ     ACK     BEL     BS      HT      LF      VT      FF      CR      SO      SI
         C,      C,      C,      C,      C,      C,      C,      C,      C,      W|C,    W|C,    C,      C,      W|C,    C,      C,
     //  DLE     DC1     DC2     DC3     DC4     NAK     SYN     ETB     CAN     EM      SUB     ESC     FS      GS      RS      US
