@@ -1,38 +1,58 @@
-// Copyright 2017 Alexander Bolz
+// Derived from https://github.com/ulfjack/ryu
+// Original license follows:
+
+// Copyright 2018 Ulf Adams
 //
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
+// The contents of this file may be used under the terms of the Apache License,
+// Version 2.0.
 //
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
+//    (See accompanying file LICENSE-Apache or copy at
+//     http://www.apache.org/licenses/LICENSE-2.0)
 //
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
+// Alternatively, the contents of this file may be used under the terms of
+// the Boost Software License, Version 1.0.
+//    (See accompanying file LICENSE-Boost or copy at
+//     https://www.boost.org/LICENSE_1_0.txt)
+//
+// Unless required by applicable law or agreed to in writing, this software
+// is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.
 
 #pragma once
 
 #include <cassert>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
-#include <climits>
 #include <limits>
 #include <type_traits>
 
-#ifdef _MSC_VER
+#ifndef DTOA_ASSERT
+#define DTOA_ASSERT(X) assert(X)
+#endif
+
+// ABSL avoids uint128_t on Win32 even if __SIZEOF_INT128__ is defined.
+// Let's do the same for now.
+#if defined(__SIZEOF_INT128__) && !defined(_MSC_VER)
+#define DTOA_HAS_UINT128 1
+#elif defined(_MSC_VER) && defined(_M_X64) && !defined(__clang__) // https://bugs.llvm.org/show_bug.cgi?id=37755
+#define DTOA_HAS_64_BIT_INTRINSICS 1
+#endif
+
+#if DTOA_HAS_64_BIT_INTRINSICS
 #include <intrin.h>
 #endif
 
-#ifndef DTOA_ASSERT
-#define DTOA_ASSERT(X) assert(X)
+#ifndef DTOA_INLINE
+#if _MSC_VER
+#define DTOA_INLINE __forceinline
+#else
+#define DTOA_INLINE inline
+#endif
+#endif
+
+#ifndef DTOA_OPTIMIZE_SIZE
+#define DTOA_OPTIMIZE_SIZE 1
 #endif
 
 #if DTOA_UNNAMED_NAMESPACE
@@ -40,230 +60,16 @@ namespace {
 #endif
 namespace base_conv {
 
-//==================================================================================================
-// DoubleToDecimal
-//
-// Implements the Grisu2 algorithm for (IEEE) binary to decimal floating-point conversion.
-//
-// This implementation is a slightly modified version of the reference
-// implementation by Florian Loitsch which can be obtained from
-// http://florian.loitsch.com/publications (bench.tar.gz)
-//
-// The original license can be found at the end of this file.
-//
-// References:
-//
-// [1]  Loitsch, "Printing Floating-Point Numbers Quickly and Accurately with Integers",
-//      Proceedings of the ACM SIGPLAN 2010 Conference on Programming Language Design and Implementation, PLDI 2010
-// [2]  Burger, Dybvig, "Printing Floating-Point Numbers Quickly and Accurately",
-//      Proceedings of the ACM SIGPLAN 1996 Conference on Programming Language Design and Implementation, PLDI 1996
-//==================================================================================================
-
-namespace impl {
+namespace dtoa_impl {
 
 template <typename Dest, typename Source>
-inline Dest ReinterpretBits(Source source)
+DTOA_INLINE Dest ReinterpretBits(Source source)
 {
     static_assert(sizeof(Dest) == sizeof(Source), "size mismatch");
 
     Dest dest;
     std::memcpy(&dest, &source, sizeof(Source));
     return dest;
-}
-
-inline char* Utoa100(char* buf, uint32_t digits)
-{
-    static constexpr char const* kDigits100 =
-        "00010203040506070809"
-        "10111213141516171819"
-        "20212223242526272829"
-        "30313233343536373839"
-        "40414243444546474849"
-        "50515253545556575859"
-        "60616263646566676869"
-        "70717273747576777879"
-        "80818283848586878889"
-        "90919293949596979899";
-
-    DTOA_ASSERT(digits < 100);
-    std::memcpy(buf, kDigits100 + 2*digits, 2);
-    return buf + 2;
-}
-
-struct DiyFp // f * 2^e
-{
-    static constexpr int SignificandSize = 64; // = q
-
-    uint64_t f = 0;
-    int e = 0;
-
-    constexpr DiyFp() = default;
-    constexpr DiyFp(uint64_t f_, int e_) : f(f_), e(e_) {}
-};
-
-// Returns whether the given floating point value is normalized.
-inline bool IsNormalized(DiyFp x)
-{
-    static_assert(DiyFp::SignificandSize == 64, "internal error");
-
-    return x.f >= (uint64_t{1} << 63);
-}
-
-// Returns x - y.
-// PRE: x.e == y.e and x.f >= y.f
-inline DiyFp Subtract(DiyFp x, DiyFp y)
-{
-    DTOA_ASSERT(x.e == y.e);
-    DTOA_ASSERT(x.f >= y.f);
-
-    return DiyFp(x.f - y.f, x.e);
-}
-
-// Returns x * y.
-// The result is rounded (ties up). (Only the upper q bits are returned.)
-inline DiyFp Multiply(DiyFp x, DiyFp y)
-{
-    static_assert(DiyFp::SignificandSize == 64, "internal error");
-
-    // Computes:
-    //  f = round((x.f * y.f) / 2^q)
-    //  e = x.e + y.e + q
-
-#if defined(_MSC_VER) && defined(_M_X64)
-
-    uint64_t h = 0;
-    uint64_t l = _umul128(x.f, y.f, &h);
-    h += l >> 63; // round, ties up: [h, l] += 2^q / 2
-
-    return DiyFp(h, x.e + y.e + 64);
-
-#elif defined(__GNUC__) && defined(__SIZEOF_INT128__)
-
-    __extension__ using Uint128 = unsigned __int128;
-
-    Uint128 const p = Uint128{x.f} * Uint128{y.f};
-
-    uint64_t h = static_cast<uint64_t>(p >> 64);
-    uint64_t l = static_cast<uint64_t>(p);
-    h += l >> 63; // round, ties up: [h, l] += 2^q / 2
-
-    return DiyFp(h, x.e + y.e + 64);
-
-#else
-
-    // Emulate the 64-bit * 64-bit multiplication:
-    //
-    // p = u * v
-    //   = (u_lo + 2^32 u_hi) (v_lo + 2^32 v_hi)
-    //   = (u_lo v_lo         ) + 2^32 ((u_lo v_hi         ) + (u_hi v_lo         )) + 2^64 (u_hi v_hi         )
-    //   = (p0                ) + 2^32 ((p1                ) + (p2                )) + 2^64 (p3                )
-    //   = (p0_lo + 2^32 p0_hi) + 2^32 ((p1_lo + 2^32 p1_hi) + (p2_lo + 2^32 p2_hi)) + 2^64 (p3                )
-    //   = (p0_lo             ) + 2^32 (p0_hi + p1_lo + p2_lo                      ) + 2^64 (p1_hi + p2_hi + p3)
-    //   = (p0_lo             ) + 2^32 (Q                                          ) + 2^64 (H                 )
-    //   = (p0_lo             ) + 2^32 (Q_lo + 2^32 Q_hi                           ) + 2^64 (H                 )
-    //
-    // (Since Q might be larger than 2^32 - 1)
-    //
-    //   = (p0_lo + 2^32 Q_lo) + 2^64 (Q_hi + H)
-    //
-    // (Q_hi + H does not overflow a 64-bit int)
-    //
-    //   = p_lo + 2^64 p_hi
-
-    // Note:
-    // The 32/64-bit casts here help MSVC to avoid calls to the _allmul
-    // library function.
-
-    uint32_t const u_lo = static_cast<uint32_t>(x.f /*& 0xFFFFFFFF*/);
-    uint32_t const u_hi = static_cast<uint32_t>(x.f >> 32);
-    uint32_t const v_lo = static_cast<uint32_t>(y.f /*& 0xFFFFFFFF*/);
-    uint32_t const v_hi = static_cast<uint32_t>(y.f >> 32);
-
-    uint64_t const p0 = uint64_t{u_lo} * v_lo;
-    uint64_t const p1 = uint64_t{u_lo} * v_hi;
-    uint64_t const p2 = uint64_t{u_hi} * v_lo;
-    uint64_t const p3 = uint64_t{u_hi} * v_hi;
-
-    uint64_t const p0_hi = p0 >> 32;
-    uint64_t const p1_lo = p1 & 0xFFFFFFFF;
-    uint64_t const p1_hi = p1 >> 32;
-    uint64_t const p2_lo = p2 & 0xFFFFFFFF;
-    uint64_t const p2_hi = p2 >> 32;
-
-    uint64_t Q = p0_hi + p1_lo + p2_lo;
-
-    // The full product might now be computed as
-    //
-    // p_hi = p3 + p2_hi + p1_hi + (Q >> 32)
-    // p_lo = p0_lo + (Q << 32)
-    //
-    // But in this particular case here, the full p_lo is not required.
-    // Effectively we only need to add the highest bit in p_lo to p_hi (and
-    // Q_hi + 1 does not overflow).
-
-    Q += uint64_t{1} << (63 - 32); // round, ties up
-
-    uint64_t const h = p3 + p2_hi + p1_hi + (Q >> 32);
-
-    return DiyFp(h, x.e + y.e + 64);
-
-#endif
-}
-
-// Returns the number of leading 0-bits in x, starting at the most significant bit position.
-// If x is 0, the result is undefined.
-inline int CountLeadingZeros64(uint64_t x)
-{
-    DTOA_ASSERT(x != 0);
-
-#if defined(_MSC_VER) && defined(_M_X64)
-
-    return static_cast<int>(__lzcnt64(x));
-
-#elif defined(_MSC_VER) && defined(_M_IX86)
-
-    int lz = static_cast<int>( __lzcnt(static_cast<uint32_t>(x >> 32)) );
-    if (lz == 32) {
-        lz += static_cast<int>( __lzcnt(static_cast<uint32_t>(x)) );
-    }
-    return lz;
-
-#elif defined(__GNUC__)
-
-    return __builtin_clzll(x);
-
-#else
-
-    int lz = 0;
-    while ((x >> 63) == 0) {
-        x <<= 1;
-        ++lz;
-    }
-    return lz;
-
-#endif
-}
-
-// Normalize x such that the significand is >= 2^(q-1).
-// PRE: x.f != 0
-inline DiyFp Normalize(DiyFp x)
-{
-    static_assert(DiyFp::SignificandSize == 64, "internal error");
-
-    int const lz = CountLeadingZeros64(x.f);
-    return DiyFp(x.f << lz, x.e - lz);
-}
-
-// Normalize x such that the result has the exponent E.
-// PRE: e >= x.e and the upper e - x.e bits of x.f must be zero.
-inline DiyFp NormalizeTo(DiyFp x, int e)
-{
-    int const delta = x.e - e;
-
-    DTOA_ASSERT(delta >= 0);
-    DTOA_ASSERT(((x.f << delta) >> delta) == x.f);
-
-    return DiyFp(x.f << delta, e);
 }
 
 template <typename Float>
@@ -331,880 +137,1487 @@ struct IEEE
     ieee_type AbsValue() const {
         return ReinterpretBits<ieee_type>(bits & ~SignMask);
     }
+};
 
-    ieee_type NextValue() const {
-        DTOA_ASSERT(!SignBit());
-        return ReinterpretBits<ieee_type>(IsInf() ? bits : bits + 1);
+} // namespace dtoa_impl
+
+//==================================================================================================
+// DoubleToDecimal
+//
+// Implements the Ryu algorithm for (IEEE) binary to decimal floating-point conversion.
+//
+// This implementation is a slightly modified version of the
+// implementation by Ulf Adams which can be obtained from
+// https://github.com/ulfjack/ryu
+//
+// The original license can be found at the top of this file.
+//
+// References:
+//
+// [1]  Adams, "Ryu: fast float-to-string conversion",
+//      PLDI 2018 Proceedings of the 39th ACM SIGPLAN Conference on Programming Language Design and Implementation Pages 270-282
+//      https://dl.acm.org/citation.cfm?id=3192369
+//==================================================================================================
+
+namespace dtoa_impl {
+
+constexpr int kPow5InvDoubleBitLength = 122;
+constexpr int kPow5DoubleBitLength = 121;
+
+struct Uint64x2 {
+    uint64_t lo;
+    uint64_t hi;
+};
+
+#if DTOA_HAS_64_BIT_INTRINSICS
+
+DTOA_INLINE unsigned char AddCarry(uint64_t a, uint64_t b, uint64_t* sum)
+{
+    return _addcarry_u64(0, a, b, sum);
+}
+
+DTOA_INLINE uint64_t Mul128(uint64_t a, uint64_t b, uint64_t* productHi)
+{
+    return _umul128(a, b, productHi);
+}
+
+DTOA_INLINE uint64_t ShiftRight128(uint64_t lo, uint64_t hi, int dist)
+{
+    DTOA_ASSERT(dist >= 0);
+    DTOA_ASSERT(dist < 64);
+    return __shiftright128(lo, hi, static_cast<unsigned char>(dist));
+}
+
+#else // ^^^ DTOA_HAS_64_BIT_INTRINSICS
+
+DTOA_INLINE unsigned char AddCarry(uint64_t a, uint64_t b, uint64_t* sum)
+{
+    uint64_t const s = a + b;
+    *sum = s;
+    return s < a;
+}
+
+DTOA_INLINE uint64_t Mul128(uint64_t a, uint64_t b, uint64_t* productHi)
+{
+    uint32_t const aLo = static_cast<uint32_t>(a);
+    uint32_t const aHi = static_cast<uint32_t>(a >> 32);
+    uint32_t const bLo = static_cast<uint32_t>(b);
+    uint32_t const bHi = static_cast<uint32_t>(b >> 32);
+
+    uint64_t const b00 = uint64_t{aLo} * bLo;
+    uint64_t const b01 = uint64_t{aLo} * bHi;
+    uint64_t const b10 = uint64_t{aHi} * bLo;
+    uint64_t const b11 = uint64_t{aHi} * bHi;
+
+    uint64_t midSum;
+    uint64_t const midSumCarry = AddCarry(b01, b10, &midSum);
+
+    uint64_t productLo;
+    uint64_t const productLoCarry = AddCarry(b00, midSum << 32, &productLo);
+
+    *productHi = b11 + (midSum >> 32) + (midSumCarry << 32) + productLoCarry;
+    return productLo;
+}
+
+DTOA_INLINE uint64_t ShiftRight128(uint64_t lo, uint64_t hi, int dist)
+{
+    DTOA_ASSERT(dist > 0);
+    DTOA_ASSERT(dist < 128);
+    return (dist >= 64)
+        ? hi >> (dist - 64)
+        : (hi << (64 - dist)) | (lo >> dist);
+}
+
+#endif // ^^^ !DTOA_HAS_64_BIT_INTRINSICS
+
+DTOA_INLINE int Pow5BitLength(int e) // e == 0 ? 1 : ceil(log_2(5^e))
+{
+    DTOA_ASSERT(e >= 0);
+    DTOA_ASSERT(e <= 1500); // Only tested for e <= 1500
+    return ((e * 1217359) >> 19) + 1;
+}
+
+#if DTOA_OPTIMIZE_SIZE
+// sizeof(tables) = 756 bytes
+
+constexpr int kSmallPow5Size = 26;
+
+static constexpr uint64_t kSmallPow5[26 /*208 bytes*/] = {
+    1,
+    5,
+    25,
+    125,
+    625,
+    3125,
+    15625,
+    78125,
+    390625,
+    1953125,
+    9765625,
+    48828125,
+    244140625,
+    1220703125,
+    6103515625,
+    30517578125,
+    152587890625,
+    762939453125,
+    3814697265625,
+    19073486328125,
+    95367431640625,
+    476837158203125,
+    2384185791015625,
+    11920928955078125,
+    59604644775390625,
+    298023223876953125,
+};
+
+static constexpr Uint64x2 kPow5Double[13 /*208 bytes*/] = {
+    {0x0000000000000000, 0x0100000000000000},
+    {0x9000000000000000, 0x014ADF4B7320334B},
+    {0xD0E549208B31ADB1, 0x01ABA4714957D300},
+    {0x56DC6AD264D8F086, 0x01145B7E285BF98F},
+    {0xCEB1DBD923D8596C, 0x01652EFDC6018A1F},
+    {0x3B4C1B80B22AE923, 0x01CDA62055B2D9D8},
+    {0x65BB28B4E8F7E4C3, 0x012A5568B9F52F41},
+    {0xFF08AED437682D4F, 0x01819651531F9E78},
+    {0x8B4EE134AD99BF15, 0x01F25C186A6F04C2},
+    {0x616499ECB70C25F0, 0x01420EB449C8842E},
+    {0x585A56EAD360865B, 0x01A03FDE214CAF08},
+    {0x8093DB1D57999890, 0x010CFEB353A97DAD},
+    {0xECF38BB735E3F36A, 0x015BAAF44FA52673},
+};
+
+// Unfortunately, the results are sometimes off by one. We use an additional
+// lookup table to store those cases and adjust the result.
+static constexpr uint32_t kPow5DoubleAdjust[13 /*52 bytes*/] = {
+    0x00000000,
+    0x00000000,
+    0x00000000,
+    0x033C55BE,
+    0x03DB77D8,
+    0x0265FFB2,
+    0x00000800,
+    0x01A8FF56,
+    0x00000000,
+    0x0037A200,
+    0x00004000,
+    0x03FFFFFC,
+    0x00003FFE,
+};
+
+static constexpr Uint64x2 kPow5InvDouble[13 /*208 bytes*/] = {
+    {0x0000000000000001, 0x0400000000000000},
+    {0x6A54D92BF80CAA07, 0x0318481895D96277},
+    {0xAF951AA00E3BF901, 0x0264FF8B1B41EDFE},
+    {0x4CA4048FA6AAC8EE, 0x03B4919C8D1CF8E0},
+    {0x2C2739BAED005CDE, 0x02DDEB68185F8EEF},
+    {0x3F2A34FFE87BD190, 0x0237D7BEAF165E72},
+    {0x0F7D17DD1ADD2AFD, 0x036EB1B091F58A96},
+    {0xF17A7F3D3334847E, 0x02A7DB4C280E3476},
+    {0x81091F2E7967DC7A, 0x020E037AA4F692F1},
+    {0xA2A650BD773DF7F5, 0x032DF7737689B689},
+    {0xD5BDDCFF0D80F6D3, 0x0275C6B23EB69B26},
+    {0x29AD0D49D5E30445, 0x03CE8809E7B55B52},
+    {0xF3181420DC13D7B4, 0x02F201D49FB4F84A},
+};
+
+static constexpr uint32_t kPow5InvDoubleAdjust[20 /*80 bytes*/] = {
+    0x51505404,
+    0x55054514,
+    0x45555545,
+    0x05511411,
+    0x00505010,
+    0x00000004,
+    0x00000000,
+    0x00000000,
+    0x55555040,
+    0x00505051,
+    0x00050040,
+    0x55554000,
+    0x51659559,
+    0x00001000,
+    0x15000010,
+    0x55455555,
+    0x41404051,
+    0x00001010,
+    0x00000014,
+    0x00000000,
+};
+
+// Computes 5^i in the form required by Ryu.
+DTOA_INLINE Uint64x2 ComputePow5(int i)
+{
+    DTOA_ASSERT(i >= 0);
+
+    Uint64x2 result;
+
+    int const base = static_cast<int>(static_cast<uint32_t>(i) / kSmallPow5Size);
+    int const base2 = static_cast<int>(static_cast<uint32_t>(base) * kSmallPow5Size);
+    int const offset = i - base2;
+
+    auto const mul = kPow5Double[base];
+    if (offset == 0)
+    {
+        result = mul;
     }
+    else
+    {
+        uint64_t const m = kSmallPow5[offset];
+        uint32_t const adjust = (kPow5DoubleAdjust[base] >> offset) & 1;
+
+        int const delta = Pow5BitLength(i) - Pow5BitLength(base2);
+        DTOA_ASSERT(delta >= 0);
+        DTOA_ASSERT(delta <= 64);
+
+#if DTOA_HAS_UINT128
+        __extension__ using uint128_t = unsigned __int128;
+
+        uint128_t const b0 = static_cast<uint128_t>(m) * mul.lo;
+        uint128_t const b2 = static_cast<uint128_t>(m) * mul.hi;
+        uint128_t const shiftedSum = (b0 >> delta) + (b2 << (64 - delta)) + adjust;
+
+        result.lo = static_cast<uint64_t>(shiftedSum);
+        result.hi = static_cast<uint64_t>(shiftedSum >> 64);
+#else
+        uint64_t b0_hi;
+        uint64_t b2_hi;
+        uint64_t const b0_lo = Mul128(m, mul.lo, &b0_hi);
+        uint64_t const b2_lo = Mul128(m, mul.hi, &b2_hi);
+
+        uint64_t sum;
+        b2_hi += AddCarry(b0_hi, b2_lo, &sum);
+
+        result.lo = ShiftRight128(b0_lo, sum, delta) + adjust;
+        result.hi = ShiftRight128(sum, b2_hi, delta);
+#endif
+    }
+
+    return result;
+}
+
+// Computes 5^-i in the form required by Ryu.
+DTOA_INLINE Uint64x2 ComputePow5Inv(int i)
+{
+    DTOA_ASSERT(i >= 0);
+
+    Uint64x2 result;
+
+    int const base = static_cast<int>((static_cast<uint32_t>(i) + (kSmallPow5Size - 1)) / kSmallPow5Size);
+    int const base2 = static_cast<int>(static_cast<uint32_t>(base) * kSmallPow5Size);
+    int const offset = base2 - i;
+
+    auto const mul = kPow5InvDouble[base]; // 1/5^base2
+    if (offset == 0)
+    {
+        result = mul;
+    }
+    else
+    {
+        uint64_t const m = kSmallPow5[offset];
+        uint32_t const adjust = ( kPow5InvDoubleAdjust[static_cast<uint32_t>(i) / 16] >> ((static_cast<uint32_t>(i) % 16) << 1) ) & 3;
+
+        int const delta = Pow5BitLength(base2) - Pow5BitLength(i);
+        DTOA_ASSERT(delta >= 0);
+        DTOA_ASSERT(delta <= 64);
+
+        // 1/5^base2 * 5^offset = 1/5^(base2-offset) = 1/5^i
+
+#if DTOA_HAS_UINT128
+        __extension__ using uint128_t = unsigned __int128;
+
+        uint128_t const b0 = static_cast<uint128_t>(m) * (mul.lo - 1);
+        uint128_t const b2 = static_cast<uint128_t>(m) * (mul.hi    );
+        uint128_t const shiftedSum = ((b0 >> delta) + (b2 << (64 - delta))) + 1 + adjust;
+
+        result.lo = static_cast<uint64_t>(shiftedSum);
+        result.hi = static_cast<uint64_t>(shiftedSum >> 64);
+#else
+        uint64_t b0_hi;
+        uint64_t b2_hi;
+        uint64_t const b0_lo = Mul128(m, mul.lo - 1, &b0_hi);
+        uint64_t const b2_lo = Mul128(m, mul.hi,     &b2_hi);
+
+        uint64_t sum;
+        b2_hi += AddCarry(b0_hi, b2_lo, &sum);
+
+        result.lo = ShiftRight128(b0_lo, sum, delta) + 1 + adjust;
+        result.hi = ShiftRight128(sum, b2_hi, delta);
+#endif
+    }
+
+    return result;
+}
+
+#else // ^^^ DTOA_OPTIMIZE_SIZE
+// sizeof(tables) = 9888 bytes
+
+constexpr int kPow5InvDoubleSize = 292;
+constexpr int kPow5DoubleSize = 326;
+
+static constexpr Uint64x2 kPow5InvDouble[292] = { // 4672 bytes
+    {0x0000000000000001, 0x0400000000000000},
+    {0x3333333333333334, 0x0333333333333333},
+    {0x28F5C28F5C28F5C3, 0x028F5C28F5C28F5C},
+    {0xED916872B020C49C, 0x020C49BA5E353F7C},
+    {0xAF4F0D844D013A93, 0x0346DC5D63886594},
+    {0x8C3F3E0370CDC876, 0x029F16B11C6D1E10},
+    {0xD698FE69270B06C5, 0x0218DEF416BDB1A6},
+    {0xF0F4CA41D811A46E, 0x035AFE535795E90A},
+    {0xF3F70834ACDAE9F1, 0x02AF31DC4611873B},
+    {0x5CC5A02A23E254C1, 0x0225C17D04DAD296},
+    {0xFAD5CD10396A2135, 0x036F9BFB3AF7B756},
+    {0xFBDE3DA69454E75E, 0x02BFAFFC2F2C92AB},
+    {0x2FE4FE1EDD10B918, 0x0232F33025BD4223},
+    {0x4CA19697C81AC1BF, 0x0384B84D092ED038},
+    {0x3D4E1213067BCE33, 0x02D09370D4257360},
+    {0x643E74DC052FD829, 0x024075F3DCEAC2B3},
+    {0x6D30BAF9A1E626A7, 0x039A5652FB113785},
+    {0x2426FBFAE7EB5220, 0x02E1DEA8C8DA92D1},
+    {0x1CEBFCC8B9890E80, 0x024E4BBA3A487574},
+    {0x94ACC7A78F41B0CC, 0x03B07929F6DA5586},
+    {0xAA23D2EC729AF3D7, 0x02F394219248446B},
+    {0xBB4FDBF05BAF2979, 0x025C768141D369EF},
+    {0xC54C931A2C4B758D, 0x03C7240202EBDCB2},
+    {0x9DD6DC14F03C5E0B, 0x0305B66802564A28},
+    {0x4B1249AA59C9E4D6, 0x026AF8533511D4ED},
+    {0x44EA0F76F60FD489, 0x03DE5A1EBB4FBB15},
+    {0x6A54D92BF80CAA07, 0x0318481895D96277},
+    {0x21DD7A89933D54D2, 0x0279D346DE4781F9},
+    {0x362F2A75B8622150, 0x03F61ED7CA0C0328},
+    {0xF825BB91604E810D, 0x032B4BDFD4D668EC},
+    {0xC684960DE6A5340B, 0x0289097FDD7853F0},
+    {0xD203AB3E521DC33C, 0x02073ACCB12D0FF3},
+    {0xE99F7863B696052C, 0x033EC47AB514E652},
+    {0x87B2C6B62BAB3757, 0x02989D2EF743EB75},
+    {0xD2F56BC4EFBC2C45, 0x0213B0F25F69892A},
+    {0x1E55793B192D13A2, 0x0352B4B6FF0F41DE},
+    {0x4B77942F475742E8, 0x02A8909265A5CE4B},
+    {0xD5F9435905DF68BA, 0x022073A8515171D5},
+    {0x565B9EF4D6324129, 0x03671F73B54F1C89},
+    {0xDEAFB25D78283421, 0x02B8E5F62AA5B06D},
+    {0x188C8EB12CECF681, 0x022D84C4EEEAF38B},
+    {0x8DADB11B7B14BD9B, 0x037C07A17E44B8DE},
+    {0x7157C0E2C8DD647C, 0x02C99FB46503C718},
+    {0x8DDFCD823A4AB6CA, 0x023AE629EA696C13},
+    {0x1632E269F6DDF142, 0x0391704310A8ACEC},
+    {0x44F581EE5F17F435, 0x02DAC035A6ED5723},
+    {0x372ACE584C1329C4, 0x024899C4858AAC1C},
+    {0xBEAAE3C079B842D3, 0x03A75C6DA27779C6},
+    {0x6555830061603576, 0x02EC49F14EC5FB05},
+    {0xB7779C004DE6912B, 0x0256A18DD89E626A},
+    {0xF258F99A163DB512, 0x03BDCF495A9703DD},
+    {0x5B7A614811CAF741, 0x02FE3F6DE212697E},
+    {0xAF951AA00E3BF901, 0x0264FF8B1B41EDFE},
+    {0x7F54F7667D2CC19B, 0x03D4CC11C5364997},
+    {0x32AA5F8530F09AE3, 0x0310A3416A91D479},
+    {0xF55519375A5A1582, 0x0273B5CDEEDB1060},
+    {0xBBBB5B8BC3C3559D, 0x03EC56164AF81A34},
+    {0x2FC916096969114A, 0x03237811D593482A},
+    {0x596DAB3ABABA743C, 0x0282C674AADC39BB},
+    {0x478AEF622EFB9030, 0x0202385D557CFAFC},
+    {0xD8DE4BD04B2C19E6, 0x0336C0955594C4C6},
+    {0xAD7EA30D08F014B8, 0x029233AAAADD6A38},
+    {0x24654F3DA0C01093, 0x020E8FBBBBE454FA},
+    {0x3A3BB1FC346680EB, 0x034A7F92C63A2190},
+    {0x94FC8E635D1ECD89, 0x02A1FFA89E94E7A6},
+    {0xAA63A51C4A7F0AD4, 0x021B32ED4BAA52EB},
+    {0xDD6C3B607731AAED, 0x035EB7E212AA1E45},
+    {0x1789C919F8F488BD, 0x02B22CB4DBBB4B6B},
+    {0xAC6E3A7B2D906D64, 0x022823C3E2FC3C55},
+    {0x13E390C515B3E23A, 0x03736C6C9E606089},
+    {0xDCB60D6A77C31B62, 0x02C2BD23B1E6B3A0},
+    {0x7D5E7121F968E2B5, 0x0235641C8E52294D},
+    {0xC8971B698F0E3787, 0x0388A02DB0837548},
+    {0xA078E2BAD8D82C6C, 0x02D3B357C0692AA0},
+    {0xE6C71BC8AD79BD24, 0x0242F5DFCD20EEE6},
+    {0x0AD82C7448C2C839, 0x039E5632E1CE4B0B},
+    {0x3BE023903A356CFA, 0x02E511C24E3EA26F},
+    {0x2FE682D9C82ABD95, 0x0250DB01D8321B8C},
+    {0x4CA4048FA6AAC8EE, 0x03B4919C8D1CF8E0},
+    {0x3D5003A61EEF0725, 0x02F6DAE3A4172D80},
+    {0x9773361E7F259F51, 0x025F1582E9AC2466},
+    {0x8BEB89CA6508FEE8, 0x03CB559E42AD070A},
+    {0x6FEFA16EB73A6586, 0x0309114B688A6C08},
+    {0xF3261ABEF8FB846B, 0x026DA76F86D52339},
+    {0x51D691318E5F3A45, 0x03E2A57F3E21D1F6},
+    {0x0E4540F471E5C837, 0x031BB798FE8174C5},
+    {0xD8376729F4B7D360, 0x027C92E0CB9AC3D0},
+    {0xF38BD84321261EFF, 0x03FA849ADF5E061A},
+    {0x293CAD0280EB4BFF, 0x032ED07BE5E4D1AF},
+    {0xEDCA240200BC3CCC, 0x028BD9FCB7EA4158},
+    {0xBE3B50019A3030A4, 0x02097B309321CDE0},
+    {0xC9F88002904D1A9F, 0x03425EB41E9C7C9A},
+    {0x3B2D3335403DAEE6, 0x029B7EF67EE396E2},
+    {0x95BDC291003158B8, 0x0215FF2B98B6124E},
+    {0x892F9DB4CD1BC126, 0x035665128DF01D4A},
+    {0x07594AF70A7C9A85, 0x02AB840ED7F34AA2},
+    {0x6C476F2C0863AED1, 0x0222D00BDFF5D54E},
+    {0x13A57EACDA3917B4, 0x036AE67966562217},
+    {0x0FB7988A482DAC90, 0x02BBEB9451DE81AC},
+    {0xD95FAD3B6CF156DA, 0x022FEFA9DB1867BC},
+    {0xF565E1F8AE4EF15C, 0x037FE5DC91C0A5FA},
+    {0x911E4E608B725AB0, 0x02CCB7E3A7CD5195},
+    {0xDA7EA51A0928488D, 0x023D5FE9530AA7AA},
+    {0xF7310829A8407415, 0x039566421E7772AA},
+    {0x2C2739BAED005CDE, 0x02DDEB68185F8EEF},
+    {0xBCEC2E2F24004A4B, 0x024B22B9AD193F25},
+    {0x94AD16B1D333AA11, 0x03AB6AC2AE8ECB6F},
+    {0xAA241227DC2954DB, 0x02EF889BBED8A2BF},
+    {0x54E9A81FE35443E2, 0x02593A163246E899},
+    {0x2175D9CC9EED396A, 0x03C1F689EA0B0DC2},
+    {0xE7917B0A18BDC788, 0x03019207EE6F3E34},
+    {0xB9412F3B46FE393A, 0x0267A8065858FE90},
+    {0xF535185ED7FD285C, 0x03D90CD6F3C1974D},
+    {0xC42A79E57997537D, 0x03140A458FCE12A4},
+    {0x03552E512E12A931, 0x02766E9E0CA4DBB7},
+    {0x9EEEB081E3510EB4, 0x03F0B0FCE107C5F1},
+    {0x4BF226CE4F740BC3, 0x0326F3FD80D304C1},
+    {0xA3281F0B72C33C9C, 0x02858FFE00A8D09A},
+    {0x1C2018D5F568FD4A, 0x020473319A20A6E2},
+    {0xF9CCF48988A7FBA9, 0x033A51E8F69AA49C},
+    {0xFB0A5D3AD3B99621, 0x02950E53F87BB6E3},
+    {0x2F3B7DC8A96144E7, 0x0210D8432D2FC583},
+    {0xE52BFC7442353B0C, 0x034E26D1E1E608D1},
+    {0xB756639034F76270, 0x02A4EBDB1B1E6D74},
+    {0x2C451C735D92B526, 0x021D897C15B1F12A},
+    {0x13A1C71EFC1DEEA3, 0x0362759355E981DD},
+    {0x761B05B2634B2550, 0x02B52ADC44BACE4A},
+    {0x91AF37C1E908EAA6, 0x022A88B036FBD83B},
+    {0x82B1F2CFDB417770, 0x03774119F192F392},
+    {0xCEF4C23FE29AC5F3, 0x02C5CDAE5ADBF60E},
+    {0x3F2A34FFE87BD190, 0x0237D7BEAF165E72},
+    {0x984387FFDA5FB5B2, 0x038C8C644B56FD83},
+    {0xE0360666484C915B, 0x02D6D6B6A2ABFE02},
+    {0x802B3851D3707449, 0x024578921BBCCB35},
+    {0x99DEC082EBE72075, 0x03A25A835F947855},
+    {0xAE4BCD358985B391, 0x02E8486919439377},
+    {0xBEA30A913AD15C74, 0x02536D20E102DC5F},
+    {0xFDD1AA81F7B560B9, 0x03B8AE9B019E2D65},
+    {0x97DAEECE5FC44D61, 0x02FA2548CE182451},
+    {0xDFE258A51969D781, 0x0261B76D71ACE9DA},
+    {0x996A276E8F0FBF34, 0x03CF8BE24F7B0FC4},
+    {0xE121B9253F3FCC2A, 0x030C6FE83F95A636},
+    {0xB41AFA8432997022, 0x02705986994484F8},
+    {0xECF7F739EA8F19CF, 0x03E6F5A4286DA18D},
+    {0x23F99294BBA5AE40, 0x031F2AE9B9F14E0B},
+    {0x4FFADBAA2FB7BE99, 0x027F5587C7F43E6F},
+    {0x7FF7C5DD1925FDC2, 0x03FEEF3FA6539718},
+    {0xCCC637E4141E649B, 0x033258FFB842DF46},
+    {0xD704F983434B83AF, 0x028EAD9960357F6B},
+    {0x126A6135CF6F9C8C, 0x020BBE144CF79923},
+    {0x83DD685618B29414, 0x0345FCED47F28E9E},
+    {0x9CB12044E08EDCDD, 0x029E63F1065BA54B},
+    {0x16F419D0B3A57D7D, 0x02184FF405161DD6},
+    {0x8B20294DEC3BFBFB, 0x035A19866E89C956},
+    {0x3C19BAA4BCFCC996, 0x02AE7AD1F207D445},
+    {0xC9AE2EEA30CA3ADF, 0x02252F0E5B39769D},
+    {0x0F7D17DD1ADD2AFD, 0x036EB1B091F58A96},
+    {0x3F97464A7BE42264, 0x02BEF48D41913BAB},
+    {0xCC790508631CE850, 0x02325D3DCE0DC955},
+    {0xE0C1A1A704FB0D4D, 0x0383C862E3494222},
+    {0x4D67B4859D95A43E, 0x02CFD3824F6DCE82},
+    {0x711FC39E17AAE9CB, 0x023FDC683F8B0B9B},
+    {0xE832D2968C44A945, 0x039960A6CC11AC2B},
+    {0xECF575453D03BA9E, 0x02E11A1F09A7BCEF},
+    {0x572AC4376402FBB1, 0x024DAE7F3AEC9726},
+    {0x58446D256CD192B5, 0x03AF7D985E47583D},
+    {0x79D0575123DADBC4, 0x02F2CAE04B6C4697},
+    {0x94A6AC40E97BE303, 0x025BD5803C569EDF},
+    {0x8771139B0F2C9E6C, 0x03C62266C6F0FE32},
+    {0x9F8DA948D8F07EBD, 0x0304E85238C0CB5B},
+    {0xE60AEDD3E0C06564, 0x026A5374FA33D5E2},
+    {0xA344AFB9679A3BD2, 0x03DD5254C3862304},
+    {0xE903BFC78614FCA8, 0x031775109C6B4F36},
+    {0xBA6966393810CA20, 0x02792A73B055D8F8},
+    {0x2A423D2859B4769A, 0x03F510B91A22F4C1},
+    {0xEE9B642047C39215, 0x032A73C7481BF700},
+    {0xBEE2B680396941AA, 0x02885C9F6CE32C00},
+    {0xFF1BC53361210155, 0x0206B07F8A4F5666},
+    {0x31C6085235019BBB, 0x033DE73276E5570B},
+    {0x27D1A041C4014963, 0x0297EC285F1DDF3C},
+    {0xECA7B367D0010782, 0x021323537F4B18FC},
+    {0xADD91F0C8001A59D, 0x0351D21F3211C194},
+    {0xF17A7F3D3334847E, 0x02A7DB4C280E3476},
+    {0x279532975C2A0398, 0x021FE2A3533E905F},
+    {0xD8EEB75893766C26, 0x0366376BB8641A31},
+    {0x7A5892AD42C52352, 0x02B82C562D1CE1C1},
+    {0xFB7A0EF102374F75, 0x022CF044F0E3E7CD},
+    {0xC59017E8038BB254, 0x037B1A07E7D30C7C},
+    {0x37A67986693C8EAA, 0x02C8E19FECA8D6CA},
+    {0xF951FAD1EDCA0BBB, 0x023A4E198A20ABD4},
+    {0x28832AE97C76792B, 0x03907CF5A9CDDFBB},
+    {0x2068EF21305EC756, 0x02D9FD9154A4B2FC},
+    {0x19ED8C1A8D189F78, 0x0247FE0DDD508F30},
+    {0x5CAF4690E1C0FF26, 0x03A66349621A7EB3},
+    {0x4A25D20D81673285, 0x02EB82A11B48655C},
+    {0x3B5174D79AB8F537, 0x0256021A7C39EAB0},
+    {0x921BEE25C45B21F1, 0x03BCD02A605CAAB3},
+    {0xDB498B5169E2818E, 0x02FD735519E3BBC2},
+    {0x15D46F7454B53472, 0x02645C4414B62FCF},
+    {0xEFBA4BED545520B6, 0x03D3C6D35456B2E4},
+    {0xF2FB6FF110441A2B, 0x030FD242A9DEF583},
+    {0x8F2F8CC0D9D014EF, 0x02730E9BBB18C469},
+    {0xB1E5AE015C80217F, 0x03EB4A92C4F46D75},
+    {0xC1848B344A001ACC, 0x0322A20F03F6BDF7},
+    {0xCE03A2903B3348A3, 0x02821B3F365EFE5F},
+    {0xD802E873628F6D4F, 0x0201AF65C518CB7F},
+    {0x599E40B89DB2487F, 0x0335E56FA1C14599},
+    {0xE14B66FA17C1D399, 0x029184594E3437AD},
+    {0x81091F2E7967DC7A, 0x020E037AA4F692F1},
+    {0x9B41CB7D8F0C93F6, 0x03499F2AA18A84B5},
+    {0xAF67D5FE0C0A0FF8, 0x02A14C221AD536F7},
+    {0xF2B977FE70080CC7, 0x021AA34E7BDDC592},
+    {0x1DF58CCA4CD9AE0B, 0x035DD2172C9608EB},
+    {0xE4C470A1D7148B3C, 0x02B174DF56DE6D88},
+    {0x83D05A1B1276D5CA, 0x022790B2ABE5246D},
+    {0x9FB3C35E83F1560F, 0x0372811DDFD50715},
+    {0xB2F635E5365AAB3F, 0x02C200E4B310D277},
+    {0xF591C4B75EAEEF66, 0x0234CD83C273DB92},
+    {0xEF4FA125644B18A3, 0x0387AF39371FC5B7},
+    {0x8C3FB41DE9D5AD4F, 0x02D2F2942C196AF9},
+    {0x3CFFC34B2177BDD9, 0x02425BA9BCE12261},
+    {0x94CC6BAB68BF9628, 0x039D5F75FB01D09B},
+    {0x10A38955ED6611B9, 0x02E44C5E6267DA16},
+    {0xDA1C6DDE5784DAFB, 0x02503D184EB97B44},
+    {0xF693E2FD58D49191, 0x03B394F3B128C53A},
+    {0xC5431BFDE0AA0E0E, 0x02F610C2F4209DC8},
+    {0x6A9C1664B3BB3E72, 0x025E73CF29B3B16D},
+    {0x10F9BD6DEC5ECA4F, 0x03CA52E50F85E8AF},
+    {0xDA616457F04BD50C, 0x03084250D937ED58},
+    {0xE1E783798D09773D, 0x026D01DA475FF113},
+    {0x030C058F480F252E, 0x03E19C9072331B53},
+    {0x68D66AD906728425, 0x031AE3A6C1C27C42},
+    {0x8711EF14052869B7, 0x027BE952349B969B},
+    {0x0B4FE4ECD50D75F2, 0x03F97550542C242C},
+    {0xA2A650BD773DF7F5, 0x032DF7737689B689},
+    {0xB551DA312C31932A, 0x028B2C5C5ED49207},
+    {0x5DDB14F4235ADC22, 0x0208F049E576DB39},
+    {0x2FC4EE536BC49369, 0x034180763BF15EC2},
+    {0xBFD0BEA92303A921, 0x029ACD2B63277F01},
+    {0x9973CBBA8269541A, 0x021570EF8285FF34},
+    {0x5BEC792A6A42202A, 0x0355817F373CCB87},
+    {0xE3239421EE9B4CEF, 0x02AACDFF5F63D605},
+    {0xB5B6101B25490A59, 0x02223E65E5E97804},
+    {0x22BCE691D541AA27, 0x0369FD6FD64259A1},
+    {0xB563EBA7DDCE21B9, 0x02BB31264501E14D},
+    {0xF78322ECB171B494, 0x022F5A850401810A},
+    {0x259E9E47824F8753, 0x037EF73B399C01AB},
+    {0x1E187E9F9B72D2A9, 0x02CBF8FC2E1667BC},
+    {0x4B46CBB2E2C24221, 0x023CC73024DEB963},
+    {0x120ADF849E039D01, 0x039471E6A1645BD2},
+    {0xDB3BE603B19C7D9A, 0x02DD27EBB4504974},
+    {0x7C2FEB3627B0647C, 0x024A865629D9D45D},
+    {0x2D197856A5E7072C, 0x03AA7089DC8FBA2F},
+    {0x8A7AC6ABB7EC05BD, 0x02EEC06E4A0C94F2},
+    {0xD52F05562CBCD164, 0x025899F1D4D6DD8E},
+    {0x21E4D556ADFAE8A0, 0x03C0F64FBAF1627E},
+    {0xE7EA444557FBED4D, 0x0300C50C958DE864},
+    {0xECBB69D1132FF10A, 0x0267040A113E5383},
+    {0xADF8A94E851981AA, 0x03D8067681FD526C},
+    {0x8B2D543ED0E13488, 0x0313385ECE6441F0},
+    {0xD5BDDCFF0D80F6D3, 0x0275C6B23EB69B26},
+    {0x892FC7FE7C018AEB, 0x03EFA45064575EA4},
+    {0x3A8C9FFEC99AD589, 0x03261D0D1D12B21D},
+    {0xC8707FFF07AF113B, 0x0284E40A7DA88E7D},
+    {0x39F39998D2F2742F, 0x0203E9A1FE2071FE},
+    {0x8FEC28F484B7204B, 0x033975CFFD00B663},
+    {0xD989BA5D36F8E6A2, 0x02945E3FFD9A2B82},
+    {0x47A161E42BFA521C, 0x02104B66647B5602},
+    {0x0C35696D132A1CF9, 0x034D4570A0C5566A},
+    {0x09C454574288172D, 0x02A4378D4D6AAB88},
+    {0xA169DD129BA0128B, 0x021CF93DD7888939},
+    {0x0242FB50F9001DAB, 0x03618EC958DA7529},
+    {0x9B68C90D940017BC, 0x02B4723AAD7B90ED},
+    {0x4920A0D7A999AC96, 0x0229F4FBBDFC73F1},
+    {0x750101590F5C4757, 0x037654C5FCC71FE8},
+    {0x2A6734473F7D05DF, 0x02C5109E63D27FED},
+    {0xEEB8F69F65FD9E4C, 0x0237407EB641FFF0},
+    {0xE45B24323CC8FD46, 0x038B9A6456CFFFE7},
+    {0xB6AF502830A0CA9F, 0x02D6151D123FFFEC},
+    {0xF88C402026E7087F, 0x0244DDB0DB666656},
+    {0x2746CD003E3E73FE, 0x03A162B4923D708B},
+    {0x1F6BD73364FEC332, 0x02E7822A0E978D3C},
+    {0xE5EFDF5C50CBCF5B, 0x0252CE880BAC70FC},
+    {0x3CB2FEFA1ADFB22B, 0x03B7B0D9AC471B2E},
+    {0x308F3261AF195B56, 0x02F95A47BD05AF58},
+    {0x5A0C284E25ADE2AB, 0x0261150630D15913},
+    {0x29AD0D49D5E30445, 0x03CE8809E7B55B52},
+    {0x548A7107DE4F369D, 0x030BA007EC9115DB},
+    {0xDD3B8D9FE50C2BB1, 0x026FB3398A0DAB15},
+    {0x952C15CCA1AD12B5, 0x03E5EB8F434911BC},
+    {0x775677D6E7BDA891, 0x031E560C35D40E30},
+    {0xC5DEC645863153A7, 0x027EAB3CF7DCD826},
 };
 
-// Decomposes `value` into `f * 2^e`.
-// The result is not normalized.
-// PRE: `value` must be finite and non-negative, i.e. >= +0.0.
-template <typename Float>
-inline DiyFp DiyFpFromFloat(Float value)
-{
-    using Fp = IEEE<Float>;
-
-    auto const v = Fp(value);
-
-    DTOA_ASSERT(v.IsFinite());
-    DTOA_ASSERT(!v.SignBit());
-
-    auto const F = v.PhysicalSignificand();
-    auto const E = v.PhysicalExponent();
-
-    // If v is denormal:
-    //      value = 0.F * 2^(1 - bias) = (          F) * 2^(1 - bias - (p-1))
-    // If v is normalized:
-    //      value = 1.F * 2^(E - bias) = (2^(p-1) + F) * 2^(E - bias - (p-1))
-
-    return (E == 0) // denormal?
-        ? DiyFp(F, Fp::MinExponent)
-        : DiyFp(F + Fp::HiddenBit, static_cast<int>(E) - Fp::ExponentBias);
-}
-
-// Compute the boundaries m- and m+ of the floating-point value
-// v = f * 2^e.
-//
-// Determine v- and v+, the floating-point predecessor and successor if v,
-// respectively.
-//
-//      v- = v - 2^e        if f != 2^(p-1) or e == e_min                (A)
-//         = v - 2^(e-1)    if f == 2^(p-1) and e > e_min                (B)
-//
-//      v+ = v + 2^e
-//
-// Let m- = (v- + v) / 2 and m+ = (v + v+) / 2. All real numbers _strictly_
-// between m- and m+ round to v, regardless of how the input rounding
-// algorithm breaks ties.
-//
-//      ---+-------------+-------------+-------------+-------------+---  (A)
-//         v-            m-            v             m+            v+
-//
-//      -----------------+------+------+-------------+-------------+---  (B)
-//                       v-     m-     v             m+            v+
-
-// Returns the upper boundary of value, i.e. the upper bound of the rounding
-// interval for v.
-// The result is not normalized.
-// PRE: `value` must be finite and non-negative.
-template <typename Float>
-inline DiyFp UpperBoundary(Float value)
-{
-    auto const v = DiyFpFromFloat(value);
-    return DiyFp(4*v.f + 2, v.e - 2);
-}
-
-template <typename Float>
-inline bool LowerBoundaryIsCloser(Float value)
-{
-    IEEE<Float> const v(value);
-
-    DTOA_ASSERT(v.IsFinite());
-    DTOA_ASSERT(!v.SignBit());
-
-    auto const F = v.PhysicalSignificand();
-    auto const E = v.PhysicalExponent();
-    return F == 0 && E > 1;
-}
-
-// Returns the lower boundary of `value`, i.e. the lower bound of the rounding
-// interval for `value`.
-// The result is not normalized.
-// PRE: `value` must be finite and strictly positive.
-template <typename Float>
-inline DiyFp LowerBoundary(Float value)
-{
-    DTOA_ASSERT(IEEE<Float>(value).IsFinite());
-    DTOA_ASSERT(value > 0);
-
-    auto const v = DiyFpFromFloat(value);
-    return DiyFp(4*v.f - 2 + (LowerBoundaryIsCloser(value) ? 1 : 0), v.e - 2);
-}
-
-struct Boundaries {
-    DiyFp v;
-    DiyFp m_minus;
-    DiyFp m_plus;
+static constexpr Uint64x2 kPow5Double[326] = { // 5216 bytes
+    {0x0000000000000000, 0x0100000000000000},
+    {0x0000000000000000, 0x0140000000000000},
+    {0x0000000000000000, 0x0190000000000000},
+    {0x0000000000000000, 0x01F4000000000000},
+    {0x0000000000000000, 0x0138800000000000},
+    {0x0000000000000000, 0x0186A00000000000},
+    {0x0000000000000000, 0x01E8480000000000},
+    {0x0000000000000000, 0x01312D0000000000},
+    {0x0000000000000000, 0x017D784000000000},
+    {0x0000000000000000, 0x01DCD65000000000},
+    {0x0000000000000000, 0x012A05F200000000},
+    {0x0000000000000000, 0x0174876E80000000},
+    {0x0000000000000000, 0x01D1A94A20000000},
+    {0x0000000000000000, 0x012309CE54000000},
+    {0x0000000000000000, 0x016BCC41E9000000},
+    {0x0000000000000000, 0x01C6BF5263400000},
+    {0x0000000000000000, 0x011C37937E080000},
+    {0x0000000000000000, 0x016345785D8A0000},
+    {0x0000000000000000, 0x01BC16D674EC8000},
+    {0x0000000000000000, 0x01158E460913D000},
+    {0x0000000000000000, 0x015AF1D78B58C400},
+    {0x0000000000000000, 0x01B1AE4D6E2EF500},
+    {0x0000000000000000, 0x010F0CF064DD5920},
+    {0x0000000000000000, 0x0152D02C7E14AF68},
+    {0x0000000000000000, 0x01A784379D99DB42},
+    {0x4000000000000000, 0x0108B2A2C2802909},
+    {0x9000000000000000, 0x014ADF4B7320334B},
+    {0x7400000000000000, 0x019D971E4FE8401E},
+    {0x0880000000000000, 0x01027E72F1F12813},
+    {0xCAA0000000000000, 0x01431E0FAE6D7217},
+    {0xBD48000000000000, 0x0193E5939A08CE9D},
+    {0x2C9A000000000000, 0x01F8DEF8808B0245},
+    {0x3BE0400000000000, 0x013B8B5B5056E16B},
+    {0x0AD8500000000000, 0x018A6E32246C99C6},
+    {0x8D8E640000000000, 0x01ED09BEAD87C037},
+    {0xB878FE8000000000, 0x013426172C74D822},
+    {0x66973E2000000000, 0x01812F9CF7920E2B},
+    {0x403D0DA800000000, 0x01E17B84357691B6},
+    {0xE826288900000000, 0x012CED32A16A1B11},
+    {0x622FB2AB40000000, 0x0178287F49C4A1D6},
+    {0xFABB9F5610000000, 0x01D6329F1C35CA4B},
+    {0x7CB54395CA000000, 0x0125DFA371A19E6F},
+    {0x5BE2947B3C800000, 0x016F578C4E0A060B},
+    {0x32DB399A0BA00000, 0x01CB2D6F618C878E},
+    {0xDFC9040047440000, 0x011EFC659CF7D4B8},
+    {0x17BB450059150000, 0x0166BB7F0435C9E7},
+    {0xDDAA16406F5A4000, 0x01C06A5EC5433C60},
+    {0x8A8A4DE845986800, 0x0118427B3B4A05BC},
+    {0xAD2CE16256FE8200, 0x015E531A0A1C872B},
+    {0x987819BAECBE2280, 0x01B5E7E08CA3A8F6},
+    {0x1F4B1014D3F6D590, 0x0111B0EC57E6499A},
+    {0xA71DD41A08F48AF4, 0x01561D276DDFDC00},
+    {0xD0E549208B31ADB1, 0x01ABA4714957D300},
+    {0x828F4DB456FF0C8E, 0x010B46C6CDD6E3E0},
+    {0xA33321216CBECFB2, 0x014E1878814C9CD8},
+    {0xCBFFE969C7EE839E, 0x01A19E96A19FC40E},
+    {0x3F7FF1E21CF51243, 0x0105031E2503DA89},
+    {0x8F5FEE5AA43256D4, 0x014643E5AE44D12B},
+    {0x7337E9F14D3EEC89, 0x0197D4DF19D60576},
+    {0x1005E46DA08EA7AB, 0x01FDCA16E04B86D4},
+    {0x8A03AEC4845928CB, 0x013E9E4E4C2F3444},
+    {0xAC849A75A56F72FD, 0x018E45E1DF3B0155},
+    {0x17A5C1130ECB4FBD, 0x01F1D75A5709C1AB},
+    {0xEEC798ABE93F11D6, 0x013726987666190A},
+    {0xAA797ED6E38ED64B, 0x0184F03E93FF9F4D},
+    {0x1517DE8C9C728BDE, 0x01E62C4E38FF8721},
+    {0xAD2EEB17E1C7976B, 0x012FDBB0E39FB474},
+    {0xD87AA5DDDA397D46, 0x017BD29D1C87A191},
+    {0x4E994F5550C7DC97, 0x01DAC74463A989F6},
+    {0xF11FD195527CE9DE, 0x0128BC8ABE49F639},
+    {0x6D67C5FAA71C2456, 0x0172EBAD6DDC73C8},
+    {0x88C1B77950E32D6C, 0x01CFA698C95390BA},
+    {0x957912ABD28DFC63, 0x0121C81F7DD43A74},
+    {0xBAD75756C7317B7C, 0x016A3A275D494911},
+    {0x298D2D2C78FDDA5B, 0x01C4C8B1349B9B56},
+    {0xD9F83C3BCB9EA879, 0x011AFD6EC0E14115},
+    {0x50764B4ABE865297, 0x0161BCCA7119915B},
+    {0x2493DE1D6E27E73D, 0x01BA2BFD0D5FF5B2},
+    {0x56DC6AD264D8F086, 0x01145B7E285BF98F},
+    {0x2C938586FE0F2CA8, 0x0159725DB272F7F3},
+    {0xF7B866E8BD92F7D2, 0x01AFCEF51F0FB5EF},
+    {0xFAD34051767BDAE3, 0x010DE1593369D1B5},
+    {0x79881065D41AD19C, 0x015159AF80444623},
+    {0x57EA147F49218603, 0x01A5B01B605557AC},
+    {0xB6F24CCF8DB4F3C1, 0x01078E111C3556CB},
+    {0xA4AEE003712230B2, 0x014971956342AC7E},
+    {0x4DDA98044D6ABCDF, 0x019BCDFABC13579E},
+    {0xF0A89F02B062B60B, 0x010160BCB58C16C2},
+    {0xACD2C6C35C7B638E, 0x0141B8EBE2EF1C73},
+    {0x98077874339A3C71, 0x01922726DBAAE390},
+    {0xBE0956914080CB8E, 0x01F6B0F092959C74},
+    {0xF6C5D61AC8507F38, 0x013A2E965B9D81C8},
+    {0x34774BA17A649F07, 0x0188BA3BF284E23B},
+    {0x01951E89D8FDC6C8, 0x01EAE8CAEF261ACA},
+    {0x40FD3316279E9C3D, 0x0132D17ED577D0BE},
+    {0xD13C7FDBB186434C, 0x017F85DE8AD5C4ED},
+    {0x458B9FD29DE7D420, 0x01DF67562D8B3629},
+    {0xCB7743E3A2B0E494, 0x012BA095DC7701D9},
+    {0x3E5514DC8B5D1DB9, 0x017688BB5394C250},
+    {0x4DEA5A13AE346527, 0x01D42AEA2879F2E4},
+    {0xB0B2784C4CE0BF38, 0x01249AD2594C37CE},
+    {0x5CDF165F6018EF06, 0x016DC186EF9F45C2},
+    {0xF416DBF7381F2AC8, 0x01C931E8AB871732},
+    {0xD88E497A83137ABD, 0x011DBF316B346E7F},
+    {0xCEB1DBD923D8596C, 0x01652EFDC6018A1F},
+    {0xC25E52CF6CCE6FC7, 0x01BE7ABD3781ECA7},
+    {0xD97AF3C1A40105DC, 0x01170CB642B133E8},
+    {0x0FD9B0B20D014754, 0x015CCFE3D35D80E3},
+    {0xD3D01CDE90419929, 0x01B403DCC834E11B},
+    {0x6462120B1A28FFB9, 0x01108269FD210CB1},
+    {0xBD7A968DE0B33FA8, 0x0154A3047C694FDD},
+    {0x2CD93C3158E00F92, 0x01A9CBC59B83A3D5},
+    {0x3C07C59ED78C09BB, 0x010A1F5B81324665},
+    {0x8B09B7068D6F0C2A, 0x014CA732617ED7FE},
+    {0x2DCC24C830CACF34, 0x019FD0FEF9DE8DFE},
+    {0xDC9F96FD1E7EC180, 0x0103E29F5C2B18BE},
+    {0x93C77CBC661E71E1, 0x0144DB473335DEEE},
+    {0x38B95BEB7FA60E59, 0x01961219000356AA},
+    {0xC6E7B2E65F8F91EF, 0x01FB969F40042C54},
+    {0xFC50CFCFFBB9BB35, 0x013D3E2388029BB4},
+    {0x3B6503C3FAA82A03, 0x018C8DAC6A0342A2},
+    {0xCA3E44B4F9523484, 0x01EFB1178484134A},
+    {0xBE66EAF11BD360D2, 0x0135CEAEB2D28C0E},
+    {0x6E00A5AD62C83907, 0x0183425A5F872F12},
+    {0x0980CF18BB7A4749, 0x01E412F0F768FAD7},
+    {0x65F0816F752C6C8D, 0x012E8BD69AA19CC6},
+    {0xFF6CA1CB527787B1, 0x017A2ECC414A03F7},
+    {0xFF47CA3E2715699D, 0x01D8BA7F519C84F5},
+    {0xBF8CDE66D86D6202, 0x0127748F9301D319},
+    {0x2F7016008E88BA83, 0x017151B377C247E0},
+    {0x3B4C1B80B22AE923, 0x01CDA62055B2D9D8},
+    {0x250F91306F5AD1B6, 0x012087D4358FC827},
+    {0xEE53757C8B318623, 0x0168A9C942F3BA30},
+    {0x29E852DBADFDE7AC, 0x01C2D43B93B0A8BD},
+    {0x3A3133C94CBEB0CC, 0x0119C4A53C4E6976},
+    {0xC8BD80BB9FEE5CFF, 0x016035CE8B6203D3},
+    {0xBAECE0EA87E9F43E, 0x01B843422E3A84C8},
+    {0x74D40C9294F238A7, 0x01132A095CE492FD},
+    {0xD2090FB73A2EC6D1, 0x0157F48BB41DB7BC},
+    {0x068B53A508BA7885, 0x01ADF1AEA12525AC},
+    {0x8417144725748B53, 0x010CB70D24B7378B},
+    {0x651CD958EED1AE28, 0x014FE4D06DE5056E},
+    {0xFE640FAF2A8619B2, 0x01A3DE04895E46C9},
+    {0x3EFE89CD7A93D00F, 0x01066AC2D5DAEC3E},
+    {0xCEBE2C40D938C413, 0x014805738B51A74D},
+    {0x426DB7510F86F518, 0x019A06D06E261121},
+    {0xC9849292A9B4592F, 0x0100444244D7CAB4},
+    {0xFBE5B73754216F7A, 0x01405552D60DBD61},
+    {0x7ADF25052929CB59, 0x01906AA78B912CBA},
+    {0x1996EE4673743E2F, 0x01F485516E7577E9},
+    {0xAFFE54EC0828A6DD, 0x0138D352E5096AF1},
+    {0x1BFDEA270A32D095, 0x018708279E4BC5AE},
+    {0xA2FD64B0CCBF84BA, 0x01E8CA3185DEB719},
+    {0x05DE5EEE7FF7B2F4, 0x01317E5EF3AB3270},
+    {0x0755F6AA1FF59FB1, 0x017DDDF6B095FF0C},
+    {0x092B7454A7F3079E, 0x01DD55745CBB7ECF},
+    {0x65BB28B4E8F7E4C3, 0x012A5568B9F52F41},
+    {0xBF29F2E22335DDF3, 0x0174EAC2E8727B11},
+    {0x2EF46F9AAC035570, 0x01D22573A28F19D6},
+    {0xDD58C5C0AB821566, 0x0123576845997025},
+    {0x54AEF730D6629AC0, 0x016C2D4256FFCC2F},
+    {0x29DAB4FD0BFB4170, 0x01C73892ECBFBF3B},
+    {0xFA28B11E277D08E6, 0x011C835BD3F7D784},
+    {0x38B2DD65B15C4B1F, 0x0163A432C8F5CD66},
+    {0xC6DF94BF1DB35DE7, 0x01BC8D3F7B3340BF},
+    {0xDC4BBCF772901AB0, 0x0115D847AD000877},
+    {0xD35EAC354F34215C, 0x015B4E5998400A95},
+    {0x48365742A30129B4, 0x01B221EFFE500D3B},
+    {0x0D21F689A5E0BA10, 0x010F5535FEF20845},
+    {0x506A742C0F58E894, 0x01532A837EAE8A56},
+    {0xE4851137132F22B9, 0x01A7F5245E5A2CEB},
+    {0x6ED32AC26BFD75B4, 0x0108F936BAF85C13},
+    {0x4A87F57306FCD321, 0x014B378469B67318},
+    {0x5D29F2CFC8BC07E9, 0x019E056584240FDE},
+    {0xFA3A37C1DD7584F1, 0x0102C35F729689EA},
+    {0xB8C8C5B254D2E62E, 0x014374374F3C2C65},
+    {0x26FAF71EEA079FB9, 0x01945145230B377F},
+    {0xF0B9B4E6A48987A8, 0x01F965966BCE055E},
+    {0x5674111026D5F4C9, 0x013BDF7E0360C35B},
+    {0x2C111554308B71FB, 0x018AD75D8438F432},
+    {0xB7155AA93CAE4E7A, 0x01ED8D34E547313E},
+    {0x326D58A9C5ECF10C, 0x013478410F4C7EC7},
+    {0xFF08AED437682D4F, 0x01819651531F9E78},
+    {0x3ECADA89454238A3, 0x01E1FBE5A7E78617},
+    {0x873EC895CB496366, 0x012D3D6F88F0B3CE},
+    {0x290E7ABB3E1BBC3F, 0x01788CCB6B2CE0C2},
+    {0xB352196A0DA2AB4F, 0x01D6AFFE45F818F2},
+    {0xB0134FE24885AB11, 0x01262DFEEBBB0F97},
+    {0x9C1823DADAA715D6, 0x016FB97EA6A9D37D},
+    {0x031E2CD19150DB4B, 0x01CBA7DE5054485D},
+    {0x21F2DC02FAD2890F, 0x011F48EAF234AD3A},
+    {0xAA6F9303B9872B53, 0x01671B25AEC1D888},
+    {0xD50B77C4A7E8F628, 0x01C0E1EF1A724EAA},
+    {0xC5272ADAE8F199D9, 0x01188D357087712A},
+    {0x7670F591A32E004F, 0x015EB082CCA94D75},
+    {0xD40D32F60BF98063, 0x01B65CA37FD3A0D2},
+    {0xC4883FD9C77BF03E, 0x0111F9E62FE44483},
+    {0xB5AA4FD0395AEC4D, 0x0156785FBBDD55A4},
+    {0xE314E3C447B1A760, 0x01AC1677AAD4AB0D},
+    {0xADED0E5AACCF089C, 0x010B8E0ACAC4EAE8},
+    {0xD96851F15802CAC3, 0x014E718D7D7625A2},
+    {0x8FC2666DAE037D74, 0x01A20DF0DCD3AF0B},
+    {0x39D980048CC22E68, 0x010548B68A044D67},
+    {0x084FE005AFF2BA03, 0x01469AE42C8560C1},
+    {0x4A63D8071BEF6883, 0x0198419D37A6B8F1},
+    {0x9CFCCE08E2EB42A4, 0x01FE52048590672D},
+    {0x821E00C58DD309A7, 0x013EF342D37A407C},
+    {0xA2A580F6F147CC10, 0x018EB0138858D09B},
+    {0x8B4EE134AD99BF15, 0x01F25C186A6F04C2},
+    {0x97114CC0EC80176D, 0x0137798F428562F9},
+    {0xFCD59FF127A01D48, 0x018557F31326BBB7},
+    {0xFC0B07ED7188249A, 0x01E6ADEFD7F06AA5},
+    {0xBD86E4F466F516E0, 0x01302CB5E6F642A7},
+    {0xACE89E3180B25C98, 0x017C37E360B3D351},
+    {0x1822C5BDE0DEF3BE, 0x01DB45DC38E0C826},
+    {0xCF15BB96AC8B5857, 0x01290BA9A38C7D17},
+    {0xC2DB2A7C57AE2E6D, 0x01734E940C6F9C5D},
+    {0x3391F51B6D99BA08, 0x01D022390F8B8375},
+    {0x403B393124801445, 0x01221563A9B73229},
+    {0x904A077D6DA01956, 0x016A9ABC9424FEB3},
+    {0x745C895CC9081FAC, 0x01C5416BB92E3E60},
+    {0x48B9D5D9FDA513CB, 0x011B48E353BCE6FC},
+    {0x5AE84B507D0E58BE, 0x01621B1C28AC20BB},
+    {0x31A25E249C51EEEE, 0x01BAA1E332D728EA},
+    {0x5F057AD6E1B33554, 0x0114A52DFFC67992},
+    {0xF6C6D98C9A2002AA, 0x0159CE797FB817F6},
+    {0xB4788FEFC0A80354, 0x01B04217DFA61DF4},
+    {0xF0CB59F5D8690214, 0x010E294EEBC7D2B8},
+    {0x2CFE30734E83429A, 0x0151B3A2A6B9C767},
+    {0xF83DBC9022241340, 0x01A6208B50683940},
+    {0x9B2695DA15568C08, 0x0107D457124123C8},
+    {0xC1F03B509AAC2F0A, 0x0149C96CD6D16CBA},
+    {0x726C4A24C1573ACD, 0x019C3BC80C85C7E9},
+    {0xE783AE56F8D684C0, 0x0101A55D07D39CF1},
+    {0x616499ECB70C25F0, 0x01420EB449C8842E},
+    {0xF9BDC067E4CF2F6C, 0x019292615C3AA539},
+    {0x782D3081DE02FB47, 0x01F736F9B3494E88},
+    {0x4B1C3E512AC1DD0C, 0x013A825C100DD115},
+    {0x9DE34DE57572544F, 0x018922F31411455A},
+    {0x455C215ED2CEE963, 0x01EB6BAFD91596B1},
+    {0xCB5994DB43C151DE, 0x0133234DE7AD7E2E},
+    {0x7E2FFA1214B1A655, 0x017FEC216198DDBA},
+    {0x1DBBF89699DE0FEB, 0x01DFE729B9FF1529},
+    {0xB2957B5E202AC9F3, 0x012BF07A143F6D39},
+    {0x1F3ADA35A8357C6F, 0x0176EC98994F4888},
+    {0x270990C31242DB8B, 0x01D4A7BEBFA31AAA},
+    {0x5865FA79EB69C937, 0x0124E8D737C5F0AA},
+    {0xEE7F791866443B85, 0x016E230D05B76CD4},
+    {0x2A1F575E7FD54A66, 0x01C9ABD04725480A},
+    {0x5A53969B0FE54E80, 0x011E0B622C774D06},
+    {0xF0E87C41D3DEA220, 0x01658E3AB7952047},
+    {0xED229B5248D64AA8, 0x01BEF1C9657A6859},
+    {0x3435A1136D85EEA9, 0x0117571DDF6C8138},
+    {0x4143095848E76A53, 0x015D2CE55747A186},
+    {0xD193CBAE5B2144E8, 0x01B4781EAD1989E7},
+    {0xE2FC5F4CF8F4CB11, 0x0110CB132C2FF630},
+    {0x1BBB77203731FDD5, 0x0154FDD7F73BF3BD},
+    {0x62AA54E844FE7D4A, 0x01AA3D4DF50AF0AC},
+    {0xBDAA75112B1F0E4E, 0x010A6650B926D66B},
+    {0xAD15125575E6D1E2, 0x014CFFE4E7708C06},
+    {0x585A56EAD360865B, 0x01A03FDE214CAF08},
+    {0x37387652C41C53F8, 0x010427EAD4CFED65},
+    {0x850693E7752368F7, 0x014531E58A03E8BE},
+    {0x264838E1526C4334, 0x01967E5EEC84E2EE},
+    {0xAFDA4719A7075402, 0x01FC1DF6A7A61BA9},
+    {0x0DE86C7008649481, 0x013D92BA28C7D14A},
+    {0x9162878C0A7DB9A1, 0x018CF768B2F9C59C},
+    {0xB5BB296F0D1D280A, 0x01F03542DFB83703},
+    {0x5194F9E568323906, 0x01362149CBD32262},
+    {0xE5FA385EC23EC747, 0x0183A99C3EC7EAFA},
+    {0x9F78C67672CE7919, 0x01E494034E79E5B9},
+    {0x03AB7C0A07C10BB0, 0x012EDC82110C2F94},
+    {0x04965B0C89B14E9C, 0x017A93A2954F3B79},
+    {0x45BBF1CFAC1DA243, 0x01D9388B3AA30A57},
+    {0x8B957721CB92856A, 0x0127C35704A5E676},
+    {0x2E7AD4EA3E7726C4, 0x0171B42CC5CF6014},
+    {0x3A198A24CE14F075, 0x01CE2137F7433819},
+    {0xC44FF65700CD1649, 0x0120D4C2FA8A030F},
+    {0xB563F3ECC1005BDB, 0x016909F3B92C83D3},
+    {0xA2BCF0E7F14072D2, 0x01C34C70A777A4C8},
+    {0x65B61690F6C847C3, 0x011A0FC668AAC6FD},
+    {0xBF239C35347A59B4, 0x016093B802D578BC},
+    {0xEEEC83428198F021, 0x01B8B8A6038AD6EB},
+    {0x7553D20990FF9615, 0x01137367C236C653},
+    {0x52A8C68BF53F7B9A, 0x01585041B2C477E8},
+    {0x6752F82EF28F5A81, 0x01AE64521F7595E2},
+    {0x8093DB1D57999890, 0x010CFEB353A97DAD},
+    {0xE0B8D1E4AD7FFEB4, 0x01503E602893DD18},
+    {0x18E7065DD8DFFE62, 0x01A44DF832B8D45F},
+    {0x6F9063FAA78BFEFD, 0x0106B0BB1FB384BB},
+    {0x4B747CF9516EFEBC, 0x01485CE9E7A065EA},
+    {0xDE519C37A5CABE6B, 0x019A742461887F64},
+    {0x0AF301A2C79EB703, 0x01008896BCF54F9F},
+    {0xCDAFC20B798664C4, 0x0140AABC6C32A386},
+    {0x811BB28E57E7FDF5, 0x0190D56B873F4C68},
+    {0xA1629F31EDE1FD72, 0x01F50AC6690F1F82},
+    {0xA4DDA37F34AD3E67, 0x013926BC01A973B1},
+    {0x0E150C5F01D88E01, 0x0187706B0213D09E},
+    {0x919A4F76C24EB181, 0x01E94C85C298C4C5},
+    {0x7B0071AA39712EF1, 0x0131CFD3999F7AFB},
+    {0x59C08E14C7CD7AAD, 0x017E43C8800759BA},
+    {0xF030B199F9C0D958, 0x01DDD4BAA0093028},
+    {0x961E6F003C1887D7, 0x012AA4F4A405BE19},
+    {0xFBA60AC04B1EA9CD, 0x01754E31CD072D9F},
+    {0xFA8F8D705DE65440, 0x01D2A1BE4048F907},
+    {0xFC99B8663AAFF4A8, 0x0123A516E82D9BA4},
+    {0x3BC0267FC95BF1D2, 0x016C8E5CA239028E},
+    {0xCAB0301FBBB2EE47, 0x01C7B1F3CAC74331},
+    {0x1EAE1E13D54FD4EC, 0x011CCF385EBC89FF},
+    {0xE659A598CAA3CA27, 0x01640306766BAC7E},
+    {0x9FF00EFEFD4CBCB1, 0x01BD03C81406979E},
+    {0x23F6095F5E4FF5EF, 0x0116225D0C841EC3},
+    {0xECF38BB735E3F36A, 0x015BAAF44FA52673},
+    {0xE8306EA5035CF045, 0x01B295B1638E7010},
+    {0x911E4527221A162B, 0x010F9D8EDE39060A},
+    {0x3565D670EAA09BB6, 0x015384F295C7478D},
+    {0x82BF4C0D2548C2A3, 0x01A8662F3B391970},
+    {0x51B78F88374D79A6, 0x01093FDD8503AFE6},
+    {0xE625736A4520D810, 0x014B8FD4E6449BDF},
+    {0xDFAED044D6690E14, 0x019E73CA1FD5C2D7},
+    {0xEBCD422B0601A8CC, 0x0103085E53E599C6},
+    {0xA6C092B5C78212FF, 0x0143CA75E8DF0038},
+    {0xD070B763396297BF, 0x0194BD136316C046},
+    {0x848CE53C07BB3DAF, 0x01F9EC583BDC7058},
+    {0x52D80F4584D5068D, 0x013C33B72569C637},
+    {0x278E1316E60A4831, 0x018B40A4EEC437C5},
 };
 
-// Compute the (normalized) DiyFp representing the input number 'value' and its
-// boundaries.
-// PRE: 'value' must be finite and positive
-template <typename Float>
-inline Boundaries ComputeBoundaries(Float value)
+#endif // ^^^ !DTOA_OPTIMIZE_SIZE
+
+// We need a 64x128 bit multiplication and a subsequent 128-bit shift.
+// Multiplication:
+//   The 64-bit factor is variable and passed in, the 128-bit factor comes
+//   from a lookup table. We know that the 64-bit factor only has 55
+//   significant bits (i.e., the 9 topmost bits are zeros). The 128-bit
+//   factor only has 123 significant bits (i.e., the 5 topmost bits are
+//   zeros).
+// Shift:
+//   In principle, the multiplication result requires 55+123=178 bits to
+//   represent. However, we then shift this value to the right by j, which is
+//   at least j >= 114, so the result is guaranteed to fit into 178-114=64
+//   bits. This means that we only need the topmost 64 significant bits of
+//   the 64x128-bit multiplication.
+//
+// There are several ways to do this:
+// 1. Best case: the compiler exposes a 128-bit type
+//    We perform two 64x64-bit multiplications, add the higher 64 bits of the
+//    lower result to the higher result, and shift by j-64 bits.
+//
+//    We explicitly cast from 64-bit to 128-bit, so the compiler can tell
+//    that these are only 64-bit inputs, and can map these to the best
+//    possible sequence of assembly instructions.
+//    x86-64 machines happen to have matching assembly instructions for
+//    64x64-bit multiplications and 128-bit shifts.
+//
+// 2. Second best case: the compiler exposes intrinsics for the x86-64 assembly
+//    instructions mentioned in 1.
+//
+// 3. We only have 64x64 bit instructions that return the lower 64 bits of
+//    the result, i.e., we have to use plain C.
+//    Our inputs are less than the full width, so we have three options:
+//    a. Ignore this fact and just implement the intrinsics manually
+//    b. Split both into 31-bit pieces, which guarantees no internal overflow,
+//       but requires extra work upfront (unless we change the lookup table).
+//    c. Split only the first factor into 31-bit pieces, which also guarantees
+//       no internal overflow, but requires extra work since the intermediate
+//       results are not perfectly aligned.
+
+#if DTOA_HAS_UINT128
+
+DTOA_INLINE uint64_t MulShift(uint64_t m, Uint64x2 mul, int j)
 {
-    DTOA_ASSERT(IEEE<Float>(value).IsFinite());
-    DTOA_ASSERT(value > 0);
+    __extension__ using uint128_t = unsigned __int128;
 
-    auto const v = DiyFpFromFloat(value);
+    DTOA_ASSERT((m >> 55) == 0); // m is maximum 55 bits
 
-    // Compute the boundaries of v.
-    auto const m_plus = DiyFp(4*v.f + 2, v.e - 2);
-    auto const m_minus = DiyFp(4*v.f - 2 + (LowerBoundaryIsCloser(value) ? 1 : 0), v.e - 2);
+    uint128_t const b0 = static_cast<uint128_t>(m) * mul.lo;
+    uint128_t const b2 = static_cast<uint128_t>(m) * mul.hi;
 
-    // Determine the normalized w = v.
-    auto const w = Normalize(v);
-
-    // Determine the normalized w+ = m+.
-    // Since e_(w+) == e_(w), one can use NormalizeTo instead of Normalize.
-    auto const w_plus = NormalizeTo(m_plus, w.e);
-
-    // Determine w- = m- such that e_(w-) = e_(w+).
-    auto const w_minus = NormalizeTo(m_minus, w_plus.e);
-
-    return {w, w_minus, w_plus};
+    DTOA_ASSERT(j >= 64);
+    return static_cast<uint64_t>(((b0 >> 64) + b2) >> (j - 64));
 }
 
-// Given normalized DiyFp w, Grisu needs to find a (normalized) cached
-// power-of-ten c, such that the exponent of the product c * w = f * 2^e lies
-// within a certain range [alpha, gamma] (Definition 3.2 from [1])
-//
-//      alpha <= e = e_c + e_w + q <= gamma
-//
-// or
-//
-//      f_c * f_w * 2^alpha <= f_c 2^(e_c) * f_w 2^(e_w) * 2^q
-//                          <= f_c * f_w * 2^gamma
-//
-// Since c and w are normalized, i.e. 2^(q-1) <= f < 2^q, this implies
-//
-//      2^(q-1) * 2^(q-1) * 2^alpha <= c * w * 2^q < 2^q * 2^q * 2^gamma
-//
-// or
-//
-//      2^(q - 2 + alpha) <= c * w < 2^(q + gamma)
-//
-// The choice of (alpha,gamma) determines the size of the table and the form of
-// the digit generation procedure. Using (alpha,gamma)=(-60,-32) works out well
-// in practice:
-//
-// The idea is to cut the number c * w = f * 2^e into two parts, which can be
-// processed independently: An integral part p1, and a fractional part p2:
-//
-//      f * 2^e = ( (f div 2^-e) * 2^-e + (f mod 2^-e) ) * 2^e
-//              = (f div 2^-e) + (f mod 2^-e) * 2^e
-//              = p1 + p2 * 2^e
-//
-// The conversion of p1 into decimal form requires a series of divisions and
-// modulos by (a power of) 10. These operations are faster for 32-bit than for
-// 64-bit integers, so p1 should ideally fit into a 32-bit integer. This can be
-// achieved by choosing
-//
-//      -e >= 32   or   e <= -32 := gamma
-//
-// In order to convert the fractional part
-//
-//      p2 * 2^e = p2 / 2^-e = d[-1] / 10^1 + d[-2] / 10^2 + ...
-//
-// into decimal form, the fraction is repeatedly multiplied by 10 and the digits
-// d[-i] are extracted in order:
-//
-//      (10 * p2) div 2^-e = d[-1]
-//      (10 * p2) mod 2^-e = d[-2] / 10^1 + ...
-//
-// The multiplication by 10 must not overflow. It is sufficient to choose
-//
-//      10 * p2 < 16 * p2 = 2^4 * p2 <= 2^64.
-//
-// Since p2 = f mod 2^-e < 2^-e,
-//
-//      -e <= 60   or   e >= -60 := alpha
-
-constexpr int kAlpha = -60;
-constexpr int kGamma = -32;
-
-// Now
-//
-//      alpha <= e_c + e + q <= gamma                                        (1)
-//      ==> f_c * 2^alpha <= c * 2^e * 2^q
-//
-// and since the c's are normalized, 2^(q-1) <= f_c,
-//
-//      ==> 2^(q - 1 + alpha) <= c * 2^(e + q)
-//      ==> 2^(alpha - e - 1) <= c
-//
-// If c were an exakt power of ten, i.e. c = 10^k, one may determine k as
-//
-//      k = ceil( log_10( 2^(alpha - e - 1) ) )
-//        = ceil( (alpha - e - 1) * log_10(2) )
-//
-// From the paper:
-// "In theory the result of the procedure could be wrong since c is rounded, and
-//  the computation itself is approximated [...]. In practice, however, this
-//  simple function is sufficient."
-//
-// For IEEE double precision floating-point numbers converted into normalized
-// DiyFp's w = f * 2^e, with q = 64,
-//
-//      e >= -1022      (min IEEE exponent)
-//           -52        (p - 1)
-//           -52        (p - 1, possibly normalize denormal IEEE numbers)
-//           -11        (normalize the DiyFp)
-//         = -1137
-//
-// and
-//
-//      e <= +1023      (max IEEE exponent)
-//           -52        (p - 1)
-//           -11        (normalize the DiyFp)
-//         = 960
-//
-// This binary exponent range [-1137,960] results in a decimal exponent range
-// [-307,324]. One does not need to store a cached power for each k in this
-// range. For each such k it suffices to find a cached power such that the
-// exponent of the product lies in [alpha,gamma].
-// This implies that the difference of the decimal exponents of adjacent table
-// entries must be less than or equal to
-//
-//      floor( (gamma - alpha) * log_10(2) ) = 8.
-//
-// (A smaller distance gamma-alpha would require a larger table.)
-
-struct CachedPower { // c = f * 2^e ~= 10^k
-    uint64_t f;
-    int e; // binary exponent
-    int k; // decimal exponent
-};
-
-constexpr int kCachedPowersSize         =   85;
-constexpr int kCachedPowersMinDecExp    = -348;
-constexpr int kCachedPowersMaxDecExp    =  324;
-constexpr int kCachedPowersDecExpStep   =    8;
-
-// Returns the binary exponent of a cached power for a given decimal exponent.
-inline int BinaryExponentFromDecimalExponent(int k)
+DTOA_INLINE uint64_t MulShiftAll(uint64_t m2, Uint64x2 mul, int j, uint64_t* vp, uint64_t* vm, uint32_t mmShift)
 {
-    DTOA_ASSERT(k <=  400);
-    DTOA_ASSERT(k >= -400);
-
-    // log_2(10) ~= [3; 3, 9, 2, 2, 4, 6, 2, 1, 1, 3] = 254370/76573
-    // 2^15 * 254370/76573 = 108852.93980907...
-
-//  return (k * 108853) / (1 << 15) - (k < 0) - 63;
-//  return ((k * 108853) >> 15) - 63;
-    return (k * 108853 - 63 * (1 << 15)) >> 15;
+    *vp = MulShift(4 * m2 + 2, mul, j);
+    *vm = MulShift(4 * m2 - 1 - mmShift, mul, j);
+    return MulShift(4 * m2, mul, j);
 }
 
-#if 0
-// Returns the decimal for a cached power with the given binary exponent.
-inline int DecimalExponentFromBinaryExponent(int e)
+#elif DTOA_HAS_64_BIT_INTRINSICS
+
+DTOA_INLINE uint64_t MulShift(uint64_t m, Uint64x2 mul, int j)
 {
-    DTOA_ASSERT(e <=  1265);
-    DTOA_ASSERT(e >= -1392);
+    DTOA_ASSERT((m >> 55) == 0); // m is maximum 55 bits
 
-    // log_10(2) ~= [0; 3, 3, 9, 2, 2, 4, 6, 2, 1, 1, 3] = 76573/254370
-    // 2^18 * 76573/254370 = 78913.20718638...
+    uint64_t b0_hi;
+    uint64_t b2_hi;
+/*  uint64_t const b0_lo =*/ Mul128(m, mul.lo, &b0_hi);
+    uint64_t const b2_lo =   Mul128(m, mul.hi, &b2_hi);
 
-//  return ((e + 63) * 78913) / (1 << 18) + (e + 63 > 0);
-//  return -(((e + 63) * -78913) >> 18);
-    return -((e * -78913 - 63 * 78913) >> 18);
+    uint64_t sum;
+    b2_hi += AddCarry(b0_hi, b2_lo, &sum);
+
+    return ShiftRight128(sum, b2_hi, j - 64);
 }
+
+DTOA_INLINE uint64_t MulShiftAll(uint64_t m2, Uint64x2 mul, int j, uint64_t* vp, uint64_t* vm, uint32_t mmShift)
+{
+    *vp = MulShift(4 * m2 + 2, mul, j);
+    *vm = MulShift(4 * m2 - 1 - mmShift, mul, j);
+    return MulShift(4 * m2, mul, j);
+}
+
+#else
+
+DTOA_INLINE uint64_t MulShiftAll(uint64_t m2, Uint64x2 mul, int j, uint64_t* vp, uint64_t* vm, uint32_t mmShift)
+{
+    DTOA_ASSERT((m2 >> 55) == 0); // m2 is maximum 55 bits
+
+    m2 *= 2;
+
+    uint64_t tmp;
+    uint64_t const lo = Mul128(m2, mul.lo, &tmp);
+    uint64_t hi;
+    uint64_t const mid = tmp + Mul128(m2, mul.hi, &hi);
+    hi += mid < tmp;
+
+    uint64_t const lo2 = lo + mul.lo;
+    uint64_t const mid2 = mid + mul.hi + (lo2 < lo);
+    uint64_t const hi2 = hi + (mid2 < mid);
+    *vp = ShiftRight128(mid2, hi2, j - 64 - 1);
+
+    if (mmShift == 1)
+    {
+        uint64_t const lo3 = lo - mul.lo;
+        uint64_t const mid3 = mid - mul.hi - (lo3 > lo);
+        uint64_t const hi3 = hi - (mid3 > mid);
+        *vm = ShiftRight128(mid3, hi3, j - 64 - 1);
+    }
+    else
+    {
+        uint64_t const lo3 = lo + lo;
+        uint64_t const mid3 = mid + mid + (lo3 < lo);
+        uint64_t const hi3 = hi + hi + (mid3 < mid);
+        uint64_t const lo4 = lo3 - mul.lo;
+        uint64_t const mid4 = mid3 - mul.hi - (lo4 > lo3);
+        uint64_t const hi4 = hi3 - (mid4 > mid3);
+        *vm = ShiftRight128(mid4, hi4, j - 64);
+    }
+
+    return ShiftRight128(mid, hi, j - 64 - 1);
+}
+
 #endif
 
-inline CachedPower GetCachedPower(int index)
+DTOA_INLINE int Max0(int y)
 {
-    static constexpr uint64_t kSignificands[/*680 bytes*/] = {
-        0xFA8FD5A0081C0288, // e = -1220, k = -348, //*
-        0xBAAEE17FA23EBF76, // e = -1193, k = -340, //*
-        0x8B16FB203055AC76, // e = -1166, k = -332, //*
-        0xCF42894A5DCE35EA, // e = -1140, k = -324, //*
-        0x9A6BB0AA55653B2D, // e = -1113, k = -316, //*
-        0xE61ACF033D1A45DF, // e = -1087, k = -308, //*
-        0xAB70FE17C79AC6CA, // e = -1060, k = -300, // >>> double-precision (-1060 + 960 + 64 = -36)
-        0xFF77B1FCBEBCDC4F, // e = -1034, k = -292,
-        0xBE5691EF416BD60C, // e = -1007, k = -284,
-        0x8DD01FAD907FFC3C, // e =  -980, k = -276,
-        0xD3515C2831559A83, // e =  -954, k = -268,
-        0x9D71AC8FADA6C9B5, // e =  -927, k = -260,
-        0xEA9C227723EE8BCB, // e =  -901, k = -252,
-        0xAECC49914078536D, // e =  -874, k = -244,
-        0x823C12795DB6CE57, // e =  -847, k = -236,
-        0xC21094364DFB5637, // e =  -821, k = -228,
-        0x9096EA6F3848984F, // e =  -794, k = -220,
-        0xD77485CB25823AC7, // e =  -768, k = -212,
-        0xA086CFCD97BF97F4, // e =  -741, k = -204,
-        0xEF340A98172AACE5, // e =  -715, k = -196,
-        0xB23867FB2A35B28E, // e =  -688, k = -188,
-        0x84C8D4DFD2C63F3B, // e =  -661, k = -180,
-        0xC5DD44271AD3CDBA, // e =  -635, k = -172,
-        0x936B9FCEBB25C996, // e =  -608, k = -164,
-        0xDBAC6C247D62A584, // e =  -582, k = -156,
-        0xA3AB66580D5FDAF6, // e =  -555, k = -148,
-        0xF3E2F893DEC3F126, // e =  -529, k = -140,
-        0xB5B5ADA8AAFF80B8, // e =  -502, k = -132,
-        0x87625F056C7C4A8B, // e =  -475, k = -124,
-        0xC9BCFF6034C13053, // e =  -449, k = -116,
-        0x964E858C91BA2655, // e =  -422, k = -108,
-        0xDFF9772470297EBD, // e =  -396, k = -100,
-        0xA6DFBD9FB8E5B88F, // e =  -369, k =  -92,
-        0xF8A95FCF88747D94, // e =  -343, k =  -84,
-        0xB94470938FA89BCF, // e =  -316, k =  -76,
-        0x8A08F0F8BF0F156B, // e =  -289, k =  -68,
-        0xCDB02555653131B6, // e =  -263, k =  -60,
-        0x993FE2C6D07B7FAC, // e =  -236, k =  -52,
-        0xE45C10C42A2B3B06, // e =  -210, k =  -44,
-        0xAA242499697392D3, // e =  -183, k =  -36, // >>> single-precision (-183 + 80 + 64 = -39)
-        0xFD87B5F28300CA0E, // e =  -157, k =  -28, //
-        0xBCE5086492111AEB, // e =  -130, k =  -20, //
-        0x8CBCCC096F5088CC, // e =  -103, k =  -12, //
-        0xD1B71758E219652C, // e =   -77, k =   -4, //
-        0x9C40000000000000, // e =   -50, k =    4, //
-        0xE8D4A51000000000, // e =   -24, k =   12, //
-        0xAD78EBC5AC620000, // e =     3, k =   20, //
-        0x813F3978F8940984, // e =    30, k =   28, //
-        0xC097CE7BC90715B3, // e =    56, k =   36, //
-        0x8F7E32CE7BEA5C70, // e =    83, k =   44, // <<< single-precision (83 - 196 + 64 = -49)
-        0xD5D238A4ABE98068, // e =   109, k =   52,
-        0x9F4F2726179A2245, // e =   136, k =   60,
-        0xED63A231D4C4FB27, // e =   162, k =   68,
-        0xB0DE65388CC8ADA8, // e =   189, k =   76,
-        0x83C7088E1AAB65DB, // e =   216, k =   84,
-        0xC45D1DF942711D9A, // e =   242, k =   92,
-        0x924D692CA61BE758, // e =   269, k =  100,
-        0xDA01EE641A708DEA, // e =   295, k =  108,
-        0xA26DA3999AEF774A, // e =   322, k =  116,
-        0xF209787BB47D6B85, // e =   348, k =  124,
-        0xB454E4A179DD1877, // e =   375, k =  132,
-        0x865B86925B9BC5C2, // e =   402, k =  140,
-        0xC83553C5C8965D3D, // e =   428, k =  148,
-        0x952AB45CFA97A0B3, // e =   455, k =  156,
-        0xDE469FBD99A05FE3, // e =   481, k =  164,
-        0xA59BC234DB398C25, // e =   508, k =  172,
-        0xF6C69A72A3989F5C, // e =   534, k =  180,
-        0xB7DCBF5354E9BECE, // e =   561, k =  188,
-        0x88FCF317F22241E2, // e =   588, k =  196,
-        0xCC20CE9BD35C78A5, // e =   614, k =  204,
-        0x98165AF37B2153DF, // e =   641, k =  212,
-        0xE2A0B5DC971F303A, // e =   667, k =  220,
-        0xA8D9D1535CE3B396, // e =   694, k =  228,
-        0xFB9B7CD9A4A7443C, // e =   720, k =  236,
-        0xBB764C4CA7A44410, // e =   747, k =  244,
-        0x8BAB8EEFB6409C1A, // e =   774, k =  252,
-        0xD01FEF10A657842C, // e =   800, k =  260,
-        0x9B10A4E5E9913129, // e =   827, k =  268,
-        0xE7109BFBA19C0C9D, // e =   853, k =  276,
-        0xAC2820D9623BF429, // e =   880, k =  284,
-        0x80444B5E7AA7CF85, // e =   907, k =  292,
-        0xBF21E44003ACDD2D, // e =   933, k =  300,
-        0x8E679C2F5E44FF8F, // e =   960, k =  308,
-        0xD433179D9C8CB841, // e =   986, k =  316,
-        0x9E19DB92B4E31BA9, // e =  1013, k =  324, // <<< double-precision (1013 - 1137 + 64 = -60)
-    };
-
-    DTOA_ASSERT(index >= 0);
-    DTOA_ASSERT(index < kCachedPowersSize);
-
-    int const k = kCachedPowersMinDecExp + index * kCachedPowersDecExpStep;
-    int const e = BinaryExponentFromDecimalExponent(k);
-
-    return {kSignificands[index], e, k};
+    return y < 0 ? 0 : y;
 }
 
-// For a normalized DiyFp w = f * 2^e, this function returns a (normalized)
-// cached power-of-ten c = f_c * 2^e_c, such that the exponent of the product
-// w * c satisfies (Definition 3.2 from [1])
-//
-//      alpha <= e_c + e + q <= gamma.
-//
-inline CachedPower GetCachedPowerForBinaryExponent(int e)
+DTOA_INLINE int Log10Pow2(int e) // floor(log_10(2^e))
 {
-    DTOA_ASSERT(e <=  1265);
-    DTOA_ASSERT(e >= -1392);
-
-    // k = ceil((kAlpha - e - 1) * log_10(2))
-    int const k = (e * -78913 + ((kAlpha - 1) * 78913 + (1 << 18))) >> 18;
-    DTOA_ASSERT(k >= kCachedPowersMinDecExp);
-    DTOA_ASSERT(k <= kCachedPowersMaxDecExp);
-
-    int const index = static_cast<int>( static_cast<unsigned>(-kCachedPowersMinDecExp + k + (kCachedPowersDecExpStep - 1)) / kCachedPowersDecExpStep );
-    DTOA_ASSERT(index >= 0);
-    DTOA_ASSERT(index < kCachedPowersSize);
-    static_cast<void>(kCachedPowersSize);
-
-    auto const cached = GetCachedPower(index);
-    DTOA_ASSERT(kAlpha <= cached.e + e + 64);
-    DTOA_ASSERT(kGamma >= cached.e + e + 64);
-
-    // NB:
-    // Actually this function returns c, such that -60 <= e_c + e + 64 <= -34.
-    DTOA_ASSERT(-60 <= cached.e + e + 64);
-    DTOA_ASSERT(-34 >= cached.e + e + 64);
-
-    return cached;
+    DTOA_ASSERT(e >= 0);
+    DTOA_ASSERT(e <= 1500); // Only tested for e <= 1500
+    return static_cast<int>((static_cast<uint32_t>(e) * 78913) >> 18);
 }
 
-inline char* GenerateIntegralDigits(char* buf, uint32_t n)
+DTOA_INLINE int Log10Pow5(int e) // floor(log_10(5^e))
 {
-    DTOA_ASSERT(n <= 798336123);
+    DTOA_ASSERT(e >= 0);
+    DTOA_ASSERT(e <= 1500); // Only tested for e <= 1500
+    return static_cast<int>((static_cast<uint32_t>(e) * 732923) >> 20);
+}
 
-    uint32_t q;
+DTOA_INLINE int ComputeQForNonNegativeExponent(int e)
+{
+    // return Max0(Log10Pow2(e) - 1);
+    return Log10Pow2(e) - (e > 3);
+}
 
-    if (n >= 100000000)
+DTOA_INLINE int ComputeQForNegativeExponent(int e)
+{
+    // return Max0(Log10Pow5(e) - 1);
+    return Log10Pow5(e) - (e > 1);
+}
+
+DTOA_INLINE int Pow5Factor(uint64_t value)
+{
+    // For 64-bit integers: result <= 27
+    // Since value here has at most 55-bits: result <= 23
+
+    int factor = 0;
+    for (;;)
     {
-//L_9_digits:
-        q = n / 10000000;
-        n = n % 10000000;
-        buf = Utoa100(buf, q);
-L_7_digits:
-        q = n / 100000;
-        n = n % 100000;
-        buf = Utoa100(buf, q);
-L_5_digits:
-        q = n / 1000;
-        n = n % 1000;
-        buf = Utoa100(buf, q);
-L_3_digits:
-        q = n / 10;
-        n = n % 10;
-        buf = Utoa100(buf, q);
-L_1_digit:
-        buf[0] = static_cast<char>('0' + n);
-        buf++;
-        return buf;
+        DTOA_ASSERT(value != 0);
+        DTOA_ASSERT(factor <= 23);
+
+        if (value % 5 != 0)
+            return factor;
+        value /= 5;
+        ++factor;
+    }
+}
+
+DTOA_INLINE int DecimalLength(uint64_t v)
+{
+    DTOA_ASSERT(v < 100000000000000000ull);
+
+    if (v >= 10000000000000000ull) { return 17; }
+    if (v >= 1000000000000000ull) { return 16; }
+    if (v >= 100000000000000ull) { return 15; }
+    if (v >= 10000000000000ull) { return 14; }
+    if (v >= 1000000000000ull) { return 13; }
+    if (v >= 100000000000ull) { return 12; }
+    if (v >= 10000000000ull) { return 11; }
+    if (v >= 1000000000ull) { return 10; }
+    if (v >= 100000000ull) { return 9; }
+    if (v >= 10000000ull) { return 8; }
+    if (v >= 1000000ull) { return 7; }
+    if (v >= 100000ull) { return 6; }
+    if (v >= 10000ull) { return 5; }
+    if (v >= 1000ull) { return 4; }
+    if (v >= 100ull) { return 3; }
+    if (v >= 10ull) { return 2; }
+    return 1;
+}
+
+DTOA_INLINE char* Utoa100(char* buf, uint32_t digits)
+{
+    static constexpr char const* kDigits100 =
+        "00010203040506070809"
+        "10111213141516171819"
+        "20212223242526272829"
+        "30313233343536373839"
+        "40414243444546474849"
+        "50515253545556575859"
+        "60616263646566676869"
+        "70717273747576777879"
+        "80818283848586878889"
+        "90919293949596979899";
+
+    DTOA_ASSERT(digits < 100);
+    std::memcpy(buf, kDigits100 + 2*digits, 2);
+    return buf + 2;
+}
+
+DTOA_INLINE int PrintDecimalDigits(char* next, char* last, uint64_t output)
+{
+    // The average output length is 16.38 digits.
+    int const output_length = DecimalLength(output);
+
+    DTOA_ASSERT(last - next >= output_length);
+    static_cast<void>(last); // Fix warning
+
+    char* end = next + output_length;
+
+#if 1
+#if 1
+    while (output >= 100000000)
+    {
+        DTOA_ASSERT(end - next >= 8);
+        uint32_t const c0 = static_cast<uint32_t>(output % 10000);
+        output /= 10000;
+        uint32_t const c1 = static_cast<uint32_t>(output % 10000);
+        output /= 10000;
+        uint32_t const c00 = c0 % 100;
+        uint32_t const c01 = c0 / 100;
+        uint32_t const c10 = c1 % 100;
+        uint32_t const c11 = c1 / 100;
+        Utoa100(end - 2, c00);
+        Utoa100(end - 4, c01);
+        Utoa100(end - 6, c10);
+        Utoa100(end - 8, c11);
+        end -= 8;
+    }
+#endif
+
+    while (output >= 10000)
+    {
+        DTOA_ASSERT(end - next >= 4);
+        uint32_t const c = static_cast<uint32_t>(output % 10000);
+        output /= 10000;
+        uint32_t const c0 = c % 100;
+        uint32_t const c1 = c / 100;
+        Utoa100(end - 2, c0);
+        Utoa100(end - 4, c1);
+        end -= 4;
+    }
+#endif
+
+    while (output >= 100)
+    {
+        DTOA_ASSERT(end - next >= 2);
+        uint32_t const c = static_cast<uint32_t>(output % 100);
+        output /= 100;
+        Utoa100(end - 2, c);
+        end -= 2;
     }
 
-    if (n >= 10000000)
+    if (output >= 10)
     {
-//L_8_digits:
-        q = n / 1000000;
-        n = n % 1000000;
-        buf = Utoa100(buf, q);
-L_6_digits:
-        q = n / 10000;
-        n = n % 10000;
-        buf = Utoa100(buf, q);
-L_4_digits:
-        q = n / 100;
-        n = n % 100;
-        buf = Utoa100(buf, q);
-L_2_digits:
-        buf = Utoa100(buf, n);
-        return buf;
+        DTOA_ASSERT(end - next >= 2);
+        Utoa100(end - 2, static_cast<uint32_t>(output));
+    }
+    else
+    {
+        DTOA_ASSERT(end - next >= 1);
+        end[-1] = static_cast<char>('0' + output);
     }
 
-    if (n >=  1000000) goto L_7_digits;
-    if (n >=   100000) goto L_6_digits;
-    if (n >=    10000) goto L_5_digits;
-    if (n >=     1000) goto L_4_digits;
-    if (n >=      100) goto L_3_digits;
-    if (n >=       10) goto L_2_digits;
-    goto L_1_digit;
+    return output_length;
 }
 
-// Modifies the generated digits in the buffer to approach (round towards) w.
-//
-// Input:
-//  * digits of H/10^kappa in [digits, digits + num_digits)
-//  * distance    = (H - w) * unit
-//  * delta       = (H - L) * unit
-//  * rest        = (H - buffer * 10^kappa) * unit
-//  * ten_kappa   = 10^kappa * unit
-inline void Grisu2Round(char* digits, int num_digits, uint64_t distance, uint64_t delta, uint64_t rest, uint64_t ten_kappa)
-{
-    DTOA_ASSERT(num_digits >= 1);
-    DTOA_ASSERT(distance <= delta);
-    DTOA_ASSERT(rest <= delta);
-    DTOA_ASSERT(ten_kappa > 0);
-
-    // By generating the digits of H we got the largest (closest to H) buffer
-    // that is still in the interval [L, H]. In the case where w < B <= H we
-    // try to decrement the buffer.
-    //
-    //                                  <---- distance ----->
-    //               <--------------------------- delta ---->
-    //                                       <---- rest ---->
-    //                       <-- ten_kappa -->
-    // --------------[------------------+----+--------------]--------------
-    //               L                  w    B              H
-    //                                       = digits * 10^kappa
-    //
-    // ten_kappa represents a unit-in-the-last-place in the decimal
-    // representation stored in the buffer.
-    //
-    // There are three stopping conditions:
-    // (The position of the numbers is measured relative to H.)
-    //
-    //  1)  B is already <= w
-    //          rest >= distance
-    //
-    //  2)  Decrementing B would yield a number B' < L
-    //          rest + ten_kappa > delta
-    //
-    //  3)  Decrementing B would yield a number B' < w and farther away from
-    //      w than the current number B: w - B' > B - w
-    //          rest + ten_kappa > distance &&
-    //          rest + ten_kappa - distance >= distance - rest
-
-    // The tests are written in this order to avoid overflow in unsigned
-    // integer arithmetic.
-
-    int digit = digits[num_digits - 1] - '0';
-
-    while (rest < distance
-        && delta - rest >= ten_kappa
-        && (rest + ten_kappa <= distance || rest + ten_kappa - distance < distance - rest))
-    {
-        DTOA_ASSERT(digit != 0);
-        digit--;
-        rest += ten_kappa;
-    }
-
-    digits[num_digits - 1] = static_cast<char>('0' + digit);
-}
-
-// Generates V = digits * 10^exponent, such that L <= V <= H.
-// L and H must be normalized and share the same exponent -60 <= e <= -32.
-inline void Grisu2DigitGen(char* digits, int& num_digits, int& exponent, DiyFp L, DiyFp w, DiyFp H)
-{
-    static_assert(DiyFp::SignificandSize == 64, "internal error");
-    static_assert(kAlpha >= -60, "internal error");
-    static_assert(kGamma <= -32, "internal error");
-
-    // Generates the digits (and the exponent) of a decimal floating-point
-    // number V = digits * 10^exponent in the range [L, H].
-    // The DiyFp's w, L and H share the same exponent e, which satisfies
-    // alpha <= e <= gamma.
-    //
-    //                                  <---- distance ----->
-    //               <--------------------------- delta ---->
-    // --------------[------------------+-------------------]--------------
-    //               L                  w                   H
-    //
-    // This routine generates the digits of H from left to right and stops as
-    // soon as V is in [L, H].
-
-    DTOA_ASSERT(w.e >= kAlpha);
-    DTOA_ASSERT(w.e <= kGamma);
-    DTOA_ASSERT(w.e == L.e);
-    DTOA_ASSERT(w.e == H.e);
-
-    uint64_t distance = Subtract(H, w).f; // (significand of (H - w), implicit exponent is e)
-    uint64_t delta    = Subtract(H, L).f; // (significand of (H - L), implicit exponent is e)
-    uint64_t rest;
-    uint64_t ten_kappa;
-
-    // Split H = f * 2^e into two parts p1 and p2 (note: e < 0):
-    //
-    //      H = f * 2^e
-    //           = ((f div 2^-e) * 2^-e + (f mod 2^-e)) * 2^e
-    //           = ((p1        ) * 2^-e + (p2        )) * 2^e
-    //           = p1 + p2 * 2^e
-
-    DiyFp const one(uint64_t{1} << -H.e, H.e); // one = 2^-e * 2^e
-
-    uint32_t p1 = static_cast<uint32_t>(H.f >> -one.e); // p1 = f div 2^-e (Since -e >= 32, p1 fits into a 32-bit int.)
-    uint64_t p2 = H.f & (one.f - 1);                    // p2 = f mod 2^-e
-
-    DTOA_ASSERT(p1 >= 4);            // (2^(64-2) - 1) >> 60
-    DTOA_ASSERT(p1 <= 798336123);    // test.cc: FindMaxP1 (depends on index computation in GetCachedPowerForBinaryExponent!)
-
-    // Generate the digits of the integral part p1 = d[n-1]...d[1]d[0]
-    //
-    //      10^(k-1) <= p1 < 10^k
-    //
-    //      p1 = (p1 div 10^(k-1)) * 10^(k-1) + (p1 mod 10^(k-1))
-    //         = (d[k-1]         ) * 10^(k-1) + (p1 mod 10^(k-1))
-    //
-    //      H = p1                                             + p2 * 2^e
-    //        = d[k-1] * 10^(k-1) + (p1 mod 10^(k-1))          + p2 * 2^e
-    //        = d[k-1] * 10^(k-1) + ((p1 mod 10^(k-1)) * 2^-e + p2) * 2^e
-    //        = d[k-1] * 10^(k-1) + (                         rest) * 2^e
-    //
-    // Now generate the digits d[n] of p1 from left to right (n = k-1,...,0)
-    //
-    //      p1 = d[k-1]...d[n] * 10^n + d[n-1]...d[0]
-    //
-    // but stop as soon as
-    //
-    //      rest * 2^e = (d[n-1]...d[0] * 2^-e + p2) * 2^e <= delta * 2^e
-
-    // The common case is that all the digits of p1 are needed.
-    // Optimize for this case and correct later if required.
-    num_digits = static_cast<int>(GenerateIntegralDigits(digits, p1) - digits);
-
-    if (p2 > delta)
-    {
-        // The digits of the integral part have been generated (and all of them
-        // are significand):
-        //
-        //      H = d[k-1]...d[1]d[0] + p2 * 2^e
-        //        = digits            + p2 * 2^e
-        //
-        // Now generate the digits of the fractional part p2 * 2^e.
-        //
-        // Note:
-        // No decimal point is generated: the exponent is adjusted instead.
-        //
-        // p2 actually represents the fraction
-        //
-        //      p2 * 2^e
-        //          = p2 / 2^-e
-        //          = d[-1] / 10^1 + d[-2] / 10^2 + ...
-        //
-        // Now generate the digits d[-m] of p1 from left to right (m = 1,2,...)
-        //
-        //      p2 * 2^e = d[-1]d[-2]...d[-m] * 10^-m
-        //                      + 10^-m * (d[-m-1] / 10^1 + d[-m-2] / 10^2 + ...)
-        //
-        // using
-        //
-        //      10^m * p2 = ((10^m * p2) div 2^-e) * 2^-e + ((10^m * p2) mod 2^-e)
-        //                = (                   d) * 2^-e + (                   r)
-        //
-        // or
-        //      10^m * p2 * 2^e = d + r * 2^e
-        //
-        // i.e.
-        //
-        //      H = digits + p2 * 2^e
-        //        = digits + 10^-m * (d + r * 2^e)
-        //        = (digits * 10^m + d) * 10^-m + 10^-m * r * 2^e
-        //
-        // and stop as soon as 10^-m * r * 2^e <= delta * 2^e
-
-        // unit = 1
-        int m = 0;
-        for (;;)
-        {
-            // !!! DTOA_ASSERT(num_digits < max_digits10) !!!
-            DTOA_ASSERT(num_digits < 17);
-
-            //
-            //      H = digits * 10^-m + 10^-m * (d[-m-1] / 10 + d[-m-2] / 10^2 + ...) * 2^e
-            //        = digits * 10^-m + 10^-m * (p2                                 ) * 2^e
-            //        = digits * 10^-m + 10^-m * (1/10 * (10 * p2)                   ) * 2^e
-            //        = digits * 10^-m + 10^-m * (1/10 * ((10*p2 div 2^-e) * 2^-e + (10*p2 mod 2^-e)) * 2^e
-            //
-            DTOA_ASSERT(p2 <= UINT64_MAX / 10);
-            p2 *= 10;
-            uint64_t const d = p2 >> -one.e;     // d = (10 * p2) div 2^-e
-            uint64_t const r = p2 & (one.f - 1); // r = (10 * p2) mod 2^-e
-            DTOA_ASSERT(d <= 9);
-            //
-            //      H = digits * 10^-m + 10^-m * (1/10 * (d * 2^-e + r) * 2^e
-            //        = digits * 10^-m + 10^-m * (1/10 * (d + r * 2^e))
-            //        = (digits * 10 + d) * 10^(-m-1) + 10^(-m-1) * r * 2^e
-            //
-            digits[num_digits++] = static_cast<char>('0' + d); // digits := digits * 10 + d
-            //
-            //      H = buffer * 10^(-m-1) + 10^(-m-1) * r * 2^e
-            //
-            p2 = r;
-            m++;
-            //
-            //      H = digits * 10^-m + 10^-m * p2 * 2^e
-            //
-
-            // Keep the units in sync. (unit *= 10)
-            delta    *= 10;
-            distance *= 10;
-
-            // Check if enough digits have been generated.
-            //
-            //      10^-m * p2 * 2^e <= delta * 2^e
-            //              p2 * 2^e <= 10^m * delta * 2^e
-            //                    p2 <= 10^m * delta
-            if (p2 <= delta)
-            {
-                // V = digits * 10^-m, with L <= V <= H.
-                exponent = -m;
-
-                rest = p2;
-
-                // 1 ulp in the decimal representation is now 10^-m.
-                // Since delta and distance are now scaled by 10^m, we need to do
-                // the same with ulp in order to keep the units in sync.
-                //
-                //      10^m * 10^-m = 1 = 2^-e * 2^e = ten_m * 2^e
-                //
-                ten_kappa = one.f; // one.f == 2^-e
-
-                break;
-            }
-        }
-    }
-    else // p2 <= delta
-    {
-        DTOA_ASSERT((uint64_t{p1} << -one.e) + p2 > delta); // Loop terminates.
-
-        // In this case: Too many digits of p1 might have been generated.
-        //
-        // Find the largest 0 <= n < k = length, such that
-        //
-        //      H = (p1 div 10^n) * 10^n + ((p1 mod 10^n) * 2^-e + p2) * 2^e
-        //        = (p1 div 10^n) * 10^n + (                     rest) * 2^e
-        //
-        // and rest <= delta.
-        //
-        // Compute rest * 2^e = H mod 10^n = p1 + p2 * 2^e = (p1 * 2^-e + p2) * 2^e
-        // and check if enough digits have been generated:
-        //
-        //      rest * 2^e <= delta * 2^e
-        //
-
-        int const k = num_digits;
-        DTOA_ASSERT(k >= 0);
-        DTOA_ASSERT(k <= 9);
-
-        rest = p2;
-
-        // 10^n is now 1 ulp in the decimal representation V. The rounding
-        // procedure works with DiyFp's with an implicit exponent of e.
-        //
-        //      10^n = (10^n * 2^-e) * 2^e = ten_kappa * 2^e
-        //
-        ten_kappa = one.f; // Start with 2^-e
-
-        for (int n = 0; /**/; ++n)
-        {
-            DTOA_ASSERT(n <= k - 1);
-            DTOA_ASSERT(rest <= delta);
-
-            // rn = d[n]...d[0] * 2^-e + p2
-            uint32_t const dn = static_cast<uint32_t>(digits[k - 1 - n] - '0');
-            uint64_t const rn = dn * ten_kappa + rest;
-
-            if (rn > delta)
-            {
-                num_digits = k - n;
-                exponent = n;
-                break;
-            }
-
-            rest = rn;
-            ten_kappa *= 10;
-        }
-    }
-
-    // The buffer now contains a correct decimal representation of the input
-    // number w = buffer * 10^exponent.
-
-    Grisu2Round(digits, num_digits, distance, delta, rest, ten_kappa);
-}
-
-// v = buffer * 10^exponent
-// length is the length of the buffer (number of decimal digits)
-// The buffer must be large enough, i.e. >= max_digits10.
-inline void Grisu2(char* digits, int& num_digits, int& exponent, DiyFp m_minus, DiyFp v, DiyFp m_plus)
-{
-    DTOA_ASSERT(v.e == m_minus.e);
-    DTOA_ASSERT(v.e == m_plus.e);
-
-    //  --------+-----------------------+-----------------------+--------    (A)
-    //          m-                      v                       m+
-    //
-    //  --------------------+-----------+-----------------------+--------    (B)
-    //                      m-          v                       m+
-    //
-    // First scale v (and m- and m+) such that the exponent is in the range
-    // [alpha, gamma].
-
-    auto const cached = GetCachedPowerForBinaryExponent(v.e);
-
-    DiyFp const c_minus_k(cached.f, cached.e); // = c ~= 10^-k
-
-    DiyFp const w       = Multiply(v,       c_minus_k);
-    DiyFp const w_minus = Multiply(m_minus, c_minus_k);
-    DiyFp const w_plus  = Multiply(m_plus,  c_minus_k);
-
-    // The exponent of the products is = v.e + c_minus_k.e + q and is in the
-    // range [alpha, gamma].
-    DTOA_ASSERT(w.e >= kAlpha);
-    DTOA_ASSERT(w.e <= kGamma);
-
-    // Note:
-    // The result of Multiply() is **NOT** neccessarily normalized.
-    // But since m+ and c are normalized, w_plus.f >= 2^(q - 2).
-    DTOA_ASSERT(w_plus.f >= (uint64_t{1} << (64 - 2)));
-
-    //  ----(---+---)---------------(---+---)---------------(---+---)----
-    //          w-                      w                       w+
-    //          = c*m-                  = c*v                   = c*m+
-    //
-    // Multiply rounds its result and c_minus_k is approximated too. w, w- and
-    // w+ are now off by a small amount.
-    // In fact:
-    //
-    //      w - v * 10^-k < 1 ulp
-    //
-    // To account for this inaccuracy, add resp. subtract 1 ulp.
-    // Note: ulp(w-) = ulp(w) = ulp(w+).
-    //
-    //  ----(---+---[---------------(---+---)---------------]---+---)----
-    //          w-  L                   w                   H   w+
-    //
-    // Now any number in [L, H] (bounds included) will round to w when input,
-    // regardless of how the input rounding algorithm breaks ties.
-    //
-    // And DigitGen generates the shortest possible such number in [L, H].
-    // Note that this does not mean that Grisu2 always generates the shortest
-    // possible number in the interval (m-, m+).
-    DiyFp const L(w_minus.f + 1, w_minus.e);
-    DiyFp const H(w_plus.f  - 1, w_plus.e );
-
-    Grisu2DigitGen(digits, num_digits, exponent, L, w, H);
-    // w = buffer * 10^exponent
-
-    // v = w * 10^k
-    exponent += -cached.k; // cached.k = -k
-    // v = buffer * 10^exponent
-}
-
-} // namespace impl
+} // namespace dtoa_impl
 
 constexpr int kDoubleToDecimalMaxLength = 17;
 
-// v = digits * 10^exponent
-// num_digits is the length of the buffer (number of decimal digits)
-// PRE: The buffer must be large enough, i.e. >= max_digits10.
-// PRE: value must be finite and strictly positive.
-template <typename Float>
-inline char* DoubleToDecimal(char* next, char* last, int& num_digits, int& exponent, Float value)
+inline void DoubleToDecimal(char* next, char* last, int& num_digits, int& exponent, double value)
 {
-    static_assert(base_conv::impl::DiyFp::SignificandSize >= std::numeric_limits<Float>::digits + 3,
-        "Grisu2 requires at least three extra bits of precision");
+    using Double = dtoa_impl::IEEE<double>;
+    using namespace dtoa_impl;
 
     DTOA_ASSERT(last - next >= kDoubleToDecimalMaxLength);
-    DTOA_ASSERT(base_conv::impl::IEEE<Float>(value).IsFinite());
+    DTOA_ASSERT(Double(value).IsFinite());
     DTOA_ASSERT(value > 0);
 
     static_cast<void>(last); // Fix warning
 
-#if 0
-    // If the neighbors (and boundaries) of 'value' are always computed for
-    // double-precision numbers, all float's can be recovered using strtod
-    // (and strtof). However, the resulting decimal representations are not
-    // exactly "short".
     //
-    // If the neighbors are computed for single-precision numbers, there is a
-    // single float (7.0385307e-26f) which can't be recovered using strtod.
-    // (The resulting double precision is off by 1 ulp.)
-    auto const boundaries = base_conv::impl::ComputeBoundaries(static_cast<double>(value));
-#else
-    auto const boundaries = base_conv::impl::ComputeBoundaries(value);
+    // Step 1:
+    // Decode the floating point number, and unify normalized and subnormal cases.
+    //
+
+    Double const ieee_value(value);
+
+    // Decode bits into mantissa, and exponent.
+    uint64_t const ieeeMantissa = ieee_value.PhysicalSignificand();
+    uint64_t const ieeeExponent = ieee_value.PhysicalExponent();
+
+    uint64_t m2;
+    int e2;
+    if (ieeeExponent == 0)
+    {
+        m2 = ieeeMantissa;
+        e2 = 1;
+    }
+    else
+    {
+        m2 = Double::HiddenBit | ieeeMantissa;
+        e2 = static_cast<int>(ieeeExponent);
+    }
+
+    bool const even = (m2 & 1) == 0;
+    bool const acceptBounds = even;
+
+    //
+    // Step 2:
+    // Determine the interval of legal decimal representations.
+    //
+
+    // We subtract 2 so that the bounds computation has 2 additional bits.
+    e2 -= Double::ExponentBias + 2;
+
+    uint64_t const mv = 4 * m2;
+    uint32_t const mmShift = (ieeeMantissa != 0 || ieeeExponent <= 1) ? 1 : 0;
+#if 0
+    // We would compute mp and mm like this:
+    uint64_t const mp = mv + 2;
+    uint64_t const mm = mv - 1 - mmShift;
 #endif
 
-    base_conv::impl::Grisu2(next, num_digits, exponent, boundaries.m_minus, boundaries.v, boundaries.m_plus);
+    //
+    // Step 3:
+    // Convert to a decimal power base using 128-bit arithmetic.
+    //
 
-    DTOA_ASSERT(num_digits > 0);
-    DTOA_ASSERT(num_digits <= kDoubleToDecimalMaxLength);
+    int e10;
 
-    return next + num_digits;
+    uint64_t vr;
+    uint64_t vp;
+    uint64_t vm;
+
+    bool vmIsTrailingZeros = false;
+    bool vrIsTrailingZeros = false;
+
+    if (e2 >= 0)
+    {
+        // I tried special-casing q == 0, but there was no effect on performance.
+        int const q = ComputeQForNonNegativeExponent(e2);
+        DTOA_ASSERT(q >= 0);
+        int const k = kPow5InvDoubleBitLength + Pow5BitLength(q) - 1;
+        int const j = -e2 + q + k;
+        DTOA_ASSERT(j >= 114 + (q == 0 ? 1 : 0));
+
+        e10 = q;
+
+#if DTOA_OPTIMIZE_SIZE
+        auto const pow5 = ComputePow5Inv(q);
+        DTOA_ASSERT((pow5.hi >> (kPow5InvDoubleBitLength - 64 + (q == 0 ? 1 : 0))) == 0);
+#else
+        auto const pow5 = kPow5InvDouble[q];
+#endif
+        vr = MulShiftAll(m2, pow5, j, &vp, &vm, mmShift);
+
+//      if (q <= 21) // Why 21?
+        if (q <= 23) // 23 = floor(log_5(2^(53+2)))
+        {
+            // Only one of mp, mv, and mm can be a multiple of 5, if any.
+            if (mv % 5 == 0)
+            {
+                vrIsTrailingZeros = Pow5Factor(mv) >= q;
+            }
+            else
+            {
+                if (acceptBounds)
+                {
+                    // Same as min(e2 + (~mm & 1), Pow5Factor(mm)) >= q
+                    // <=> e2 + (~mm & 1) >= q && Pow5Factor(mm) >= q
+                    // <=> true && Pow5Factor(mm) >= q, since e2 >= q.
+                    vmIsTrailingZeros = Pow5Factor(mv - 1 - mmShift) >= q;
+                }
+                else
+                {
+                    // Same as min(e2 + 1, Pow5Factor(mp)) >= q.
+                    vp -= Pow5Factor(mv + 2) >= q;
+                }
+            }
+        }
+    }
+    else
+    {
+        int const q = ComputeQForNegativeExponent(-e2);
+        DTOA_ASSERT(q >= 0);
+        int const i = -e2 - q;
+        int const k = Pow5BitLength(i) - kPow5DoubleBitLength;
+        int const j = q - k;
+        DTOA_ASSERT(j >= 114);
+
+        e10 = e2 + q;
+
+#if DTOA_OPTIMIZE_SIZE
+        auto const pow5 = ComputePow5(i);
+        DTOA_ASSERT((pow5.hi >> (kPow5DoubleBitLength - 64)) == 0);
+#else
+        auto const pow5 = kPow5Double[i];
+#endif
+
+        vr = MulShiftAll(m2, pow5, j, &vp, &vm, mmShift);
+
+        if (q <= 1)
+        {
+//          vrIsTrailingZeros = static_cast<int>(~mv & 1) >= q;
+            vrIsTrailingZeros = q == 0 || (~mv & 1) != 0;
+            if (acceptBounds)
+            {
+//              vmIsTrailingZeros = static_cast<int>(~(mv - 1 - mmShift) & 1) >= q;
+                vmIsTrailingZeros = q == 0 || (~(mv - 1 - mmShift) & 1) != 0;
+            }
+            else
+            {
+                vp -= 1;
+            }
+        }
+//      else if (q <= 64)
+        else if (q <= Double::SignificandSize + 2)
+        {
+            // TODO(ulfjack): Use a tighter bound here.
+
+            // We need to compute min(ntz(mv), Pow5Factor(mv) - e2) >= q-1
+            // <=> ntz(mv) >= q-1  &&  Pow5Factor(mv) - e2 >= q-1
+            // <=> ntz(mv) >= q-1
+            // <=> mv & ((1 << (q-1)) - 1) == 0
+            // We also need to make sure that the left shift does not overflow.
+            vrIsTrailingZeros = (mv & ((1ull << (q - 1)) - 1)) == 0;
+        }
+    }
+
+    //
+    // Step 4:
+    // Find the shortest decimal representation in the interval of legal representations.
+    //
+
+    // On average, we remove ~2 digits.
+
+    uint64_t output;
+    int lastRemovedDigit = 0;
+
+    if (vmIsTrailingZeros || vrIsTrailingZeros)
+    {
+        // General case, which happens rarely (<1%).
+
+        while (vp / 10 > vm / 10)
+        {
+            vmIsTrailingZeros &= vm % 10 == 0;
+            vrIsTrailingZeros &= lastRemovedDigit == 0;
+
+            lastRemovedDigit = static_cast<uint8_t>(vr % 10);
+            vr /= 10;
+            vp /= 10;
+            vm /= 10;
+            ++e10;
+        }
+
+        if (vmIsTrailingZeros)
+        {
+            while (vm % 10 == 0)
+            {
+                vrIsTrailingZeros &= lastRemovedDigit == 0;
+
+                lastRemovedDigit = static_cast<uint8_t>(vr % 10);
+                vr /= 10;
+                vp /= 10;
+                vm /= 10;
+                ++e10;
+            }
+        }
+
+#if 1//test (XXX: should round-to-nearest-even really be used for binary->decimal???)
+        if (vrIsTrailingZeros && lastRemovedDigit == 5 && vr % 2 == 0)
+        {
+           // Round down not up if the number ends in X50000.
+           lastRemovedDigit = 4;
+        }
+#endif
+
+        // We need to take vr+1 if vr is outside bounds or we need to round up.
+        output = vr + ((vr == vm && (!acceptBounds || !vmIsTrailingZeros)) || lastRemovedDigit >= 5);
+    }
+    else
+    {
+        // Specialized for the common case (>99%).
+
+        while (vp / 10 > vm / 10)
+        {
+            lastRemovedDigit = static_cast<uint8_t>(vr % 10);
+            vr /= 10;
+            vp /= 10;
+            vm /= 10;
+            ++e10;
+        }
+
+        // We need to take vr+1 if vr is outside bounds or we need to round up.
+        output = vr + (vr == vm || lastRemovedDigit >= 5);
+    }
+
+    //
+    // Step 5:
+    // Print the decimal representation.
+    //
+
+    //
+    // XXX:
+    // Just return 'output' here?!?!
+    //
+
+    // The average output length is 16.38 digits.
+    num_digits = PrintDecimalDigits(next, last, output);
+    exponent = e10;
 }
 
 //==================================================================================================
 // PositiveDtoa
 //==================================================================================================
 
-namespace impl {
+namespace dtoa_impl {
 
-// Appends a decimal representation of 'value' to buffer.
-// Returns a pointer to the element following the digits.
-//
-// PRE: -1000 < value < 1000
-inline char* ExponentToDecimal(char* buffer, int value)
+DTOA_INLINE char* ExponentToDecimal(char* buffer, int value)
 {
     DTOA_ASSERT(value > -1000);
     DTOA_ASSERT(value <  1000);
@@ -1239,7 +1652,7 @@ inline char* ExponentToDecimal(char* buffer, int value)
     return buffer;
 }
 
-inline char* FormatFixed(char* buffer, int length, int decimal_point, bool force_trailing_dot_zero)
+DTOA_INLINE char* FormatFixed(char* buffer, int length, int decimal_point, bool force_trailing_dot_zero)
 {
     DTOA_ASSERT(buffer != nullptr);
     DTOA_ASSERT(length >= 1);
@@ -1247,7 +1660,6 @@ inline char* FormatFixed(char* buffer, int length, int decimal_point, bool force
     if (length <= decimal_point)
     {
         // digits[000]
-        // DTOA_ASSERT(buffer_length >= decimal_point + (force_trailing_dot_zero ? 2 : 0));
 
         std::memset(buffer + length, '0', static_cast<size_t>(decimal_point - length));
         buffer += decimal_point;
@@ -1261,7 +1673,6 @@ inline char* FormatFixed(char* buffer, int length, int decimal_point, bool force
     else if (0 < decimal_point)
     {
         // dig.its
-        // DTOA_ASSERT(buffer_length >= length + 1);
 
         std::memmove(buffer + (decimal_point + 1), buffer + decimal_point, static_cast<size_t>(length - decimal_point));
         buffer[decimal_point] = '.';
@@ -1270,7 +1681,6 @@ inline char* FormatFixed(char* buffer, int length, int decimal_point, bool force
     else // decimal_point <= 0
     {
         // 0.[000]digits
-        // DTOA_ASSERT(buffer_length >= 2 + (-decimal_point) + length);
 
         std::memmove(buffer + (2 + -decimal_point), buffer, static_cast<size_t>(length));
         buffer[0] = '0';
@@ -1280,7 +1690,7 @@ inline char* FormatFixed(char* buffer, int length, int decimal_point, bool force
     }
 }
 
-inline char* FormatExponential(char* buffer, int length, int exponent, char exponent_char = 'e')
+DTOA_INLINE char* FormatExponential(char* buffer, int length, int exponent, char exponent_char = 'e')
 {
     DTOA_ASSERT(buffer != nullptr);
     DTOA_ASSERT(length >= 1);
@@ -1288,87 +1698,68 @@ inline char* FormatExponential(char* buffer, int length, int exponent, char expo
     if (length == 1)
     {
         // dE+123
-        // DTOA_ASSERT(buffer_length >= length + 5);
-
-        //
-        // XXX:
-        // Should force_trailing_dot_zero apply here?!?!
-        //
 
         buffer += 1;
     }
     else
     {
         // d.igitsE+123
-        // DTOA_ASSERT(buffer_length >= length + 1 + 5);
 
         std::memmove(buffer + 2, buffer + 1, static_cast<size_t>(length - 1));
         buffer[1] = '.';
         buffer += 1 + length;
     }
 
-    *buffer++ = exponent_char;
+    if (exponent != 0)
+    {
+        buffer[0] = exponent_char;
+        buffer = ExponentToDecimal(buffer + 1, exponent);
+    }
 
-    return ExponentToDecimal(buffer, exponent);
+    return buffer;
 }
 
-} // namespace impl
+} // namespace dtoa_impl
 
 constexpr int kPositiveDtoaMaxLength = 24;
 
-// Generates a decimal representation of the floating-point number `value` in
-// the buffer `[next, last)`.
-//
-// PRE: The input `value` must be strictly positive
-// PRE: The buffer must be large enough (>= kPositiveDtoaMaxLength)
-//
-// Note: The result is _not_ null-terminated
-template <typename Float>
-inline char* PositiveDtoa(char* next, char* last, Float value, bool force_trailing_dot_zero = false)
+inline char* PositiveDtoa(char* next, char* last, double value, bool force_trailing_dot_zero = false)
 {
     DTOA_ASSERT(last - next >= kPositiveDtoaMaxLength);
-    DTOA_ASSERT(base_conv::impl::IEEE<Float>(value).IsFinite());
     DTOA_ASSERT(value > 0);
 
-    // Compute v = buffer * 10^exponent.
-    // The decimal digits are stored in the buffer, which needs to be
-    // interpreted as an unsigned decimal integer.
-    // num_digits is the length of the buffer, i.e. the number of decimal digits.
     int num_digits = 0;
     int exponent = 0;
     base_conv::DoubleToDecimal(next, last, num_digits, exponent, value);
 
-    // Grisu2 generates at most max_digits10 decimal digits.
-    DTOA_ASSERT(num_digits <= std::numeric_limits<Float>::max_digits10);
+    DTOA_ASSERT(num_digits <= std::numeric_limits<double>::max_digits10);
 
-    // The position of the decimal point relative to the start of the buffer.
+#if 0//test
+    char* end = next + num_digits;
+    if (exponent != 0)
+    {
+        end[0] = 'e';
+        end = base_conv::dtoa_impl::ExponentToDecimal(end + 1, exponent);
+    }
+#else
     int const decimal_point = num_digits + exponent;
 
-    // Just appending the exponent would yield a correct decimal representation
-    // for the input value.
-
-#if 1
-    // Format the digits similar to printf's %g style.
-    //
-    // NB:
-    // These are the values used by JavaScript's ToString applied to Number
-    // type. Printf uses the values -4 and max_digits10 resp.
+#if 0//test
+    char* const end = base_conv::dtoa_impl::FormatExponential(next, num_digits, decimal_point - 1);
+#else
+    // Changing these constants requires changing kPositiveDtoaMaxLength too.
+    // XXX:
+    // Compute kPositiveDtoaMaxLength using these constants...?!
     constexpr int kMinExp = -6;
     constexpr int kMaxExp = 21;
 
     bool const use_fixed = kMinExp < decimal_point && decimal_point <= kMaxExp;
-#else
-    // NB:
-    // Integers <= 2^p = kMaxVal are exactly representable as Float's.
-    constexpr auto kMinExp = -6;
-    constexpr auto kMaxVal = static_cast<Float>(uint64_t{1} << std::numeric_limits<Float>::digits); // <= 16 digits
-
-    bool const use_fixed = kMinExp < decimal_point && value <= kMaxVal;
-#endif
 
     char* const end = use_fixed
-        ? base_conv::impl::FormatFixed(next, num_digits, decimal_point, force_trailing_dot_zero)
-        : base_conv::impl::FormatExponential(next, num_digits, decimal_point - 1);
+        ? base_conv::dtoa_impl::FormatFixed(next, num_digits, decimal_point, force_trailing_dot_zero)
+        : base_conv::dtoa_impl::FormatExponential(next, num_digits, decimal_point - 1);
+#endif
+#endif
 
     DTOA_ASSERT(end - next <= kPositiveDtoaMaxLength);
     return end;
@@ -1378,9 +1769,9 @@ inline char* PositiveDtoa(char* next, char* last, Float value, bool force_traili
 // Dtoa
 //==================================================================================================
 
-namespace impl {
+namespace dtoa_impl {
 
-inline char* StrCopy(char* next, char* last, char const* source)
+DTOA_INLINE char* StrCopy(char* next, char* last, char const* source)
 {
     static_cast<void>(last); // Fix warning
 
@@ -1394,40 +1785,35 @@ inline char* StrCopy(char* next, char* last, char const* source)
     return next + len;
 }
 
-} // namespace impl
+} // namespace dtoa_impl
 
 constexpr int kDtoaMaxLength = 1/* minus-sign */ + kPositiveDtoaMaxLength;
 
-// Generates a decimal representation of the floating-point number `value` in
-// the buffer `[next, last)`.
-//
-// PRE: The buffer must be large enough.
-//       Max(1 + kPositiveDtoaMaxLength, len(nan_string), 1 + len(inf_string))
-//       is sufficient.
-//
-// Note: The result is _not_ null-terminated.
-template <typename Float>
 inline char* Dtoa(
     char*       next,
     char*       last,
-    Float       value,
+    double      value,
     bool        force_trailing_dot_zero = false,
     char const* nan_string = "NaN",
     char const* inf_string = "Infinity")
 {
+    using Double = dtoa_impl::IEEE<double>;
+
+    DTOA_ASSERT(next != nullptr);
+    DTOA_ASSERT(last != nullptr);
     DTOA_ASSERT(last - next >= kDtoaMaxLength);
     DTOA_ASSERT(std::strlen(nan_string) <= size_t{kPositiveDtoaMaxLength});
     DTOA_ASSERT(std::strlen(inf_string) <= size_t{kPositiveDtoaMaxLength});
 
-    base_conv::impl::IEEE<Float> const v(value);
+    Double const v(value);
 
     if (!v.IsFinite())
     {
         if (v.IsNaN())
-            return base_conv::impl::StrCopy(next, last, nan_string);
+            return base_conv::dtoa_impl::StrCopy(next, last, nan_string);
         if (v.SignBit())
             *next++ = '-';
-        return base_conv::impl::StrCopy(next, last, inf_string);
+        return base_conv::dtoa_impl::StrCopy(next, last, inf_string);
     }
 
     if (v.SignBit())
@@ -1454,28 +1840,3 @@ inline char* Dtoa(
 #if DTOA_UNNAMED_NAMESPACE
 } // namespace
 #endif
-
-/*
-Copyright (c) 2009 Florian Loitsch
-
-Permission is hereby granted, free of charge, to any person
-obtaining a copy of this software and associated documentation
-files (the "Software"), to deal in the Software without
-restriction, including without limitation the rights to use,
-copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the
-Software is furnished to do so, subject to the following
-conditions:
-
-The above copyright notice and this permission notice shall be
-included in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
-OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
-HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
-WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
-OTHER DEALINGS IN THE SOFTWARE.
-*/

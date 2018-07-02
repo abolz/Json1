@@ -22,7 +22,6 @@
 
 #include "json_charclass.h"
 
-#define DTOA_UNNAMED_NAMESPACE 1
 #include "dtoa.h"
 #include "strtod.h"
 
@@ -46,7 +45,7 @@ using namespace json::numbers;
 
 static char* U32ToString(char* buf, uint32_t n)
 {
-    using base_conv::impl::Utoa100;
+    using base_conv::dtoa_impl::Utoa100;
 
     uint32_t q;
 
@@ -128,7 +127,7 @@ L_1_digit:
 
 static char* U64ToString(char* buf, uint64_t n)
 {
-    using base_conv::impl::Utoa100;
+    using base_conv::dtoa_impl::Utoa100;
 
     auto Utoa_9digits = [](char* ptr, uint32_t k)
     {

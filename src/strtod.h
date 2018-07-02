@@ -20,9 +20,30 @@
 
 #pragma once
 
-#include "dtoa.h"
+#include <cassert>
+#include <cstdint>
+#include <cstring>
+#include <climits>
+#include <limits>
+#include <type_traits> // conditional
 
-#if DTOA_UNNAMED_NAMESPACE
+#ifdef _MSC_VER
+#include <intrin.h>
+#endif
+
+#ifndef STRTOD_ASSERT
+#define STRTOD_ASSERT(X) assert(X)
+#endif
+
+#ifndef STRTOD_INLINE
+#if _MSC_VER
+#define STRTOD_INLINE __forceinline
+#else
+#define STRTOD_INLINE inline
+#endif
+#endif
+
+#if STRTOD_UNNAMED_NAMESPACE
 namespace {
 #endif
 namespace base_conv {
@@ -49,12 +70,12 @@ namespace base_conv {
 // consists of zeros, so we don't need to preserve all the digits.
 constexpr int kMaxSignificantDigits = 767 + 1;
 
-namespace impl {
+namespace strtod_impl {
 
-inline constexpr int Min(int x, int y) { return y < x ? y : x; }
-inline constexpr int Max(int x, int y) { return y < x ? x : y; }
+STRTOD_INLINE constexpr int Min(int x, int y) { return y < x ? y : x; }
+STRTOD_INLINE constexpr int Max(int x, int y) { return y < x ? x : y; }
 
-inline bool IsDigit(char ch)
+STRTOD_INLINE bool IsDigit(char ch)
 {
 #if 0
     return static_cast<unsigned>(ch - '0') < 10;
@@ -63,11 +84,93 @@ inline bool IsDigit(char ch)
 #endif
 }
 
-inline int DigitValue(char ch)
+STRTOD_INLINE int DigitValue(char ch)
 {
-    DTOA_ASSERT(IsDigit(ch));
+    STRTOD_ASSERT(IsDigit(ch));
     return ch - '0';
 }
+
+template <typename Dest, typename Source>
+STRTOD_INLINE Dest ReinterpretBits(Source source)
+{
+    static_assert(sizeof(Dest) == sizeof(Source), "size mismatch");
+
+    Dest dest;
+    std::memcpy(&dest, &source, sizeof(Source));
+    return dest;
+}
+
+template <typename Float>
+struct IEEE
+{
+    // NB:
+    // Works for double == long double.
+    static_assert(std::numeric_limits<Float>::is_iec559 &&
+                  ((std::numeric_limits<Float>::digits == 24 && std::numeric_limits<Float>::max_exponent == 128) ||
+                   (std::numeric_limits<Float>::digits == 53 && std::numeric_limits<Float>::max_exponent == 1024)),
+        "IEEE-754 single- or double-precision implementation required");
+
+    using ieee_type = Float;
+    using bits_type = typename std::conditional<std::numeric_limits<Float>::digits == 24, uint32_t, uint64_t>::type;
+
+    static constexpr int       SignificandSize         = std::numeric_limits<ieee_type>::digits;  // = p   (includes the hidden bit)
+    static constexpr int       PhysicalSignificandSize = SignificandSize - 1;                     // = p-1 (excludes the hidden bit)
+    static constexpr int       UnbiasedMinExponent     = 1;
+    static constexpr int       UnbiasedMaxExponent     = 2 * std::numeric_limits<Float>::max_exponent - 1 - 1;
+    static constexpr int       ExponentBias            = 2 * std::numeric_limits<Float>::max_exponent / 2 - 1 + (SignificandSize - 1);
+    static constexpr int       MinExponent             = UnbiasedMinExponent - ExponentBias;
+    static constexpr int       MaxExponent             = UnbiasedMaxExponent - ExponentBias;
+    static constexpr bits_type HiddenBit               = bits_type{1} << (SignificandSize - 1);   // = 2^(p-1)
+    static constexpr bits_type SignificandMask         = HiddenBit - 1;                           // = 2^(p-1) - 1
+    static constexpr bits_type ExponentMask            = bits_type{2 * std::numeric_limits<Float>::max_exponent - 1} << PhysicalSignificandSize;
+    static constexpr bits_type SignMask                = ~(~bits_type{0} >> 1);
+
+    bits_type bits;
+
+    explicit IEEE(bits_type bits_) : bits(bits_) {}
+    explicit IEEE(ieee_type value) : bits(ReinterpretBits<bits_type>(value)) {}
+
+    bits_type PhysicalSignificand() const {
+        return bits & SignificandMask;
+    }
+
+    bits_type PhysicalExponent() const {
+        return (bits & ExponentMask) >> PhysicalSignificandSize;
+    }
+
+    bool IsFinite() const {
+        return (bits & ExponentMask) != ExponentMask;
+    }
+
+    bool IsInf() const {
+        return (bits & ExponentMask) == ExponentMask && (bits & SignificandMask) == 0;
+    }
+
+    bool IsNaN() const {
+        return (bits & ExponentMask) == ExponentMask && (bits & SignificandMask) != 0;
+    }
+
+    bool IsZero() const {
+        return (bits & ~SignMask) == 0;
+    }
+
+    bool SignBit() const {
+        return (bits & SignMask) != 0;
+    }
+
+    ieee_type Value() const {
+        return ReinterpretBits<ieee_type>(bits);
+    }
+
+    ieee_type AbsValue() const {
+        return ReinterpretBits<ieee_type>(bits & ~SignMask);
+    }
+
+    ieee_type NextValue() const {
+        STRTOD_ASSERT(!SignBit());
+        return ReinterpretBits<ieee_type>(IsInf() ? bits : bits + 1);
+    }
+};
 
 //--------------------------------------------------------------------------------------------------
 // StrtodFast
@@ -102,11 +205,11 @@ inline int DigitValue(char ch)
     defined(__AARCH64EL__)       || \
     defined(__aarch64__)         || \
     defined(__riscv)
-#define DTOA_CORRECT_DOUBLE_OPERATIONS 1
+#define STRTOD_CORRECT_DOUBLE_OPERATIONS 1
 #elif defined(_M_IX86) || defined(__i386__) || defined(__i386)
 #ifdef _WIN32
 // Windows uses a 64bit wide floating point stack.
-#define DTOA_CORRECT_DOUBLE_OPERATIONS 1
+#define STRTOD_CORRECT_DOUBLE_OPERATIONS 1
 #endif
 #endif
 
@@ -115,9 +218,9 @@ inline int DigitValue(char ch)
 // (which has a 53bit significand) without loss of precision.
 constexpr int kMaxExactDoubleIntegerDecimalDigits = 15;
 
-#if DTOA_CORRECT_DOUBLE_OPERATIONS
+#if STRTOD_CORRECT_DOUBLE_OPERATIONS
 
-inline bool FastPath(double& result, uint64_t digits, int num_digits, int exponent)
+STRTOD_INLINE bool FastPath(double& result, uint64_t digits, int num_digits, int exponent)
 {
     static constexpr int kMaxExactPowerOfTen = 22;
     static constexpr double kExactPowersOfTen[] = {
@@ -147,7 +250,7 @@ inline bool FastPath(double& result, uint64_t digits, int num_digits, int expone
 //      1.0e+23,
     };
 
-    DTOA_ASSERT(num_digits <= kMaxExactDoubleIntegerDecimalDigits);
+    STRTOD_ASSERT(num_digits <= kMaxExactDoubleIntegerDecimalDigits);
 
     // The significand fits into a double.
     // If 10^exponent (resp. 10^-exponent) fits into a double too then we can
@@ -185,18 +288,224 @@ inline bool FastPath(double& result, uint64_t digits, int num_digits, int expone
     return false;
 }
 
-#else // ^^^ DTOA_CORRECT_DOUBLE_OPERATIONS
+#else // ^^^ STRTOD_CORRECT_DOUBLE_OPERATIONS
 
-inline bool FastPath(double& /*result*/, uint64_t /*digits*/, int /*num_digits*/, int /*exponent*/)
+STRTOD_INLINE bool FastPath(double& /*result*/, uint64_t /*digits*/, int /*num_digits*/, int /*exponent*/)
 {
     return false;
 }
 
-#endif // ^^^ !DTOA_CORRECT_DOUBLE_OPERATIONS
+#endif // ^^^ !STRTOD_CORRECT_DOUBLE_OPERATIONS
 
 //--------------------------------------------------------------------------------------------------
 // StrtodApprox
 //--------------------------------------------------------------------------------------------------
+
+struct DiyFp // f * 2^e
+{
+    static constexpr int SignificandSize = 64; // = q
+
+    uint64_t f = 0;
+    int e = 0;
+
+    constexpr DiyFp() = default;
+    constexpr DiyFp(uint64_t f_, int e_) : f(f_), e(e_) {}
+};
+
+// Returns whether the given floating point value is normalized.
+STRTOD_INLINE bool IsNormalized(DiyFp x)
+{
+    static_assert(DiyFp::SignificandSize == 64, "internal error");
+
+    return x.f >= (uint64_t{1} << 63);
+}
+
+// Returns x - y.
+// PRE: x.e == y.e and x.f >= y.f
+STRTOD_INLINE DiyFp Subtract(DiyFp x, DiyFp y)
+{
+    STRTOD_ASSERT(x.e == y.e);
+    STRTOD_ASSERT(x.f >= y.f);
+
+    return DiyFp(x.f - y.f, x.e);
+}
+
+// Returns x * y.
+// The result is rounded (ties up). (Only the upper q bits are returned.)
+STRTOD_INLINE DiyFp Multiply(DiyFp x, DiyFp y)
+{
+    static_assert(DiyFp::SignificandSize == 64, "internal error");
+
+    // Computes:
+    //  f = round((x.f * y.f) / 2^q)
+    //  e = x.e + y.e + q
+
+#if defined(_MSC_VER) && defined(_M_X64)
+
+    uint64_t h = 0;
+    uint64_t l = _umul128(x.f, y.f, &h);
+    h += l >> 63; // round, ties up: [h, l] += 2^q / 2
+
+    return DiyFp(h, x.e + y.e + 64);
+
+#elif defined(__GNUC__) && defined(__SIZEOF_INT128__)
+
+    __extension__ using Uint128 = unsigned __int128;
+
+    Uint128 const p = Uint128{x.f} * Uint128{y.f};
+
+    uint64_t h = static_cast<uint64_t>(p >> 64);
+    uint64_t l = static_cast<uint64_t>(p);
+    h += l >> 63; // round, ties up: [h, l] += 2^q / 2
+
+    return DiyFp(h, x.e + y.e + 64);
+
+#else
+
+    // Emulate the 64-bit * 64-bit multiplication:
+    //
+    // p = u * v
+    //   = (u_lo + 2^32 u_hi) (v_lo + 2^32 v_hi)
+    //   = (u_lo v_lo         ) + 2^32 ((u_lo v_hi         ) + (u_hi v_lo         )) + 2^64 (u_hi v_hi         )
+    //   = (p0                ) + 2^32 ((p1                ) + (p2                )) + 2^64 (p3                )
+    //   = (p0_lo + 2^32 p0_hi) + 2^32 ((p1_lo + 2^32 p1_hi) + (p2_lo + 2^32 p2_hi)) + 2^64 (p3                )
+    //   = (p0_lo             ) + 2^32 (p0_hi + p1_lo + p2_lo                      ) + 2^64 (p1_hi + p2_hi + p3)
+    //   = (p0_lo             ) + 2^32 (Q                                          ) + 2^64 (H                 )
+    //   = (p0_lo             ) + 2^32 (Q_lo + 2^32 Q_hi                           ) + 2^64 (H                 )
+    //
+    // (Since Q might be larger than 2^32 - 1)
+    //
+    //   = (p0_lo + 2^32 Q_lo) + 2^64 (Q_hi + H)
+    //
+    // (Q_hi + H does not overflow a 64-bit int)
+    //
+    //   = p_lo + 2^64 p_hi
+
+    // Note:
+    // The 32/64-bit casts here help MSVC to avoid calls to the _allmul
+    // library function.
+
+    uint32_t const u_lo = static_cast<uint32_t>(x.f /*& 0xFFFFFFFF*/);
+    uint32_t const u_hi = static_cast<uint32_t>(x.f >> 32);
+    uint32_t const v_lo = static_cast<uint32_t>(y.f /*& 0xFFFFFFFF*/);
+    uint32_t const v_hi = static_cast<uint32_t>(y.f >> 32);
+
+    uint64_t const p0 = uint64_t{u_lo} * v_lo;
+    uint64_t const p1 = uint64_t{u_lo} * v_hi;
+    uint64_t const p2 = uint64_t{u_hi} * v_lo;
+    uint64_t const p3 = uint64_t{u_hi} * v_hi;
+
+    uint64_t const p0_hi = p0 >> 32;
+    uint64_t const p1_lo = p1 & 0xFFFFFFFF;
+    uint64_t const p1_hi = p1 >> 32;
+    uint64_t const p2_lo = p2 & 0xFFFFFFFF;
+    uint64_t const p2_hi = p2 >> 32;
+
+    uint64_t Q = p0_hi + p1_lo + p2_lo;
+
+    // The full product might now be computed as
+    //
+    // p_hi = p3 + p2_hi + p1_hi + (Q >> 32)
+    // p_lo = p0_lo + (Q << 32)
+    //
+    // But in this particular case here, the full p_lo is not required.
+    // Effectively we only need to add the highest bit in p_lo to p_hi (and
+    // Q_hi + 1 does not overflow).
+
+    Q += uint64_t{1} << (63 - 32); // round, ties up
+
+    uint64_t const h = p3 + p2_hi + p1_hi + (Q >> 32);
+
+    return DiyFp(h, x.e + y.e + 64);
+
+#endif
+}
+
+// Decomposes `value` into `f * 2^e`.
+// The result is not normalized.
+// PRE: `value` must be finite and non-negative, i.e. >= +0.0.
+template <typename Float>
+STRTOD_INLINE DiyFp DiyFpFromFloat(Float value)
+{
+    using Fp = IEEE<Float>;
+
+    auto const v = Fp(value);
+
+    STRTOD_ASSERT(v.IsFinite());
+    STRTOD_ASSERT(!v.SignBit());
+
+    auto const F = v.PhysicalSignificand();
+    auto const E = v.PhysicalExponent();
+
+    // If v is denormal:
+    //      value = 0.F * 2^(1 - bias) = (          F) * 2^(1 - bias - (p-1))
+    // If v is normalized:
+    //      value = 1.F * 2^(E - bias) = (2^(p-1) + F) * 2^(E - bias - (p-1))
+
+    return (E == 0) // denormal?
+        ? DiyFp(F, Fp::MinExponent)
+        : DiyFp(F + Fp::HiddenBit, static_cast<int>(E) - Fp::ExponentBias);
+}
+
+// Compute the boundaries m- and m+ of the floating-point value
+// v = f * 2^e.
+//
+// Determine v- and v+, the floating-point predecessor and successor if v,
+// respectively.
+//
+//      v- = v - 2^e        if f != 2^(p-1) or e == e_min                (A)
+//         = v - 2^(e-1)    if f == 2^(p-1) and e > e_min                (B)
+//
+//      v+ = v + 2^e
+//
+// Let m- = (v- + v) / 2 and m+ = (v + v+) / 2. All real numbers _strictly_
+// between m- and m+ round to v, regardless of how the input rounding
+// algorithm breaks ties.
+//
+//      ---+-------------+-------------+-------------+-------------+---  (A)
+//         v-            m-            v             m+            v+
+//
+//      -----------------+------+------+-------------+-------------+---  (B)
+//                       v-     m-     v             m+            v+
+
+// Returns the upper boundary of value, i.e. the upper bound of the rounding
+// interval for v.
+// The result is not normalized.
+// PRE: `value` must be finite and non-negative.
+template <typename Float>
+STRTOD_INLINE DiyFp UpperBoundary(Float value)
+{
+    auto const v = DiyFpFromFloat(value);
+//  return DiyFp(2*v.f + 1, v.e - 1);
+    return DiyFp(4*v.f + 2, v.e - 2);
+}
+
+// template <typename Float>
+// STRTOD_INLINE bool LowerBoundaryIsCloser(Float value)
+// {
+//     IEEE<Float> const v(value);
+//
+//     STRTOD_ASSERT(v.IsFinite());
+//     STRTOD_ASSERT(!v.SignBit());
+//
+//     auto const F = v.PhysicalSignificand();
+//     auto const E = v.PhysicalExponent();
+//     return F == 0 && E > 1;
+// }
+
+// Returns the lower boundary of `value`, i.e. the lower bound of the rounding
+// interval for `value`.
+// The result is not normalized.
+// PRE: `value` must be finite and strictly positive.
+// template <typename Float>
+// STRTOD_INLINE DiyFp LowerBoundary(Float value)
+// {
+//     STRTOD_ASSERT(IEEE<Float>(value).IsFinite());
+//     STRTOD_ASSERT(value > 0);
+//
+//     auto const v = DiyFpFromFloat(value);
+//     return DiyFp(4*v.f - 2 + (LowerBoundaryIsCloser(value) ? 1 : 0), v.e - 2);
+// }
 
 struct DiyFpWithError // value = (x.f + delta) * 2^x.e, where |delta| <= error
 {
@@ -211,13 +520,47 @@ struct DiyFpWithError // value = (x.f + delta) * 2^x.e, where |delta| <= error
     constexpr DiyFpWithError(DiyFp x_, uint32_t error_) : x(x_), error(error_) {}
 };
 
+// Returns the number of leading 0-bits in x, starting at the most significant bit position.
+// If x is 0, the result is undefined.
+STRTOD_INLINE int CountLeadingZeros64(uint64_t x)
+{
+    STRTOD_ASSERT(x != 0);
+
+#if defined(_MSC_VER) && defined(_M_X64)
+
+    return static_cast<int>(__lzcnt64(x));
+
+#elif defined(_MSC_VER) && defined(_M_IX86)
+
+    int lz = static_cast<int>( __lzcnt(static_cast<uint32_t>(x >> 32)) );
+    if (lz == 32) {
+        lz += static_cast<int>( __lzcnt(static_cast<uint32_t>(x)) );
+    }
+    return lz;
+
+#elif defined(__GNUC__)
+
+    return __builtin_clzll(x);
+
+#else
+
+    int lz = 0;
+    while ((x >> 63) == 0) {
+        x <<= 1;
+        ++lz;
+    }
+    return lz;
+
+#endif
+}
+
 // Normalize x
 // and scale the error, so that the error is in ULP(x)
-inline void Normalize(DiyFpWithError& num)
+STRTOD_INLINE void Normalize(DiyFpWithError& num)
 {
     int const s = CountLeadingZeros64(num.x.f);
 
-    DTOA_ASSERT(((num.error << s) >> s) == num.error);
+    STRTOD_ASSERT(((num.error << s) >> s) == num.error);
 
     num.x.f   <<= s;
     num.x.e    -= s;
@@ -229,9 +572,9 @@ inline void Normalize(DiyFpWithError& num)
 constexpr int kMaxUint64DecimalDigits = 19;
 
 template <typename Int>
-inline Int ReadInt(char const* f, char const* l)
+STRTOD_INLINE Int ReadInt(char const* f, char const* l)
 {
-    DTOA_ASSERT(l - f <= std::numeric_limits<Int>::digits10);
+    STRTOD_ASSERT(l - f <= std::numeric_limits<Int>::digits10);
 
     Int value = 0;
 #if 1
@@ -250,7 +593,7 @@ inline Int ReadInt(char const* f, char const* l)
     for ( ; f != l; ++f)
     {
 #if 1
-        DTOA_ASSERT(IsDigit(*f));
+        STRTOD_ASSERT(IsDigit(*f));
         value = 10 * value + static_cast<unsigned char>(*f) - '0';
 #else
         value = 10 * value + static_cast<uint32_t>(DigitValue(*f));
@@ -260,46 +603,135 @@ inline Int ReadInt(char const* f, char const* l)
     return value;
 }
 
+struct CachedPower { // c = f * 2^e ~= 10^k
+    uint64_t f;
+    int e; // binary exponent
+    int k; // decimal exponent
+};
+
+constexpr int kCachedPowersSize         =   43;
+constexpr int kCachedPowersMinDecExp    = -348;
+constexpr int kCachedPowersMaxDecExp    =  324;
+constexpr int kCachedPowersDecExpStep   =   16;
+
+// Returns the binary exponent of a cached power for a given decimal exponent.
+STRTOD_INLINE int BinaryExponentFromDecimalExponent(int k)
+{
+    STRTOD_ASSERT(k <=  400);
+    STRTOD_ASSERT(k >= -400);
+
+    // log_2(10) ~= [3; 3, 9, 2, 2, 4, 6, 2, 1, 1, 3] = 254370/76573
+    // 2^15 * 254370/76573 = 108852.93980907...
+
+//  return (k * 108853) / (1 << 15) - (k < 0) - 63;
+    return (k * 108853 - 63 * (1 << 15)) >> 15;
+}
+
+STRTOD_INLINE CachedPower GetCachedPower(int index)
+{
+    static constexpr uint64_t kSignificands[/*340 bytes*/] = {
+        0xFA8FD5A0081C0288, // * 2^-1220 <  10^-348
+        0x8B16FB203055AC76, // * 2^-1166 <  10^-332
+        0x9A6BB0AA55653B2D, // * 2^-1113 <  10^-316
+        0xAB70FE17C79AC6CA, // * 2^-1060 <  10^-300
+        0xBE5691EF416BD60C, // * 2^-1007 <  10^-284
+        0xD3515C2831559A83, // * 2^-954  <  10^-268
+        0xEA9C227723EE8BCB, // * 2^-901  <  10^-252
+        0x823C12795DB6CE57, // * 2^-847  <  10^-236
+        0x9096EA6F3848984F, // * 2^-794  <  10^-220
+        0xA086CFCD97BF97F4, // * 2^-741  >  10^-204
+        0xB23867FB2A35B28E, // * 2^-688  >  10^-188
+        0xC5DD44271AD3CDBA, // * 2^-635  <  10^-172
+        0xDBAC6C247D62A584, // * 2^-582  >  10^-156
+        0xF3E2F893DEC3F126, // * 2^-529  <  10^-140
+        0x87625F056C7C4A8B, // * 2^-475  <  10^-124
+        0x964E858C91BA2655, // * 2^-422  <  10^-108
+        0xA6DFBD9FB8E5B88F, // * 2^-369  >  10^-92
+        0xB94470938FA89BCF, // * 2^-316  >  10^-76
+        0xCDB02555653131B6, // * 2^-263  <  10^-60
+        0xE45C10C42A2B3B06, // * 2^-210  >  10^-44
+        0xFD87B5F28300CA0E, // * 2^-157  >  10^-28
+        0x8CBCCC096F5088CC, // * 2^-103  >  10^-12
+        0x9C40000000000000, // * 2^-50   == 10^4
+        0xAD78EBC5AC620000, // * 2^3     == 10^20
+        0xC097CE7BC90715B3, // * 2^56    <  10^36
+        0xD5D238A4ABE98068, // * 2^109   <  10^52
+        0xED63A231D4C4FB27, // * 2^162   <  10^68
+        0x83C7088E1AAB65DB, // * 2^216   <  10^84
+        0x924D692CA61BE758, // * 2^269   <  10^100
+        0xA26DA3999AEF774A, // * 2^322   >  10^116
+        0xB454E4A179DD1877, // * 2^375   <  10^132
+        0xC83553C5C8965D3D, // * 2^428   <  10^148
+        0xDE469FBD99A05FE3, // * 2^481   <  10^164
+        0xF6C69A72A3989F5C, // * 2^534   >  10^180
+        0x88FCF317F22241E2, // * 2^588   <  10^196
+        0x98165AF37B2153DF, // * 2^641   >  10^212
+        0xA8D9D1535CE3B396, // * 2^694   <  10^228
+        0xBB764C4CA7A44410, // * 2^747   >  10^244
+        0xD01FEF10A657842C, // * 2^800   <  10^260
+        0xE7109BFBA19C0C9D, // * 2^853   <  10^276
+        0x80444B5E7AA7CF85, // * 2^907   <  10^292
+        0x8E679C2F5E44FF8F, // * 2^960   <  10^308
+        0x9E19DB92B4E31BA9, // * 2^1013  <  10^324
+    };
+
+    STRTOD_ASSERT(index >= 0);
+    STRTOD_ASSERT(index < kCachedPowersSize);
+
+    int const k = kCachedPowersMinDecExp + index * kCachedPowersDecExpStep;
+    int const e = BinaryExponentFromDecimalExponent(k);
+
+    return {kSignificands[index], e, k};
+}
+
 // Returns a cached power of ten x ~= 10^k such that
 //  k <= e < k + kCachedPowersDecExpStep.
 //
 // PRE: e >= kCachedPowersMinDecExp
 // PRE: e <  kCachedPowersMaxDecExp + kCachedPowersDecExpStep
-inline CachedPower GetCachedPowerForDecimalExponent(int e)
+STRTOD_INLINE CachedPower GetCachedPowerForDecimalExponent(int e)
 {
-    DTOA_ASSERT(e >= kCachedPowersMinDecExp);
-    DTOA_ASSERT(e <  kCachedPowersMaxDecExp + kCachedPowersDecExpStep);
+    STRTOD_ASSERT(e >= kCachedPowersMinDecExp);
+    STRTOD_ASSERT(e <  kCachedPowersMaxDecExp + kCachedPowersDecExpStep);
 
     int const index = static_cast<int>( static_cast<unsigned>(-kCachedPowersMinDecExp + e) / kCachedPowersDecExpStep );
-    DTOA_ASSERT(index >= 0);
-    DTOA_ASSERT(index < kCachedPowersSize);
+    STRTOD_ASSERT(index >= 0);
+    STRTOD_ASSERT(index < kCachedPowersSize);
 
     auto const cached = GetCachedPower(index);
-    DTOA_ASSERT(e >= cached.k);
-    DTOA_ASSERT(e <  cached.k + kCachedPowersDecExpStep);
+    STRTOD_ASSERT(e >= cached.k);
+    STRTOD_ASSERT(e <  cached.k + kCachedPowersDecExpStep);
 
     return cached;
 }
 
 // Returns 10^k as an exact DiyFp.
 // PRE: 1 <= k < kCachedPowersDecExpStep
-inline DiyFp GetAdjustmentPowerOfTen(int k)
+STRTOD_INLINE DiyFp GetAdjustmentPowerOfTen(int k)
 {
-    static_assert(kCachedPowersDecExpStep <= 8, "internal error");
+    static_assert(kCachedPowersDecExpStep <= 16, "internal error");
 
     static constexpr uint64_t kSignificands[] = {
-        0x8000000000000000, // e = -63, == 10^0 (unused)
-        0xA000000000000000, // e = -60, == 10^1
-        0xC800000000000000, // e = -57, == 10^2
-        0xFA00000000000000, // e = -54, == 10^3
-        0x9C40000000000000, // e = -50, == 10^4
-        0xC350000000000000, // e = -47, == 10^5
-        0xF424000000000000, // e = -44, == 10^6
-        0x9896800000000000, // e = -40, == 10^7
+        0x8000000000000000, // * 2^-63   == 10^0 (unused)
+        0xA000000000000000, // * 2^-60   == 10^1
+        0xC800000000000000, // * 2^-57   == 10^2
+        0xFA00000000000000, // * 2^-54   == 10^3
+        0x9C40000000000000, // * 2^-50   == 10^4
+        0xC350000000000000, // * 2^-47   == 10^5
+        0xF424000000000000, // * 2^-44   == 10^6
+        0x9896800000000000, // * 2^-40   == 10^7
+        0xBEBC200000000000, // * 2^-37   == 10^8
+        0xEE6B280000000000, // * 2^-34   == 10^9
+        0x9502F90000000000, // * 2^-30   == 10^10
+        0xBA43B74000000000, // * 2^-27   == 10^11
+        0xE8D4A51000000000, // * 2^-24   == 10^12
+        0x9184E72A00000000, // * 2^-20   == 10^13
+        0xB5E620F480000000, // * 2^-17   == 10^14
+        0xE35FA931A0000000, // * 2^-14   == 10^15
     };
 
-    DTOA_ASSERT(k > 0);
-    DTOA_ASSERT(k < kCachedPowersDecExpStep);
+    STRTOD_ASSERT(k > 0);
+    STRTOD_ASSERT(k < kCachedPowersDecExpStep);
 
     int const e = BinaryExponentFromDecimalExponent(k);
     return {kSignificands[k], e};
@@ -324,7 +756,7 @@ constexpr int kMinDecimalPower = -324;
 // once it's encoded into a 'double'. In almost all cases this is equal to
 // Double::SignificandSize. The only exceptions are subnormals. They start with
 // leading zeroes and their effective significand-size is hence smaller.
-inline int EffectiveSignificandSize(int order)
+STRTOD_INLINE int EffectiveSignificandSize(int order)
 {
     using Double = IEEE<double>;
 
@@ -339,12 +771,12 @@ inline int EffectiveSignificandSize(int order)
 }
 
 // Returns `f * 2^e`.
-inline double LoadDouble(uint64_t f, int e)
+STRTOD_INLINE double LoadDouble(uint64_t f, int e)
 {
     using Double = IEEE<double>;
 
-    DTOA_ASSERT(f <= Double::HiddenBit + Double::SignificandMask);
-    DTOA_ASSERT(e <= Double::MinExponent || (f & Double::HiddenBit) != 0);
+    STRTOD_ASSERT(f <= Double::HiddenBit + Double::SignificandMask);
+    STRTOD_ASSERT(e <= Double::MinExponent || (f & Double::HiddenBit) != 0);
 
     if (e > Double::MaxExponent)
     {
@@ -372,18 +804,18 @@ inline double LoadDouble(uint64_t f, int e)
 //
 // PRE: num_digits + exponent <= kMaxDecimalPower
 // PRE: num_digits + exponent >  kMinDecimalPower
-inline bool StrtodApprox(double& result, char const* digits, int num_digits, int exponent)
+STRTOD_INLINE bool StrtodApprox(double& result, char const* digits, int num_digits, int exponent)
 {
     using Double = IEEE<double>;
 
     static_assert(DiyFp::SignificandSize == 64,
         "We use uint64's. This only works if the DiyFp uses uint64's too.");
 
-    DTOA_ASSERT(num_digits > 0);
-    DTOA_ASSERT(DigitValue(digits[0]) > 0);
-//  DTOA_ASSERT(DigitValue(digits[num_digits - 1]) > 0);
-    DTOA_ASSERT(num_digits + exponent <= kMaxDecimalPower);
-    DTOA_ASSERT(num_digits + exponent >  kMinDecimalPower);
+    STRTOD_ASSERT(num_digits > 0);
+    STRTOD_ASSERT(DigitValue(digits[0]) > 0);
+//  STRTOD_ASSERT(DigitValue(digits[num_digits - 1]) > 0);
+    STRTOD_ASSERT(num_digits + exponent <= kMaxDecimalPower);
+    STRTOD_ASSERT(num_digits + exponent >  kMinDecimalPower);
 
     // Compute an approximation 'input' for B = digits * 10^exponent using DiyFp's.
     // And keep track of the error.
@@ -394,7 +826,6 @@ inline bool StrtodApprox(double& result, char const* digits, int num_digits, int
     //                       x
     //                       ~= (f * 2^e) * 10^exponent
 
-    constexpr int kLogULP = DiyFpWithError::kDenominatorLog;
     constexpr int kULP = DiyFpWithError::kDenominator;
 
     int const read_digits = Min(num_digits, kMaxUint64DecimalDigits);
@@ -428,7 +859,7 @@ inline bool StrtodApprox(double& result, char const* digits, int num_digits, int
     // If the input is exact, error == 0.
     // If the input is inexact, we have read 19 digits, i.e., f >= 10^(19-1) > 2^59.
     // The scaling factor in the normalization step above therefore is <= 2^(63-59) = 2^4.
-    DTOA_ASSERT(input.error <= 16 * (kULP / 2));
+    STRTOD_ASSERT(input.error <= 16 * (kULP / 2));
 
     // Move the remaining decimals into the (decimal) exponent.
     exponent += num_digits - read_digits;
@@ -476,8 +907,8 @@ inline bool StrtodApprox(double& result, char const* digits, int num_digits, int
         auto const adjustment_exponent = exponent - cached.k;
         auto const adjustment_power = GetAdjustmentPowerOfTen(adjustment_exponent);
 
-        DTOA_ASSERT(IsNormalized(input.x));
-        DTOA_ASSERT(IsNormalized(adjustment_power));
+        STRTOD_ASSERT(IsNormalized(input.x));
+        STRTOD_ASSERT(IsNormalized(adjustment_power));
 
         input.x = Multiply(input.x, adjustment_power);
         // x ~= digits * 10^adjustment_exponent
@@ -496,7 +927,7 @@ inline bool StrtodApprox(double& result, char const* digits, int num_digits, int
         {
             input.error += kULP / 2;
 
-            DTOA_ASSERT(input.error <= 17 * (kULP / 2));
+            STRTOD_ASSERT(input.error <= 17 * (kULP / 2));
         }
 
         // The result of the multiplication might not be normalized.
@@ -505,11 +936,11 @@ inline bool StrtodApprox(double& result, char const* digits, int num_digits, int
 
         // Since both factors are normalized, input.f >= 2^(q-2), and the scaling
         // factor in the normalization step above is bounded by 2^1.
-        DTOA_ASSERT(input.error <= 34 * (kULP / 2));
+        STRTOD_ASSERT(input.error <= 34 * (kULP / 2));
     }
 
-    DTOA_ASSERT(IsNormalized(input.x));
-    DTOA_ASSERT(IsNormalized(cached_power));
+    STRTOD_ASSERT(IsNormalized(input.x));
+    STRTOD_ASSERT(IsNormalized(cached_power));
 
     input.x = Multiply(input.x, cached_power);
     // x ~= digits * 10^exponent
@@ -524,7 +955,7 @@ inline bool StrtodApprox(double& result, char const* digits, int num_digits, int
     input.error += kULP / 2 + kULP / 2;
 #endif
 
-    DTOA_ASSERT(input.error <= 36 * (kULP / 2));
+    STRTOD_ASSERT(input.error <= 36 * (kULP / 2));
 
     // The result of the multiplication might not be normalized.
     // Normalize 'x' again and scale the error.
@@ -532,7 +963,7 @@ inline bool StrtodApprox(double& result, char const* digits, int num_digits, int
 
     // Since both factors were normalized, the scaling factor in the
     // normalization step above is again bounded by 2^1.
-    DTOA_ASSERT(input.error <= 72 * (kULP / 2));
+    STRTOD_ASSERT(input.error <= 72 * (kULP / 2));
 
     // We now have an approximation x = f * 2^e ~= digits * 10^exponent.
     //
@@ -549,43 +980,10 @@ inline bool StrtodApprox(double& result, char const* digits, int num_digits, int
     // precision.
 
     int const prec = EffectiveSignificandSize(DiyFp::SignificandSize + input.x.e);
-    DTOA_ASSERT(prec >= 0);
-    DTOA_ASSERT(prec <= 53);
+    STRTOD_ASSERT(prec >= 0);
+    STRTOD_ASSERT(prec <= 53);
 
-    int excess_bits = DiyFp::SignificandSize - prec;
-    if (excess_bits > DiyFp::SignificandSize - kLogULP - 1)
-    {
-        // In this case 'half' (see below) multiplied by kULP exceeds the range of an uint64_t.
-        // This can only happen for very small subnormals (when excess_bits is large).
-
-        int const s = excess_bits - (DiyFp::SignificandSize - kLogULP - 1);
-        DTOA_ASSERT(s > 0);
-
-#if 1
-        uint64_t const discarded_bits = input.x.f & ((uint64_t{1} << s) - 1);
-
-        // Move the discarded bits into the error: (f + err) * 2^e = (f - d + err + d) * 2^e
-        DTOA_ASSERT(discarded_bits <= UINT32_MAX);
-        input.error += static_cast<uint32_t>(discarded_bits);
-        // Scale the error such that input.error is in ULP(input.x) again.
-        input.error >>= s;
-        // And add 1 so that input.error is still an upper bound.
-        input.error += 1;
-
-        // error = ((error + discarded_bits) div 2^s) + 1
-        //       < ((error + 2^s           ) div 2^s) + 1
-        //       = ((error div 2^s) + 1    )          + 1
-        //      <= (error div 2) + 2
-#else
-        input.error = (input.error >> s) + 2;
-#endif
-
-        // x = f * 2^e ~= floor(f / 2^s) * 2^(e + s)
-        input.x.f >>= s;
-        input.x.e  += s;
-
-        excess_bits = DiyFp::SignificandSize - kLogULP - 1;
-    }
+    int const excess_bits = DiyFp::SignificandSize - prec;
 
     // n = excess_bits
     //
@@ -609,34 +1007,40 @@ inline bool StrtodApprox(double& result, char const* digits, int num_digits, int
     // double just below the correct double. In this case we return false, so
     // that the we can fall back to a more precise algorithm.
 
-    DTOA_ASSERT(excess_bits >= 11);
-    DTOA_ASSERT(excess_bits <  64);
-    DTOA_ASSERT(excess_bits <= DiyFp::SignificandSize - kLogULP - 1);
+    STRTOD_ASSERT(excess_bits >= 11);
+    STRTOD_ASSERT(excess_bits <= 64);
 
-    uint64_t const two_n = uint64_t{1} << excess_bits;
-
-    uint64_t p2   = input.x.f & (two_n - 1);
-    uint64_t half = two_n / 2;
-
-    // error is scaled by kULP.
-    // In order to compare p2 and half with error, these values need to be scaled, too.
-    DTOA_ASSERT(p2   <= UINT64_MAX / kULP);
-    DTOA_ASSERT(half <= UINT64_MAX / kULP);
-    p2   *= kULP;
-    half *= kULP;
+    uint64_t const p2 = (excess_bits < 64) ? (input.x.f & ((uint64_t{1} << excess_bits) - 1)) : input.x.f;
+    uint64_t const half = uint64_t{1} << (excess_bits - 1);
 
     // Truncate the significand to p = q - n bits and move the discarded bits into the (binary) exponent.
-    input.x.f >>= excess_bits;
-    input.x.e  += excess_bits;
+    // (Right shift of >= bit-width is undefined.)
+    input.x.f = (excess_bits < 64) ? (input.x.f >> excess_bits) : 0;
+    input.x.e += excess_bits;
 
-    DTOA_ASSERT(input.error > 0);
-    DTOA_ASSERT(half >= input.error);
+    // Split up error into high (integral) and low (fractional) parts,
+    // since half * kULP might overflow.
+    uint64_t const error_hi = input.error / kULP;
+    uint64_t const error_lo = input.error % kULP;
+
+    STRTOD_ASSERT(input.error > 0);
+    STRTOD_ASSERT(half >= error_hi && half - error_hi <= UINT64_MAX / kULP && (half - error_hi) * kULP >= error_lo);
+    STRTOD_ASSERT(half <= UINT64_MAX - error_hi);
+    static_cast<void>(error_lo);
 
     // Note:
     // Since error is non-zero, we can safely use '<=' and '>=' in the comparisons below.
 
     bool success;
-    if (p2 >= half + input.error)
+#if 1
+    // p2 * U >= half * U + error
+    // <=> p2 * U >= half * U + (error_hi * U + error_lo)
+    // <=> p2 * U >= (half + error_hi) * U + error_lo
+    // <=> p2 >= (half + error_hi) + error_lo / U
+    if (p2 > half + error_hi)
+#else
+    if (p2 * kULP >= half * kULP + input.error)
+#endif
     {
         // Round up.
         success = true;
@@ -649,13 +1053,22 @@ inline bool StrtodApprox(double& result, char const* digits, int num_digits, int
         // binary exponent).
         if (input.x.f > Double::HiddenBit + Double::SignificandMask)
         {
-            DTOA_ASSERT(input.x.f == (Double::HiddenBit << 1));
+            STRTOD_ASSERT(input.x.f == (Double::HiddenBit << 1));
 
             input.x.f >>= 1;
             input.x.e  += 1;
         }
     }
-    else if (p2 <= half - input.error)
+#if 1
+    // p2 * U <= half * U - error
+    // <=> half * U >= p2 * U + error
+    // <=> half * U >= p2 * U + (error_hi * U + error_lo)
+    // <=> half * U >= (p2 + error_hi) * U + error_lo
+    // <=> half >= (p2 + error_hi) + error_lo / U
+    else if (half > p2 + error_hi)
+#else
+    else if (p2 * kULP <= half * kULP - input.error)
+#endif
     {
         // Round down.
         success = true;
@@ -672,12 +1085,12 @@ inline bool StrtodApprox(double& result, char const* digits, int num_digits, int
     return success;
 }
 
-inline bool ComputeGuess(double& result, char const* digits, int num_digits, int exponent)
+STRTOD_INLINE bool ComputeGuess(double& result, char const* digits, int num_digits, int exponent)
 {
-    DTOA_ASSERT(num_digits > 0);
-    DTOA_ASSERT(num_digits <= kMaxSignificantDigits);
-    DTOA_ASSERT(DigitValue(digits[0]) > 0);
-//  DTOA_ASSERT(DigitValue(digits[num_digits - 1]) > 0);
+    STRTOD_ASSERT(num_digits > 0);
+    STRTOD_ASSERT(num_digits <= kMaxSignificantDigits);
+    STRTOD_ASSERT(DigitValue(digits[0]) > 0);
+//  STRTOD_ASSERT(DigitValue(digits[num_digits - 1]) > 0);
 
     // Any v >= 10^309 is interpreted as +Infinity.
     if (num_digits + exponent > kMaxDecimalPower)
@@ -717,13 +1130,13 @@ struct DiyInt // bigits * 2^exponent
     DiyInt& operator=(DiyInt const&) = delete;  // (not needed here)
 };
 
-inline void AssignZero(DiyInt& x)
+STRTOD_INLINE void AssignZero(DiyInt& x)
 {
     x.size = 0;
     x.exponent = 0;
 }
 
-inline void AssignU32(DiyInt& x, uint32_t value)
+STRTOD_INLINE void AssignU32(DiyInt& x, uint32_t value)
 {
     AssignZero(x);
 
@@ -734,7 +1147,7 @@ inline void AssignU32(DiyInt& x, uint32_t value)
     x.size = 1;
 }
 
-inline void AssignU64(DiyInt& x, uint64_t value)
+STRTOD_INLINE void AssignU64(DiyInt& x, uint64_t value)
 {
     AssignZero(x);
 
@@ -747,9 +1160,9 @@ inline void AssignU64(DiyInt& x, uint64_t value)
 }
 
 // x := A * x + B
-inline void MulAddU32(DiyInt& x, uint32_t A, uint32_t B = 0)
+STRTOD_INLINE void MulAddU32(DiyInt& x, uint32_t A, uint32_t B = 0)
 {
-    DTOA_ASSERT(B == 0 || x.exponent == 0);
+    STRTOD_ASSERT(B == 0 || x.exponent == 0);
 
     if (A == 1 && B == 0)
     {
@@ -771,12 +1184,12 @@ inline void MulAddU32(DiyInt& x, uint32_t A, uint32_t B = 0)
 
     if (carry != 0)
     {
-        DTOA_ASSERT(x.size < DiyInt::Capacity);
+        STRTOD_ASSERT(x.size < DiyInt::Capacity);
         x.bigits[x.size++] = carry;
     }
 }
 
-inline void AssignDecimalDigits(DiyInt& x, char const* digits, int num_digits)
+STRTOD_INLINE void AssignDecimalDigits(DiyInt& x, char const* digits, int num_digits)
 {
     static constexpr uint32_t kPow10[] = {
         1, // (unused)
@@ -802,9 +1215,9 @@ inline void AssignDecimalDigits(DiyInt& x, char const* digits, int num_digits)
     }
 }
 
-inline void MulPow2(DiyInt& x, int exp) // aka left-shift
+STRTOD_INLINE void MulPow2(DiyInt& x, int exp) // aka left-shift
 {
-    DTOA_ASSERT(exp >= 0);
+    STRTOD_ASSERT(exp >= 0);
 
     if (x.size == 0)
         return;
@@ -826,7 +1239,7 @@ inline void MulPow2(DiyInt& x, int exp) // aka left-shift
 
         if (carry != 0)
         {
-            DTOA_ASSERT(x.size < DiyInt::Capacity);
+            STRTOD_ASSERT(x.size < DiyInt::Capacity);
             x.bigits[x.size++] = carry;
         }
     }
@@ -834,7 +1247,7 @@ inline void MulPow2(DiyInt& x, int exp) // aka left-shift
     x.exponent += bigit_shift;
 }
 
-inline void MulPow5(DiyInt& x, int exp)
+STRTOD_INLINE void MulPow5(DiyInt& x, int exp)
 {
     static constexpr uint32_t kPow5[] = {
         1, // (unused)
@@ -856,7 +1269,7 @@ inline void MulPow5(DiyInt& x, int exp)
     if (x.size == 0)
         return;
 
-    DTOA_ASSERT(exp >= 0);
+    STRTOD_ASSERT(exp >= 0);
     if (exp == 0)
         return;
 
@@ -868,7 +1281,7 @@ inline void MulPow5(DiyInt& x, int exp)
     }
 }
 
-inline int Compare(DiyInt const& lhs, DiyInt const& rhs)
+STRTOD_INLINE int Compare(DiyInt const& lhs, DiyInt const& rhs)
 {
     int const e1 = lhs.exponent;
     int const e2 = rhs.exponent;
@@ -895,12 +1308,12 @@ inline int Compare(DiyInt const& lhs, DiyInt const& rhs)
 // PRE: num_digits + exponent <= kMaxDecimalPower
 // PRE: num_digits + exponent >  kMinDecimalPower
 // PRE: num_digits            <= kMaxSignificantDigits
-inline int CompareBufferWithDiyFp(char const* digits, int num_digits, int exponent, bool nonzero_tail, DiyFp v)
+STRTOD_INLINE int CompareBufferWithDiyFp(char const* digits, int num_digits, int exponent, bool nonzero_tail, DiyFp v)
 {
-    DTOA_ASSERT(num_digits > 0);
-    DTOA_ASSERT(num_digits + exponent <= kMaxDecimalPower);
-    DTOA_ASSERT(num_digits + exponent >  kMinDecimalPower);
-    DTOA_ASSERT(num_digits            <= kMaxSignificantDigits);
+    STRTOD_ASSERT(num_digits > 0);
+    STRTOD_ASSERT(num_digits + exponent <= kMaxDecimalPower);
+    STRTOD_ASSERT(num_digits + exponent >  kMinDecimalPower);
+    STRTOD_ASSERT(num_digits            <= kMaxSignificantDigits);
 
     DiyInt lhs;
     DiyInt rhs;
@@ -913,8 +1326,8 @@ inline int CompareBufferWithDiyFp(char const* digits, int num_digits, int expone
     }
     AssignU64(rhs, v.f);
 
-    DTOA_ASSERT(lhs.size <= (2555 + 31) / 32); // bits <= log_2(10^769) = 2555
-    DTOA_ASSERT(rhs.size <= (  64 + 31) / 32); // bits <= 64
+    STRTOD_ASSERT(lhs.size <= (2555 + 31) / 32); // bits <= log_2(10^769) = 2555
+    STRTOD_ASSERT(rhs.size <= (  64 + 31) / 32); // bits <= 64
 
     int lhs_exp5 = 0;
     int rhs_exp5 = 0;
@@ -952,8 +1365,8 @@ inline int CompareBufferWithDiyFp(char const* digits, int num_digits, int expone
         MulPow5(lhs, lhs_exp5);
 
         // num_digits + exponent <= kMaxDecimalPower + 1
-        DTOA_ASSERT(lhs.size <= (1030 + 31) / 32);  // 1030 = log_2(10^(309 + 1)))
-        DTOA_ASSERT(rhs.size <= (  64 + 31) / 32);
+        STRTOD_ASSERT(lhs.size <= (1030 + 31) / 32);  // 1030 = log_2(10^(309 + 1)))
+        STRTOD_ASSERT(rhs.size <= (  64 + 31) / 32);
     }
     else if (rhs_exp5 > 0)
     {
@@ -962,8 +1375,8 @@ inline int CompareBufferWithDiyFp(char const* digits, int num_digits, int expone
         // kMinDecimalPower + 1 <= num_digits + exponent <= kMaxDecimalPower + 1
         // rhs_exp5 = -exponent <= -kMinDecimalPower - 1 + num_digits = 324 - 1 + num_digits <= 324 - 1 + 769
         // rhs_exp5 = -exponent >= -kMaxDecimalPower - 1 + num_digits
-        DTOA_ASSERT(lhs.size <= (2555        + 31) / 32);
-        DTOA_ASSERT(rhs.size <= (  64 + 2536 + 31) / 32); // 2536 = log_2(5^(324 - 1 + 769)) ---- XXX: 2504
+        STRTOD_ASSERT(lhs.size <= (2555        + 31) / 32);
+        STRTOD_ASSERT(rhs.size <= (  64 + 2536 + 31) / 32); // 2536 = log_2(5^(324 - 1 + 769)) ---- XXX: 2504
     }
 #endif
 
@@ -994,8 +1407,8 @@ inline int CompareBufferWithDiyFp(char const* digits, int num_digits, int expone
 #endif
 #endif
 
-    DTOA_ASSERT(lhs.size <= (2555        + 32 + 31) / 32);
-    DTOA_ASSERT(rhs.size <= (  64 + 2536 + 32 + 31) / 32);
+    STRTOD_ASSERT(lhs.size <= (2555        + 32 + 31) / 32);
+    STRTOD_ASSERT(rhs.size <= (  64 + 2536 + 32 + 31) / 32);
 
     return Compare(lhs, rhs);
 }
@@ -1005,14 +1418,14 @@ inline int CompareBufferWithDiyFp(char const* digits, int num_digits, int expone
 //--------------------------------------------------------------------------------------------------
 
 // Returns whether the significand f of v = f * 2^e is even.
-inline bool SignificandIsEven(double v)
+STRTOD_INLINE bool SignificandIsEven(double v)
 {
     return (IEEE<double>(v).PhysicalSignificand() & 1) == 0;
 }
 
 // Returns the next larger double-precision value.
 // If v is +Infinity returns v.
-inline double NextFloat(double v)
+STRTOD_INLINE double NextFloat(double v)
 {
     return IEEE<double>(v).NextValue();
 }
@@ -1025,8 +1438,8 @@ inline double NextFloat(double v)
 // PRE: num_digits + exponent must not overflow.
 inline double DecimalToDouble(char const* digits, int num_digits, int exponent, bool nonzero_tail)
 {
-    DTOA_ASSERT(num_digits >= 0);
-    DTOA_ASSERT(exponent <= INT_MAX - num_digits);
+    STRTOD_ASSERT(num_digits >= 0);
+    STRTOD_ASSERT(exponent <= INT_MAX - num_digits);
 
     // Ignore leading zeros
     while (num_digits > 0 && digits[0] == '0')
@@ -1044,7 +1457,7 @@ inline double DecimalToDouble(char const* digits, int num_digits, int exponent, 
 
     if (num_digits > kMaxSignificantDigits)
     {
-        DTOA_ASSERT(DigitValue(digits[num_digits - 1]) > 0); // since trailing zeros have been trimmed above.
+        STRTOD_ASSERT(DigitValue(digits[num_digits - 1]) > 0); // since trailing zeros have been trimmed above.
 
         nonzero_tail = true;
 
@@ -1088,7 +1501,7 @@ inline double DecimalToDouble(char const* digits, int num_digits, int exponent, 
     return NextFloat(v);
 }
 
-} // namespace impl
+} // namespace strtod_impl
 
 // Convert the decimal representation 'digits * 10^exponent' into an IEEE
 // double-precision number.
@@ -1098,7 +1511,7 @@ inline double DecimalToDouble(char const* digits, int num_digits, int exponent, 
 // PRE: num_digits + exponent must not overflow.
 inline double DecimalToDouble(char const* digits, int num_digits, int exponent, bool nonzero_tail = false)
 {
-    return base_conv::impl::DecimalToDouble(digits, num_digits, exponent, nonzero_tail);
+    return base_conv::strtod_impl::DecimalToDouble(digits, num_digits, exponent, nonzero_tail);
 }
 
 //==================================================================================================
@@ -1117,8 +1530,8 @@ enum class StrtodStatus {
 
 inline StrtodStatus Strtod(double& result, char const*& next, char const* last)
 {
-    using base_conv::impl::IsDigit;
-    using base_conv::impl::DigitValue;
+    using base_conv::strtod_impl::IsDigit;
+    using base_conv::strtod_impl::DigitValue;
 
     // Inputs larger than kMaxInt (currently) can not be handled.
     // To avoid overflow in integer arithmetic.
@@ -1317,7 +1730,7 @@ inline StrtodStatus Strtod(double& result, char const*& next, char const* last)
     }
 
 L_convert:
-    value = base_conv::impl::DecimalToDouble(digits, num_digits, exponent, nonzero_tail);
+    value = base_conv::strtod_impl::DecimalToDouble(digits, num_digits, exponent, nonzero_tail);
 
 L_done:
     result = is_neg ? -value : value;
@@ -1326,7 +1739,7 @@ L_done:
     return status;
 }
 
-inline double Strtod(char const* first, char const* last)
+STRTOD_INLINE double Strtod(char const* first, char const* last)
 {
     double d = 0.0;
     base_conv::Strtod(d, first, last);
@@ -1334,7 +1747,7 @@ inline double Strtod(char const* first, char const* last)
 }
 
 } // namespace base_conv
-#if DTOA_UNNAMED_NAMESPACE
+#if STRTOD_UNNAMED_NAMESPACE
 } // namespace
 #endif
 
