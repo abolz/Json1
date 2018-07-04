@@ -46,162 +46,18 @@ using namespace json::numbers;
 // NumberToString
 //==================================================================================================
 
-static char* U32ToString(char* buf, uint32_t n)
-{
-    using base_conv::dtoa_impl::Utoa100;
-
-    uint32_t q;
-
-    if (n >= 1000000000)
-    {
-//L_10_digits:
-        q = n / 100000000;
-        n = n % 100000000;
-        buf = Utoa100(buf, q);
-L_8_digits:
-        q = n / 1000000;
-        n = n % 1000000;
-        buf = Utoa100(buf, q);
-L_6_digits:
-        q = n / 10000;
-        n = n % 10000;
-        buf = Utoa100(buf, q);
-L_4_digits:
-        q = n / 100;
-        n = n % 100;
-        buf = Utoa100(buf, q);
-L_2_digits:
-        buf = Utoa100(buf, n);
-        return buf;
-    }
-
-    if (n >= 100000000)
-    {
-//L_9_digits:
-        q = n / 10000000;
-        n = n % 10000000;
-        buf = Utoa100(buf, q);
-L_7_digits:
-        q = n / 100000;
-        n = n % 100000;
-        buf = Utoa100(buf, q);
-L_5_digits:
-        q = n / 1000;
-        n = n % 1000;
-        buf = Utoa100(buf, q);
-L_3_digits:
-        q = n / 10;
-        n = n % 10;
-        buf = Utoa100(buf, q);
-L_1_digit:
-        buf[0] = static_cast<char>('0' + n);
-        return buf + 1;
-    }
-
-    if (n < 100)
-    {
-        if (n >= 10)
-            goto L_2_digits;
-        else
-            goto L_1_digit;
-    }
-    else if (n < 10000)
-    {
-        if (n >= 1000)
-            goto L_4_digits;
-        else
-            goto L_3_digits;
-    }
-    else if (n < 1000000)
-    {
-        if (n >= 100000)
-            goto L_6_digits;
-        else
-            goto L_5_digits;
-    }
-    else
-    {
-        if (n >= 10000000)
-            goto L_8_digits;
-        else
-            goto L_7_digits;
-    }
-}
-
-static char* U64ToString(char* buf, uint64_t n)
-{
-    using base_conv::dtoa_impl::Utoa100;
-
-    auto Utoa_9digits = [](char* ptr, uint32_t k)
-    {
-        uint32_t q;
-
-//L_9_digits:
-        q = k / 10000000;
-        k = k % 10000000;
-        ptr = Utoa100(ptr, q);
-//L_7_digits:
-        q = k / 100000;
-        k = k % 100000;
-        ptr = Utoa100(ptr, q);
-//L_5_digits:
-        q = k / 1000;
-        k = k % 1000;
-        ptr = Utoa100(ptr, q);
-//L_3_digits:
-        q = k / 10;
-        k = k % 10;
-        ptr = Utoa100(ptr, q);
-//L_1_digits:
-        ptr[0] = static_cast<char>('0' + k);
-        return ptr + 1;
-    };
-
-    if (n <= UINT32_MAX)
-        return U32ToString(buf, static_cast<uint32_t>(n));
-
-    // n = hi * 10^9 + lo < 10^20,   where hi < 10^11, lo < 10^9
-    uint64_t const hi = n / 1000000000;
-    uint64_t const lo = n % 1000000000;
-
-    if (hi <= UINT32_MAX)
-    {
-        buf = U32ToString(buf, static_cast<uint32_t>(hi));
-    }
-    else
-    {
-        // 2^32 < hi = hi1 * 10^9 + hi0 < 10^11,   where hi1 < 10^2, 10^9 <= hi0 < 10^9
-        uint32_t const hi1 = static_cast<uint32_t>(hi / 1000000000);
-        uint32_t const hi0 = static_cast<uint32_t>(hi % 1000000000);
-        if (hi1 >= 10)
-        {
-            buf = Utoa100(buf, hi1);
-        }
-        else
-        {
-            DTOA_ASSERT(hi1 != 0);
-            buf[0] = static_cast<char>('0' + hi1);
-            buf++;
-        }
-        buf = Utoa_9digits(buf, hi0);
-    }
-
-    // lo has exactly 9 digits.
-    // (Which might all be zero...)
-    return Utoa_9digits(buf, static_cast<uint32_t>(lo));
-}
-
-static char* I64ToString(char* buf, int64_t i)
+static char* I64ToString(char* next, char* last, int64_t i)
 {
     uint64_t n = static_cast<uint64_t>(i);
     if (i < 0)
     {
-        buf[0] = '-';
-        buf++;
+        next[0] = '-';
+        next++;
         n = 0u - n;
     }
 
-    return U64ToString(buf, n);
+    int const len = base_conv::dtoa_impl::PrintDecimalDigits(next, last, n);
+    return next + len;
 }
 
 char* json::numbers::NumberToString(char* next, char* last, double value, bool emit_trailing_dot_zero)
@@ -235,7 +91,7 @@ char* json::numbers::NumberToString(char* next, char* last, double value, bool e
         const int64_t i = static_cast<int64_t>(value);
         if (static_cast<double>(i) == value)
         {
-            return I64ToString(next, i);
+            return I64ToString(next, last, i);
         }
     }
 #else
