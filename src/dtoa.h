@@ -353,17 +353,44 @@ DTOA_INLINE Uint64x2 ComputePow5(int i)
 
         int const delta = Pow5BitLength(i) - Pow5BitLength(base2);
         DTOA_ASSERT(delta >= 0);
-        DTOA_ASSERT(delta <= 64);
+        DTOA_ASSERT(delta < 64);
 
 #if DTOA_HAS_UINT128
         __extension__ using uint128_t = unsigned __int128;
 
+#if 1
+        uint128_t const b0 = static_cast<uint128_t>(m) * mul.lo;
+        uint128_t const b2 = static_cast<uint128_t>(m) * mul.hi;
+
+        uint64_t const b0_lo = static_cast<uint64_t>(b0);
+        uint64_t const b0_hi = static_cast<uint64_t>(b0 >> 64);
+        uint64_t const b2_lo = static_cast<uint64_t>(b2);
+        uint64_t       b2_hi = static_cast<uint64_t>(b2 >> 64);
+
+        uint64_t const sum = b0_hi + b2_lo;
+        b2_hi += (sum < b0_hi);
+
+#if 1
+        uint64_t const lo = (b0_lo >> delta) | (sum   << (64 - delta));
+        uint64_t const hi = (sum   >> delta) | (b2_hi << (64 - delta));
+
+        result.lo = lo + adjust;
+        result.hi = hi;
+#else
+        uint128_t const c0 = (uint128_t{sum  } << 64) | b0_lo;
+        uint128_t const c1 = (uint128_t{b2_hi} << 64) | sum;
+
+        result.lo = static_cast<uint64_t>(c0 >> delta) + adjust;
+        result.hi = static_cast<uint64_t>(c1 >> delta);
+#endif
+#else
         uint128_t const b0 = static_cast<uint128_t>(m) * mul.lo;
         uint128_t const b2 = static_cast<uint128_t>(m) * mul.hi;
         uint128_t const shiftedSum = (b0 >> delta) + (b2 << (64 - delta)) + adjust;
 
         result.lo = static_cast<uint64_t>(shiftedSum);
         result.hi = static_cast<uint64_t>(shiftedSum >> 64);
+#endif
 #else
         uint64_t b0_hi;
         uint64_t b2_hi;
@@ -416,12 +443,39 @@ DTOA_INLINE Uint64x2 ComputePow5Inv(int i)
 #if DTOA_HAS_UINT128
         __extension__ using uint128_t = unsigned __int128;
 
+#if 1
         uint128_t const b0 = static_cast<uint128_t>(m) * (mul.lo - 1);
         uint128_t const b2 = static_cast<uint128_t>(m) * (mul.hi    );
-        uint128_t const shiftedSum = ((b0 >> delta) + (b2 << (64 - delta))) + 1 + adjust;
+
+        uint64_t const b0_lo = static_cast<uint64_t>(b0);
+        uint64_t const b0_hi = static_cast<uint64_t>(b0 >> 64);
+        uint64_t const b2_lo = static_cast<uint64_t>(b2);
+        uint64_t       b2_hi = static_cast<uint64_t>(b2 >> 64);
+
+        uint64_t const sum = b0_hi + b2_lo;
+        b2_hi += (sum < b0_hi);
+
+#if 1
+        uint64_t const lo = (b0_lo >> delta) | (sum   << (64 - delta));
+        uint64_t const hi = (sum   >> delta) | (b2_hi << (64 - delta));
+
+        result.lo = lo + adjust;
+        result.hi = hi;
+#else
+        uint128_t const c0 = (uint128_t{sum  } << 64) | b0_lo;
+        uint128_t const c1 = (uint128_t{b2_hi} << 64) | sum;
+
+        result.lo = static_cast<uint64_t>(c0 >> delta) + adjust + 1;
+        result.hi = static_cast<uint64_t>(c1 >> delta);
+#endif
+#else
+        uint128_t const b0 = static_cast<uint128_t>(m) * (mul.lo - 1);
+        uint128_t const b2 = static_cast<uint128_t>(m) * (mul.hi    );
+        uint128_t const shiftedSum = (b0 >> delta) + (b2 << (64 - delta)) + 1 + adjust;
 
         result.lo = static_cast<uint64_t>(shiftedSum);
         result.hi = static_cast<uint64_t>(shiftedSum >> 64);
+#endif
 #else
         uint64_t b0_hi;
         uint64_t b2_hi;
@@ -1126,7 +1180,19 @@ DTOA_INLINE uint64_t MulShift(uint64_t m, Uint64x2 mul, int j)
     uint128_t const b2 = static_cast<uint128_t>(m) * mul.hi;
 
     DTOA_ASSERT(j >= 64);
+#if 0
+//  uint64_t const b0_lo = static_cast<uint64_t>(b0);
+    uint64_t const b0_hi = static_cast<uint64_t>(b0 >> 64);
+    uint64_t const b2_lo = static_cast<uint64_t>(b2);
+    uint64_t       b2_hi = static_cast<uint64_t>(b2 >> 64);
+
+    uint64_t const sum = b0_hi + b2_lo;
+    b2_hi += (sum < b0_hi);
+
+    return ((uint128_t{b2_hi} << 64) | sum) >> (j - 64);
+#else
     return static_cast<uint64_t>(((b0 >> 64) + b2) >> (j - 64));
+#endif
 }
 
 DTOA_INLINE uint64_t MulShiftAll(uint64_t m2, Uint64x2 mul, int j, uint64_t* vp, uint64_t* vm, uint32_t mmShift)
