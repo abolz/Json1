@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include "json_charclass.h"
 #include "json_options.h"
 #include "json_unicode.h"
 
@@ -192,6 +193,50 @@ struct EscapeStringResult
     It next;
     EscapeStringStatus status;
 };
+
+template <typename It>
+It SkipNonSpecial(It p, It end)
+{
+    using namespace json::charclass;
+
+    for (;;)
+    {
+        // if constexpr (IsRanIt<It>) {
+        while (end - p >= 4)
+        {
+            unsigned const m0 = CharClass(p[0]);
+            unsigned const m1 = CharClass(p[1]);
+            unsigned const m2 = CharClass(p[2]);
+            unsigned const m3 = CharClass(p[3]);
+
+            unsigned const mm = m0 | m1 | m2 | m3;
+            if ((mm & (CC_StringSpecial | CC_NeedsCleaning)) == 0)
+            {
+                p += 4;
+                continue;
+            }
+
+            if ((m0 & (CC_StringSpecial | CC_NeedsCleaning)) != 0) { return p; }
+            if ((m1 & (CC_StringSpecial | CC_NeedsCleaning)) != 0) { return p + 1; }
+            if ((m2 & (CC_StringSpecial | CC_NeedsCleaning)) != 0) { return p + 2; }
+            return p + 3;
+        }
+        // }
+
+        for (;;)
+        {
+            if (p == end)
+                return p;
+
+            unsigned const m0 = CharClass(*p);
+            if ((m0 & (CC_StringSpecial | CC_NeedsCleaning)) != 0) {
+                return p;
+            }
+
+            ++p;
+        }
+    }
+}
 
 template <typename It, typename Fn>
 EscapeStringResult<It> EscapeString(It next, It last, Fn yield)

@@ -1150,11 +1150,22 @@ static bool StringifyString(std::string& str, String const& value, Options const
     char const* const first = value.data();
     char const* const last  = value.data() + value.size();
 
-    str += '"';
-    auto const res = strings::EscapeString(first, last, [&](char ch) { str += ch; });
+    bool success = true;
+
     str += '"';
 
-    return res.status == strings::EscapeStringStatus::success;
+    auto const next = json::strings::SkipNonSpecial(first, last);
+    str.append(first, next);
+
+    if (next != last)
+    {
+        auto const res = strings::EscapeString(next, last, [&](char ch) { str += ch; });
+        success = res.status == strings::EscapeStringStatus::success;
+    }
+
+    str += '"';
+
+    return success;
 }
 
 static bool StringifyArray(std::string& str, Array const& value, Options const& options, int curr_indent)
