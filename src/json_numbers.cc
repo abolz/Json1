@@ -22,10 +22,10 @@
 
 #include "json_charclass.h"
 
-#define DTOA_OPTIMIZE_SIZE 0
+#define DTOA_OPTIMIZE_SIZE 1
 #include "dtoa.h"
 
-#define STRTOD_OPTIMIZE_SIZE 0
+#define STRTOD_OPTIMIZE_SIZE 1
 #include "strtod.h"
 
 #include <cassert>
