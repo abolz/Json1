@@ -48,15 +48,20 @@ using namespace json::numbers;
 
 static char* I64ToString(char* next, char* last, int64_t i)
 {
-    uint64_t n = static_cast<uint64_t>(i);
+    // Reuse PrintDecimalDigits from the dtoa implementation.
+    // This routine assumes that n has at most 17 decimal digits.
+    // We only use this here if n has at most 16 decimal digits.
+    JSON_ASSERT(i > -10000000000000000);
+    JSON_ASSERT(i <  10000000000000000);
+
     if (i < 0)
     {
         next[0] = '-';
         next++;
-        n = 0u - n;
+        i = -i;
     }
 
-    int const len = base_conv::dtoa_impl::PrintDecimalDigits(next, last, n);
+    int const len = base_conv::dtoa_impl::PrintDecimalDigits(next, last, static_cast<uint64_t>(i));
     return next + len;
 }
 

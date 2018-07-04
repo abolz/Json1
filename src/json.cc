@@ -908,6 +908,14 @@ struct ParseValueCallbacks /*final*/ : ParseCallbacks
             String str;
             str.reserve(static_cast<size_t>(last - first));
 
+#if 0
+            // XXX:
+            // next (first special character) should be stored when lexing the string...
+            auto const next = strings::SkipNonSpecial(first, last);
+            str.append(first, next);
+            first = next;
+#endif
+
             auto const res = strings::UnescapeString(first, last, [&](char ch) {
                 str.push_back(ch);
             });
