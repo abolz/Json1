@@ -34,8 +34,9 @@ enum ECharClass : uint8_t {
     CC_None             = 0,    // nothing special
     CC_Whitespace       = 0x01, // whitespace  : '\t', '\n', '\r', ' '
     CC_Digit            = 0x02, // digit       : '0'...'9'
-    CC_HexDigit         = 0x04, // hex-digit   : '0'...'9', 'a'...'f', 'A'...'F'
+    CC_AsciiControl     = 0x04,
     CC_IdentifierBody   = 0x10, // ident-body  : IsDigit, IsLetter, '_', '$'
+    CC_ValidEscapedChar = 0x20, // valid escaped chars: '"', '\\', '/', 'b', 'f', 'n', 'r', 't', 'u'
     CC_StringSpecial    = 0x40, // quote or bs : '"', '\'', '`', '\\'
     CC_NeedsCleaning    = 0x80, // needs cleaning (strings)
 };
@@ -44,28 +45,29 @@ inline unsigned CharClass(char ch)
 {
 #define W CC_Whitespace
 #define D CC_Digit
-#define H CC_HexDigit
+#define A CC_AsciiControl
 #define I CC_IdentifierBody
+#define E CC_ValidEscapedChar
 #define S CC_StringSpecial
 #define C CC_NeedsCleaning
 
 static constexpr uint8_t const kMap[] = {
     //  NUL     SOH     STX     ETX     EOT     ENQ     ACK     BEL     BS      HT      LF      VT      FF      CR      SO      SI
-        C,      C,      C,      C,      C,      C,      C,      C,      C,      W|C,    W|C,    C,      C,      W|C,    C,      C,
+        A|C,    A|C,    A|C,    A|C,    A|C,    A|C,    A|C,    A|C,    A|C,    A|W|C,  A|W|C,  A|C,    A|C,    A|W|C,  A|C,    A|C,
     //  DLE     DC1     DC2     DC3     DC4     NAK     SYN     ETB     CAN     EM      SUB     ESC     FS      GS      RS      US
-        C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,
+        A|C,    A|C,    A|C,    A|C,    A|C,    A|C,    A|C,    A|C,    A|C,    A|C,    A|C,    A|C,    A|C,    A|C,    A|C,    A|C,
     //  space   !       "       #       $       %       &       '       (       )       *       +       ,       -       .       /
-        W,      0,      S,      0,      I,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+        W,      0,      S|E,    0,      I,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      E,
     //  0       1       2       3       4       5       6       7       8       9       :       ;       <       =       >       ?
-        D|H|I,  D|H|I,  D|H|I,  D|H|I,  D|H|I,  D|H|I,  D|H|I,  D|H|I,  D|H|I,  D|H|I,  0,      0,      0,      0,      0,      0,
+        D|I,    D|I,    D|I,    D|I,    D|I,    D|I,    D|I,    D|I,    D|I,    D|I,    0,      0,      0,      0,      0,      0,
     //  @       A       B       C       D       E       F       G       H       I       J       K       L       M       N       O
-        0,      H|I,    H|I,    H|I,    H|I,    H|I,    H|I,    I,      I,      I,      I,      I,      I,      I,      I,      I,
+        0,      I,      I,      I,      I,      I,      I,    I,      I,      I,      I,      I,      I,      I,      I,      I,
     //  P       Q       R       S       T       U       V       W       X       Y       Z       [       \       ]       ^       _
-        I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      0,      S|C,    0,      0,      I,
+        I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      0,      E|S|C,  0,      0,      I,
     //  `       a       b       c       d       e       f       g       h       i       j       k       l       m       n       o
-        0,      H|I,    H|I,    H|I,    H|I,    H|I,    H|I,    I,      I,      I,      I,      I,      I,      I,      I,      I,
+        0,      I,      E|I,    I,      I,      I  ,    E|I,    I,      I,      I,      I,      I,      I,      I,      E|I,    I,
     //  p       q       r       s       t       u       v       w       x       y       z       {       |       }       ~       DEL
-        I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      0,      0,      0,      0,      0,
+        I,      I,      E|I,    I,      E|I,    E|I,    I,      I,      I,      I,      I,      0,      0,      0,      0,      0,
         C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,
         C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,
         C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,
@@ -78,20 +80,21 @@ static constexpr uint8_t const kMap[] = {
 
 #undef C
 #undef S
+#undef E
 #undef I
-#undef H
+#undef A
 #undef D
 #undef W
 
     return kMap[static_cast<unsigned char>(ch)];
 }
 
-inline bool IsWhitespace     (char ch) { return (CharClass(ch) & CC_Whitespace    ) != 0; }
-inline bool IsDigit          (char ch) { return (CharClass(ch) & CC_Digit         ) != 0; }
-inline bool IsHexDigit       (char ch) { return (CharClass(ch) & CC_HexDigit      ) != 0; }
-inline bool IsIdentifierBody (char ch) { return (CharClass(ch) & CC_IdentifierBody) != 0; }
-inline bool IsStringSpecial  (char ch) { return (CharClass(ch) & CC_StringSpecial ) != 0; }
-inline bool NeedsCleaning    (char ch) { return (CharClass(ch) & CC_NeedsCleaning ) != 0; }
+inline bool IsWhitespace      (char ch) { return (CharClass(ch) & CC_Whitespace      ) != 0; }
+inline bool IsDigit           (char ch) { return (CharClass(ch) & CC_Digit           ) != 0; }
+inline bool IsIdentifierBody  (char ch) { return (CharClass(ch) & CC_IdentifierBody  ) != 0; }
+inline bool IsValidEscapedChar(char ch) { return (CharClass(ch) & CC_ValidEscapedChar) != 0; }
+inline bool IsStringSpecial   (char ch) { return (CharClass(ch) & CC_StringSpecial   ) != 0; }
+inline bool NeedsCleaning     (char ch) { return (CharClass(ch) & CC_NeedsCleaning   ) != 0; }
 
 #if 1
 inline int HexDigitValue(char ch)
