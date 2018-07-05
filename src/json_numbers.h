@@ -41,36 +41,5 @@ double StringToNumber(char const* first, char const* last, NumberClass nc);
 // Otherwise returns false and stores 'NaN' in `result`.
 bool StringToNumber(double& result, char const* first, char const* last, Options const& options = {});
 
-constexpr double kMaxSafeInteger =  9007199254740991.0;
-constexpr double kMinSafeInteger = -9007199254740991.0;
-
-// https://tc39.github.io/ecma262/#sec-parsefloat-string
-//
-// The parseFloat function produces a Number value dictated by interpretation of
-// the contents of the string argument as a decimal literal.
-//
-// NOTE
-// parseFloat may interpret only a leading portion of string as a Number value;
-// it ignores any code units that cannot be interpreted as part of the notation
-// of a decimal literal, and no indication is given that any such code units
-// were ignored.
-double ParseFloat(char const* first, char const* last);
-
-// https://tc39.github.io/ecma262/#sec-parseint-string-radix
-//
-// The parseInt function produces an integer value dictated by interpretation of
-// the contents of the string argument according to the specified radix. Leading
-// white space in string is ignored. If radix is undefined or 0, it is assumed
-// to be 10 except when the number begins with the code unit pairs 0x or 0X, in
-// which case a radix of 16 is assumed. If radix is 16, the number may also
-// optionally begin with the code unit pairs 0x or 0X.
-//
-// NOTE
-// parseInt may interpret only a leading portion of string as an integer value;
-// it ignores any code units that cannot be interpreted as part of the notation
-// of an integer, and no indication is given that any such code units were
-// ignored.
-double ParseInt(char const* first, char const* last, int radix = 0);
-
 } // namespace numbers
 } // namespace json
