@@ -1186,8 +1186,9 @@ static bool StringifyArray(std::string& str, Array const& value, Options const& 
     {
         if (options.indent_width > 0)
         {
-            JSON_ASSERT(curr_indent <= INT_MAX - options.indent_width);
-            curr_indent += options.indent_width;
+            // Prevent overflow in curr_indent + options.indent_width
+            int const indent_width = (curr_indent <= INT_MAX - options.indent_width) ? options.indent_width : 0;
+            curr_indent += indent_width;
 
             for (;;)
             {
@@ -1203,7 +1204,7 @@ static bool StringifyArray(std::string& str, Array const& value, Options const& 
                 str += ',';
             }
 
-            curr_indent -= options.indent_width;
+            curr_indent -= indent_width;
 
             str += '\n';
             str.append(static_cast<size_t>(curr_indent), ' ');
@@ -1240,8 +1241,9 @@ static bool StringifyObject(std::string& str, Object const& value, Options const
     {
         if (options.indent_width > 0)
         {
-            JSON_ASSERT(curr_indent <= INT_MAX - options.indent_width);
-            curr_indent += options.indent_width;
+            // Prevent overflow in curr_indent + options.indent_width
+            int const indent_width = (curr_indent <= INT_MAX - options.indent_width) ? options.indent_width : 0;
+            curr_indent += indent_width;
 
             for (;;)
             {
@@ -1261,7 +1263,7 @@ static bool StringifyObject(std::string& str, Object const& value, Options const
                 str += ',';
             }
 
-            curr_indent -= options.indent_width;
+            curr_indent -= indent_width;
 
             str += '\n';
             str.append(static_cast<size_t>(curr_indent), ' ');
