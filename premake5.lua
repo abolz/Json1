@@ -156,7 +156,8 @@ project "benchmark"
     language "C++"
     kind "ConsoleApp"
     files {
-        "benchmark/benchmark.cc",
+        "benchmark/*.cc",
+        "benchmark/*.h",
     }
     links {
         "json",
