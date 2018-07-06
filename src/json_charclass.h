@@ -51,7 +51,7 @@ inline unsigned CharClass(char ch)
 #define S CC_StringSpecial
 #define C CC_NeedsCleaning
 
-static constexpr uint8_t const kMap[] = {
+    static constexpr uint8_t const kMap[] = {
     //  NUL     SOH     STX     ETX     EOT     ENQ     ACK     BEL     BS      HT      LF      VT      FF      CR      SO      SI
         A|C,    A|C,    A|C,    A|C,    A|C,    A|C,    A|C,    A|C,    A|C,    A|W|C,  A|W|C,  A|C,    A|C,    A|W|C,  A|C,    A|C,
     //  DLE     DC1     DC2     DC3     DC4     NAK     SYN     ETB     CAN     EM      SUB     ESC     FS      GS      RS      US
@@ -61,7 +61,7 @@ static constexpr uint8_t const kMap[] = {
     //  0       1       2       3       4       5       6       7       8       9       :       ;       <       =       >       ?
         D|I,    D|I,    D|I,    D|I,    D|I,    D|I,    D|I,    D|I,    D|I,    D|I,    0,      0,      0,      0,      0,      0,
     //  @       A       B       C       D       E       F       G       H       I       J       K       L       M       N       O
-        0,      I,      I,      I,      I,      I,      I,    I,      I,      I,      I,      I,      I,      I,      I,      I,
+        0,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,
     //  P       Q       R       S       T       U       V       W       X       Y       Z       [       \       ]       ^       _
         I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      0,      E|S|C,  0,      0,      I,
     //  `       a       b       c       d       e       f       g       h       i       j       k       l       m       n       o
