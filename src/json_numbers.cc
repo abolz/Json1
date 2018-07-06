@@ -389,10 +389,8 @@ double json::numbers::StringToNumber(char const* first, char const* last, Number
         return -std::numeric_limits<double>::infinity();
     }
 
-#if 1
-    // Use a _slightly_ faster method for parsing integers which will fit into a
-    // double-precision number without loss of precision. Larger numbers will be
-    // handled by strtod.
+    // Use a faster method for integers which will fit into a uint64_t.
+    // Let static_cast do the conversion.
     if (nc == NumberClass::integer)
     {
         char const* first_digit = first;
@@ -403,27 +401,28 @@ double json::numbers::StringToNumber(char const* first, char const* last, Number
             ++first_digit;
         }
 
-#if 0
-        JSON_ASSERT(last - first_digit <= INT_MAX);
-        double const result = base_conv::DecimalToDouble(first_digit, static_cast<int>(last - first_digit), /*exponent*/ 0);
-        return is_neg ? -result : result;
-#else
-        // 10^15 < 2^53 = 9007199254740992 < 10^16
-        if (last - first_digit <= 16)
+        auto const num_digits = last - first_digit;
+        if (num_digits <= 20)
         {
-            using namespace json::charclass;
+            auto const max_digits = num_digits <= 19 ? num_digits : 19;
 
-            JSON_ASSERT(IsDigit(*first_digit));
-
-            if (last - first_digit < 16 || HexDigitValue(*first_digit) <= 8 /*|| std::memcmp(first_digit, "9007199254740992", 16) <= 0*/)
+            uint64_t const u = base_conv::strtod_impl::ReadInt<uint64_t>(first_digit, first_digit + max_digits);
+            if (max_digits == num_digits)
             {
-                double const result = ReadDouble_unguarded(first_digit, static_cast<int>(last - first_digit));
-                return is_neg ? -result : result;
+                return is_neg ? -static_cast<double>(u) : static_cast<double>(u);
+            }
+
+            // num_digits == 20.
+            // Check if accumulating one digit more will still fit into a uint64_t.
+
+            unsigned const next_digit = static_cast<unsigned>(first_digit[19]) - '0';
+            if (u <= UINT64_MAX / 10 && next_digit <= UINT64_MAX - 10 * u)
+            {
+                uint64_t const u1 = 10 * u + next_digit;
+                return is_neg ? -static_cast<double>(u1) : static_cast<double>(u1);
             }
         }
-#endif
     }
-#endif
 
     double result;
     if (StringToDouble(result, first, last, Options{}))
