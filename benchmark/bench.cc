@@ -17,6 +17,7 @@
 #endif
 
 #include "bench_json1.h"
+#include "bench_json1_template.h"
 #include "bench_rapidjson.h"
 #include "bench_nlohmann.h"
 
@@ -95,6 +96,24 @@ namespace json1_dom_test {
     }
 }
 
+namespace json1_template_sax_test {
+    void test(jsonstats& stats, const TestFile& file) {
+        if (!json1_template_sax_stats(stats, reinterpret_cast<char const*>(file.data), reinterpret_cast<char const*>(file.data) + file.length)) {
+            fprintf(stderr, "json1 sax parse error\n");
+            abort();
+        }
+    }
+}
+
+namespace json1_template_dom_test {
+    void test(jsonstats& stats, const TestFile& file) {
+        if (!json1_template_dom_stats(stats, reinterpret_cast<char const*>(file.data), reinterpret_cast<char const*>(file.data) + file.length)) {
+            fprintf(stderr, "json1 dom parse error\n");
+            abort();
+        }
+    }
+}
+
 namespace rapidjson_sax_test {
     void test(jsonstats& stats, const TestFile& file) {
         if (!rapidjson_sax_stats(stats, reinterpret_cast<char const*>(file.data), reinterpret_cast<char const*>(file.data) + file.length)) {
@@ -139,10 +158,12 @@ struct TestImplementation {
 };
 TestImplementation test_implementations[] = {
 #if 0
+    { "json1_template sax", &json1_template_sax_test::test },
     { "json1 sax", &json1_sax_test::test },
     { "rapidjson sax", &rapidjson_sax_test::test },
     { "nlohmann sax", &nlohmann_sax_test::test },
 #else
+    { "json1_template dom", &json1_template_dom_test::test },
     { "json1 dom", &json1_dom_test::test },
     { "rapidjson dom", &rapidjson_dom_test::test },
     { "nlohmann dom", &nlohmann_dom_test::test },
@@ -166,7 +187,7 @@ const char* benchmark_files[] = {
     "test_data/update-center.json",
 };
 
-const double SECONDS_PER_TEST = 3.0;
+const double SECONDS_PER_TEST = 8.0;
 
 template<typename T, size_t L>
 size_t array_length(T(&)[L]) {
