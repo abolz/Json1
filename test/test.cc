@@ -1348,7 +1348,7 @@ here */
     })";
 
     json::Options options;
-    options.strip_comments = true;
+    options.skip_comments = true;
     options.allow_trailing_comma = true;
 
     json::Value val;
@@ -1390,7 +1390,7 @@ TEST_CASE("Invalid block comments")
     for (auto const& inp : inputs)
     {
         json::Options options;
-        options.strip_comments = true;
+        options.skip_comments = true;
         json::Value val;
         auto const res = json::parse(val, inp.data(), inp.data() + inp.size(), options);
         CHECK(res.ec != json::ParseStatus::success);
@@ -2596,4 +2596,44 @@ TEST_CASE("number conversions")
             CHECK(static_cast<double>(j.to_uint8_clamped()) == expected[i]);
         }
     }
+}
+
+TEST_CASE("Escape special")
+{
+    json::Value j = "hello </world>";
+    std::string str;
+    json::stringify(str, j);
+    CHECK(str == "\"hello <\\/world>\"");
+}
+
+TEST_CASE("Unquoted keys")
+{
+    std::string inp = R"({
+    a: 1.0,
+    bb: 2.0,
+    ccc: 3.0,
+    dddd: 4.0,
+    eeeee: 5.0,
+    _f6666: 6.0,
+    ggggggg: 7.0,
+    hhhhhhhh: 8.0,
+    "iiiiiiiii": 9.0,
+})";
+
+    json::Value j;
+    json::Options options;
+    options.allow_trailing_comma = true;
+    options.allow_unquoted_keys = true;
+    auto const res = json::parse(j, inp, options);
+
+    CHECK(res == json::ParseStatus::success);
+    CHECK(j["a"] == 1.0);
+    CHECK(j["bb"] == 2.0);
+    CHECK(j["ccc"] == 3.0);
+    CHECK(j["dddd"] == 4.0);
+    CHECK(j["eeeee"] == 5.0);
+    CHECK(j["_f6666"] == 6.0);
+    CHECK(j["ggggggg"] == 7.0);
+    CHECK(j["hhhhhhhh"] == 8.0);
+    CHECK(j["iiiiiiiii"] == 9.0);
 }

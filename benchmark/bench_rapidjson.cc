@@ -2,6 +2,8 @@
 
 #include <vector>
 
+#define RAPIDJSON_SSE2 1
+#define RAPIDJSON_SSE42 1
 #include "../ext/rapidjson/reader.h"
 
 #include "traverse.h"

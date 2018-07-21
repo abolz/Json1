@@ -47,7 +47,7 @@
 #define STRTOD_OPTIMIZE_SIZE 1
 #endif
 
-namespace base_conv {
+namespace baseconv {
 
 namespace strtod_impl {
 
@@ -61,29 +61,29 @@ STRTOD_INLINE Dest ReinterpretBits(Source source)
     return dest;
 }
 
-template <typename Float>
+template <typename Fp>
 struct IEEE
 {
     // NB:
     // Works for double == long double.
-    static_assert(std::numeric_limits<Float>::is_iec559 &&
-                  ((std::numeric_limits<Float>::digits == 24 && std::numeric_limits<Float>::max_exponent == 128) ||
-                   (std::numeric_limits<Float>::digits == 53 && std::numeric_limits<Float>::max_exponent == 1024)),
+    static_assert(std::numeric_limits<Fp>::is_iec559 &&
+                  ((std::numeric_limits<Fp>::digits == 24 && std::numeric_limits<Fp>::max_exponent == 128) ||
+                   (std::numeric_limits<Fp>::digits == 53 && std::numeric_limits<Fp>::max_exponent == 1024)),
         "IEEE-754 single- or double-precision implementation required");
 
-    using ieee_type = Float;
-    using bits_type = typename std::conditional<std::numeric_limits<Float>::digits == 24, uint32_t, uint64_t>::type;
+    using ieee_type = Fp;
+    using bits_type = typename std::conditional<std::numeric_limits<Fp>::digits == 24, uint32_t, uint64_t>::type;
 
     static constexpr int       SignificandSize         = std::numeric_limits<ieee_type>::digits;  // = p   (includes the hidden bit)
     static constexpr int       PhysicalSignificandSize = SignificandSize - 1;                     // = p-1 (excludes the hidden bit)
     static constexpr int       UnbiasedMinExponent     = 1;
-    static constexpr int       UnbiasedMaxExponent     = 2 * std::numeric_limits<Float>::max_exponent - 1 - 1;
-    static constexpr int       ExponentBias            = 2 * std::numeric_limits<Float>::max_exponent / 2 - 1 + (SignificandSize - 1);
+    static constexpr int       UnbiasedMaxExponent     = 2 * std::numeric_limits<Fp>::max_exponent - 1 - 1;
+    static constexpr int       ExponentBias            = 2 * std::numeric_limits<Fp>::max_exponent / 2 - 1 + (SignificandSize - 1);
     static constexpr int       MinExponent             = UnbiasedMinExponent - ExponentBias;
     static constexpr int       MaxExponent             = UnbiasedMaxExponent - ExponentBias;
     static constexpr bits_type HiddenBit               = bits_type{1} << (SignificandSize - 1);   // = 2^(p-1)
     static constexpr bits_type SignificandMask         = HiddenBit - 1;                           // = 2^(p-1) - 1
-    static constexpr bits_type ExponentMask            = bits_type{2 * std::numeric_limits<Float>::max_exponent - 1} << PhysicalSignificandSize;
+    static constexpr bits_type ExponentMask            = bits_type{2 * std::numeric_limits<Fp>::max_exponent - 1} << PhysicalSignificandSize;
     static constexpr bits_type SignMask                = ~(~bits_type{0} >> 1);
 
     bits_type bits;
@@ -162,7 +162,8 @@ namespace strtod_impl {
 STRTOD_INLINE constexpr int Min(int x, int y) { return y < x ? y : x; }
 STRTOD_INLINE constexpr int Max(int x, int y) { return y < x ? x : y; }
 
-STRTOD_INLINE bool IsDigit(char ch)
+template <typename CharT>
+STRTOD_INLINE bool IsDigit(CharT ch)
 {
 #if 0
     return static_cast<unsigned>(ch - '0') < 10;
@@ -171,7 +172,8 @@ STRTOD_INLINE bool IsDigit(char ch)
 #endif
 }
 
-STRTOD_INLINE int DigitValue(char ch)
+template <typename CharT>
+STRTOD_INLINE int DigitValue(CharT ch)
 {
     STRTOD_ASSERT(IsDigit(ch));
     return ch - '0';
@@ -571,13 +573,28 @@ STRTOD_INLINE void Normalize(DiyFpWithError& num)
 // Any integer with at most 19 decimal digits will hence fit into an uint64_t.
 constexpr int kMaxUint64DecimalDigits = 19;
 
+template <typename CharT, typename Int>
+STRTOD_INLINE Int ReadInt(CharT const* f, CharT const* l)
+{
+    STRTOD_ASSERT(l - f <= std::numeric_limits<Int>::digits10);
+
+    Int value = 0;
+    for ( ; f != l; ++f)
+    {
+        STRTOD_ASSERT(IsDigit(*f));
+        value = 10 * value + static_cast<Int>(*f - '0');
+    }
+
+    return value;
+}
+
+#if 1
 template <typename Int>
 STRTOD_INLINE Int ReadInt(char const* f, char const* l)
 {
     STRTOD_ASSERT(l - f <= std::numeric_limits<Int>::digits10);
 
     Int value = 0;
-#if 1
     for ( ; l - f >= 8; f += 8)
     {
         value = 10 * value + static_cast<unsigned char>(f[0]);
@@ -589,19 +606,15 @@ STRTOD_INLINE Int ReadInt(char const* f, char const* l)
         value = 10 * value + static_cast<unsigned char>(f[6]);
         value = 10 * value + static_cast<unsigned char>(f[7]) - Int{533333328};
     }
-#endif
     for ( ; f != l; ++f)
     {
-#if 1
         STRTOD_ASSERT(IsDigit(*f));
-        value = 10 * value + static_cast<unsigned char>(*f) - '0';
-#else
-        value = 10 * value + static_cast<uint32_t>(DigitValue(*f));
-#endif
+        value = 10 * value + static_cast<Int>(*f - '0');
     }
 
     return value;
 }
+#endif
 
 struct CachedPower { // c = f * 2^e ~= 10^k
     uint64_t f;
@@ -1504,7 +1517,8 @@ STRTOD_INLINE double LoadDouble(uint64_t f, int e)
 //
 // PRE: num_digits + exponent <= kMaxDecimalPower
 // PRE: num_digits + exponent >  kMinDecimalPower
-STRTOD_INLINE bool StrtodApprox(double& result, char const* digits, int num_digits, int exponent)
+template <typename CharT>
+STRTOD_INLINE bool StrtodApprox(double& result, CharT const* digits, int num_digits, int exponent)
 {
     using Double = IEEE<double>;
 
@@ -1787,7 +1801,8 @@ STRTOD_INLINE bool StrtodApprox(double& result, char const* digits, int num_digi
     return success;
 }
 
-STRTOD_INLINE bool ComputeGuess(double& result, char const* digits, int num_digits, int exponent)
+template <typename CharT>
+STRTOD_INLINE bool ComputeGuess(double& result, CharT const* digits, int num_digits, int exponent)
 {
     STRTOD_ASSERT(num_digits > 0);
     STRTOD_ASSERT(num_digits <= kMaxSignificantDigits);
@@ -1891,7 +1906,8 @@ STRTOD_INLINE void MulAddU32(DiyInt& x, uint32_t A, uint32_t B = 0)
     }
 }
 
-STRTOD_INLINE void AssignDecimalDigits(DiyInt& x, char const* digits, int num_digits)
+template <typename CharT>
+STRTOD_INLINE void AssignDecimalDigits(DiyInt& x, CharT const* digits, int num_digits)
 {
     static constexpr uint32_t kPow10[] = {
         1, // (unused)
@@ -2010,7 +2026,8 @@ STRTOD_INLINE int Compare(DiyInt const& lhs, DiyInt const& rhs)
 // PRE: num_digits + exponent <= kMaxDecimalPower
 // PRE: num_digits + exponent >  kMinDecimalPower
 // PRE: num_digits            <= kMaxSignificantDigits
-STRTOD_INLINE int CompareBufferWithDiyFp(char const* digits, int num_digits, int exponent, bool nonzero_tail, DiyFp v)
+template <typename CharT>
+STRTOD_INLINE int CompareBufferWithDiyFp(CharT const* digits, int num_digits, int exponent, bool nonzero_tail, DiyFp v)
 {
     STRTOD_ASSERT(num_digits > 0);
     STRTOD_ASSERT(num_digits + exponent <= kMaxDecimalPower);
@@ -2138,7 +2155,8 @@ STRTOD_INLINE double NextFloat(double v)
 // PRE: digits must contain only ASCII characters in the range '0'...'9'.
 // PRE: num_digits >= 0
 // PRE: num_digits + exponent must not overflow.
-inline double DecimalToDouble(char const* digits, int num_digits, int exponent, bool nonzero_tail)
+template <typename CharT>
+STRTOD_INLINE double DecimalToDouble(CharT const* digits, int num_digits, int exponent, bool nonzero_tail)
 {
     STRTOD_ASSERT(num_digits >= 0);
     STRTOD_ASSERT(exponent <= INT_MAX - num_digits);
@@ -2151,30 +2169,24 @@ inline double DecimalToDouble(char const* digits, int num_digits, int exponent, 
     }
 
     // Move trailing zeros into the exponent
-    while (num_digits > 0 && digits[num_digits - 1] == '0')
+    if (!nonzero_tail)
     {
-        num_digits--;
-        exponent++;
+        while (num_digits > 0 && digits[num_digits - 1] == '0')
+        {
+            num_digits--;
+            exponent++;
+        }
     }
 
     if (num_digits > kMaxSignificantDigits)
     {
-        STRTOD_ASSERT(DigitValue(digits[num_digits - 1]) > 0); // since trailing zeros have been trimmed above.
+        STRTOD_ASSERT(nonzero_tail || DigitValue(digits[num_digits - 1]) > 0); // since trailing zeros have been trimmed above.
 
         nonzero_tail = true;
 
         // Discard insignificant digits.
         exponent += num_digits - kMaxSignificantDigits;
         num_digits = kMaxSignificantDigits;
-
-#if 1
-        // Move trailing zeros into the exponent
-        while (num_digits > 0 && digits[num_digits - 1] == '0')
-        {
-            num_digits--;
-            exponent++;
-        }
-#endif
     }
 
     if (num_digits == 0)
@@ -2213,14 +2225,14 @@ inline double DecimalToDouble(char const* digits, int num_digits, int exponent, 
 // PRE: num_digits + exponent must not overflow.
 inline double DecimalToDouble(char const* digits, int num_digits, int exponent, bool nonzero_tail = false)
 {
-    return base_conv::strtod_impl::DecimalToDouble(digits, num_digits, exponent, nonzero_tail);
+    return baseconv::strtod_impl::DecimalToDouble(digits, num_digits, exponent, nonzero_tail);
 }
 
 //==================================================================================================
 // Strtod
 //==================================================================================================
 
-enum class StrtodStatus {
+enum class StrtodResult {
     success,
     input_too_large,
     no_digits,
@@ -2230,34 +2242,35 @@ enum class StrtodStatus {
     // XXX: underflow,
 };
 
-inline StrtodStatus Strtod(double& result, char const*& next, char const* last)
+template <typename CharT>
+inline StrtodResult Strtod(double& result, CharT const*& next, CharT const* last)
 {
-    using base_conv::strtod_impl::IsDigit;
-    using base_conv::strtod_impl::DigitValue;
+    using baseconv::strtod_impl::IsDigit;
+    using baseconv::strtod_impl::DigitValue;
 
     // Inputs larger than kMaxInt (currently) can not be handled.
     // To avoid overflow in integer arithmetic.
     constexpr int const kMaxInt = INT_MAX / 4;
 
-    StrtodStatus status = StrtodStatus::success;
+    StrtodResult status = StrtodResult::success;
     double       value  = 0;
-    char const*  curr   = next;
+    CharT const* curr   = next;
 
-    char digits[kMaxSignificantDigits];
-    int  num_digits   = 0;
-    int  exponent     = 0;
-    bool nonzero_tail = false;
-    bool is_neg       = false;
+    CharT digits[kMaxSignificantDigits];
+    int   num_digits   = 0;
+    int   exponent     = 0;
+    bool  nonzero_tail = false;
+    bool  is_neg       = false;
 
     if (last - curr >= kMaxInt)
     {
-        status = StrtodStatus::input_too_large;
+        status = StrtodResult::input_too_large;
         goto L_done;
     }
 
     if (curr == last)
     {
-        status = StrtodStatus::no_digits;
+        status = StrtodResult::no_digits;
         goto L_done;
     }
 
@@ -2273,7 +2286,7 @@ inline StrtodStatus Strtod(double& result, char const*& next, char const* last)
 
     if (curr == last)
     {
-        status = StrtodStatus::syntax_error;
+        status = StrtodResult::syntax_error;
         goto L_done;
     }
 
@@ -2328,7 +2341,7 @@ inline StrtodStatus Strtod(double& result, char const*& next, char const* last)
         ++curr;
         if (curr == last)
         {
-            status = (num_digits > 0) ? StrtodStatus::success : StrtodStatus::syntax_error;
+            status = (num_digits > 0) ? StrtodResult::success : StrtodResult::syntax_error;
             goto L_convert;
         }
 
@@ -2376,7 +2389,7 @@ inline StrtodStatus Strtod(double& result, char const*& next, char const* last)
         ++curr;
         if (curr == last)
         {
-            status = StrtodStatus::syntax_error;
+            status = StrtodResult::syntax_error;
             goto L_done;
         }
 
@@ -2387,14 +2400,14 @@ inline StrtodStatus Strtod(double& result, char const*& next, char const* last)
             ++curr;
             if (curr == last)
             {
-                status = StrtodStatus::syntax_error;
+                status = StrtodResult::syntax_error;
                 goto L_done;
             }
         }
 
         if (!IsDigit(*curr))
         {
-            status = StrtodStatus::syntax_error;
+            status = StrtodResult::syntax_error;
             goto L_done;
         }
 
@@ -2406,7 +2419,7 @@ inline StrtodStatus Strtod(double& result, char const*& next, char const* last)
 //          if (num > kMaxInt / 10 || digit > kMaxInt - 10 * num)
             if (num > kMaxInt / 10 - 9)
             {
-                //status = StrtodStatus::exponent_too_large;
+                //status = StrtodResult::exponent_too_large;
                 num = kMaxInt;
                 break;
             }
@@ -2432,7 +2445,7 @@ inline StrtodStatus Strtod(double& result, char const*& next, char const* last)
     }
 
 L_convert:
-    value = base_conv::strtod_impl::DecimalToDouble(digits, num_digits, exponent, nonzero_tail);
+    value = baseconv::DecimalToDouble(digits, num_digits, exponent, nonzero_tail);
 
 L_done:
     result = is_neg ? -value : value;
@@ -2444,11 +2457,11 @@ L_done:
 STRTOD_INLINE double Strtod(char const* first, char const* last)
 {
     double d = 0.0;
-    base_conv::Strtod(d, first, last);
+    baseconv::Strtod(d, first, last);
     return d;
 }
 
-} // namespace base_conv
+} // namespace baseconv
 
 /*
 Copyright 2006-2011, the V8 project authors. All rights reserved.

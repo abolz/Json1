@@ -417,8 +417,11 @@ bool Value::less_than(Value const& rhs) const noexcept
 
 static size_t HashCombine(size_t h1, size_t h2) noexcept
 {
+#if SIZE_MAX == UINT32_MAX
     h1 ^= h2 + 0x9E3779B9 + (h1 << 6) + (h1 >> 2);
-//  h1 ^= h2 + 0x9E3779B97F4A7C15 + (h1 << 6) + (h1 >> 2);
+#else
+    h1 ^= h2 + 0x9E3779B97F4A7C15 + (h1 << 6) + (h1 >> 2);
+#endif
     return h1;
 }
 
@@ -851,9 +854,8 @@ String Value::to_string() const
     case Type::number:
         {
             char buf[32];
-            char* first = &buf[0];
-            char* last = numbers::NumberToString(first, first + 32, get_number(), /*force_trailing_dot_zero*/ false);
-            return String(first, last);
+            char* end = numbers::NumberToString(buf, get_number(), /*force_trailing_dot_zero*/ false);
+            return String(buf, end);
         }
     case Type::string:
         return get_string();
@@ -871,7 +873,7 @@ String Value::to_string() const
 // parse
 //==================================================================================================
 
-struct ParseValueCallbacks /*final*/ : ParseCallbacks
+struct ParseValueCallbacks
 {
     static constexpr int kMaxElements = 120;
     static constexpr int kMaxMembers = 120;
@@ -879,19 +881,19 @@ struct ParseValueCallbacks /*final*/ : ParseCallbacks
     std::vector<Value> stack;
     std::vector<String> keys;
 
-    ParseStatus HandleNull(Options const& /*options*/) override
+    ParseStatus HandleNull(Options const& /*options*/)
     {
         stack.emplace_back(nullptr);
         return {};
     }
 
-    ParseStatus HandleBoolean(bool value, Options const& /*options*/) override
+    ParseStatus HandleBoolean(bool value, Options const& /*options*/)
     {
         stack.emplace_back(value);
         return {};
     }
 
-    ParseStatus HandleNumber(char const* first, char const* last, NumberClass nc, Options const& options) override
+    ParseStatus HandleNumber(char const* first, char const* last, NumberClass nc, Options const& options)
     {
         if (options.parse_numbers_as_strings)
             stack.emplace_back(json::string_tag, first, last);
@@ -901,26 +903,16 @@ struct ParseValueCallbacks /*final*/ : ParseCallbacks
         return {};
     }
 
-    ParseStatus HandleString(char const* first, char const* last, bool needs_cleaning, Options const& /*options*/) override
+    ParseStatus HandleString(char const* first, char const* last, StringClass string_class, Options const& /*options*/)
     {
-        if (needs_cleaning)
+        if (string_class == StringClass::needs_cleaning)
         {
             String str;
+
             str.reserve(static_cast<size_t>(last - first));
 
-#if 0
-            // XXX:
-            // next (first special character) should be stored when lexing the string...
-            auto const next = strings::SkipNonSpecial(first, last);
-            str.append(first, next);
-            first = next;
-#endif
-
-            auto const res = strings::UnescapeString(first, last, [&](char ch) {
-                str.push_back(ch);
-            });
-
-            if (res.status != strings::UnescapeStringStatus::success)
+            auto const res = strings::UnescapeString(first, last, [&](char ch) { str.push_back(ch); });
+            if (res.status != strings::Status::success)
                 return ParseStatus::invalid_string;
 
             stack.emplace_back(std::move(str));
@@ -933,19 +925,19 @@ struct ParseValueCallbacks /*final*/ : ParseCallbacks
         return {};
     }
 
-    ParseStatus HandleBeginArray(Options const& /*options*/) override
+    ParseStatus HandleBeginArray(Options const& /*options*/)
     {
         stack.emplace_back(json::array_tag);
         return {};
     }
 
-    ParseStatus HandleEndArray(size_t count, Options const& /*options*/) override
+    ParseStatus HandleEndArray(size_t count, Options const& /*options*/)
     {
         PopElements(count);
         return {};
     }
 
-    ParseStatus HandleEndElement(size_t& count, Options const& /*options*/) override
+    ParseStatus HandleEndElement(size_t& count, Options const& /*options*/)
     {
         JSON_ASSERT(!stack.empty());
         JSON_ASSERT(count != 0);
@@ -959,30 +951,27 @@ struct ParseValueCallbacks /*final*/ : ParseCallbacks
         return {};
     }
 
-    ParseStatus HandleBeginObject(Options const& /*options*/) override
+    ParseStatus HandleBeginObject(Options const& /*options*/)
     {
         stack.emplace_back(json::object_tag);
         return {};
     }
 
-    ParseStatus HandleEndObject(size_t count, Options const& /*options*/) override
+    ParseStatus HandleEndObject(size_t count, Options const& /*options*/)
     {
         PopMembers(count);
         return {};
     }
 
-    ParseStatus HandleKey(char const* first, char const* last, bool needs_cleaning, Options const& /*options*/) override
+    ParseStatus HandleKey(char const* first, char const* last, StringClass string_class, Options const& /*options*/)
     {
-        if (needs_cleaning)
+        if (string_class == StringClass::needs_cleaning)
         {
             keys.emplace_back();
             keys.back().reserve(static_cast<size_t>(last - first));
 
-            auto const res = strings::UnescapeString(first, last, [&](char ch) {
-                keys.back().push_back(ch);
-            });
-
-            if (res.status != strings::UnescapeStringStatus::success)
+            auto const res = strings::UnescapeString(first, last, [&](char ch) { keys.back().push_back(ch); });
+            if (res.status != strings::Status::success)
                 return ParseStatus::invalid_string; // return ParseStatus::invalid_key;
         }
         else
@@ -993,7 +982,7 @@ struct ParseValueCallbacks /*final*/ : ParseCallbacks
         return {};
     }
 
-    ParseStatus HandleEndMember(size_t& count, Options const& /*options*/) override
+    ParseStatus HandleEndMember(size_t& count, Options const& /*options*/)
     {
         JSON_ASSERT(!keys.empty());
         JSON_ASSERT(!stack.empty());
@@ -1024,7 +1013,19 @@ private:
         auto const E = stack.end();
 
         auto& arr = I[-1].get_array();
-        arr.insert(arr.end(), std::make_move_iterator(I), std::make_move_iterator(E));
+        //if (options.ignore_null_values)
+        //{
+        //    for (std::ptrdiff_t i = 0; i != count; ++i)
+        //    {
+        //        if (I[i].is_null())
+        //            continue;
+        //        arr.push_back(std::move(*I));
+        //    }
+        //}
+        //else
+        {
+            arr.insert(arr.end(), std::make_move_iterator(I), std::make_move_iterator(E));
+        }
 
         stack.erase(I, E);
 
@@ -1049,17 +1050,16 @@ private:
 
         auto& obj = Iv[-1].get_object();
 
-#if 1
         for (std::ptrdiff_t i = 0; i != count; ++i)
         {
             auto& K = Ik[i];
             auto& V = Iv[i];
+
+            //if (options.ignore_null_values && V.is_null())
+            //    continue;
+
             obj[std::move(K)] = std::move(V);
         }
-#else
-        obj.insert(std::make_move_iterator(Ik), std::make_move_iterator(keys.end()),
-                   std::make_move_iterator(Iv), std::make_move_iterator(stack.end()));
-#endif
 
         stack.erase(Iv, stack.end());
         keys.erase(Ik, keys.end());
@@ -1072,7 +1072,7 @@ ParseResult json::parse(Value& value, char const* next, char const* last, Option
 {
     ParseValueCallbacks cb;
 
-    auto const res = json::parse(cb, next, last, options);
+    auto const res = json::ParseSAX(cb, next, last, options);
     if (res.ec == ParseStatus::success)
     {
         JSON_ASSERT(cb.stack.size() == 1);
@@ -1098,9 +1098,10 @@ ParseStatus json::parse(Value& value, std::string const& str, Options const& opt
 
 static bool StringifyValue(std::string& str, Value const& value, Options const& options, int curr_indent);
 
-static bool StringifyNull(std::string& str)
+static bool StringifyNull(std::string& str, Options const& /*options*/)
 {
-    str += "null";
+    //if (!options.ignore_null_values)
+        str += "null";
     return true;
 }
 
@@ -1112,43 +1113,18 @@ static bool StringifyBoolean(std::string& str, bool value)
 
 static bool StringifyNumber(std::string& str, double value, Options const& options)
 {
-    if (!std::isfinite(value))
+    if (!options.allow_nan_inf && !std::isfinite(value))
     {
-        if (!options.allow_nan_inf)
-        {
+        // XXX:
+        // Should ignore_null_values apply here?!?!
+        //if (!options.ignore_null_values)
             str += "null";
-        }
-        else if (std::isnan(value))
-        {
-            str += "NaN";
-        }
-        else
-        {
-            if (value < 0)
-                str += '-';
-
-            str += "Infinity";
-        }
+        return true;
     }
-#if 0
-    else if (value == 0.0)
-    {
-        // Handle +-0.
-        // Interpret -0 as a floating-point number and +0 as an integer.
 
-        if (std::signbit(value))
-            str += "-0.0";
-        else
-            str += '0';
-    }
-#endif
-    else
-    {
-        char buf[32];
-        char* end = numbers::NumberToString(buf, buf + 32, value, /*emit_trailing_dot_zero*/ true);
-
-        str.append(buf, end);
-    }
+    char buf[32];
+    char* end = numbers::NumberToString(buf, value, /*force_trailing_dot_zero*/ true);
+    str.append(buf, end);
 
     return true;
 }
@@ -1162,13 +1138,18 @@ static bool StringifyString(std::string& str, String const& value, Options const
 
     str += '"';
 
-    auto const next = json::strings::SkipNonSpecial(first, last);
+#if 0
+    // XXX: '/'!!!
+    auto const next = json::strings::SkipNonSpecialASCII(first, last);
     str.append(first, next);
+#else
+    auto const next = first;
+#endif
 
     if (next != last)
     {
         auto const res = strings::EscapeString(next, last, [&](char ch) { str += ch; });
-        success = res.status == strings::EscapeStringStatus::success;
+        success = res.status == strings::Status::success;
     }
 
     str += '"';
@@ -1186,42 +1167,67 @@ static bool StringifyArray(std::string& str, Array const& value, Options const& 
     {
         if (options.indent_width > 0)
         {
+            bool skipped_all = true;
+
             // Prevent overflow in curr_indent + options.indent_width
             int const indent_width = (curr_indent <= INT_MAX - options.indent_width) ? options.indent_width : 0;
             curr_indent += indent_width;
 
             for (;;)
             {
-                str += '\n';
-                str.append(static_cast<size_t>(curr_indent), ' ');
+                //bool const skip = options.ignore_null_values && I->is_null();
+                //if (skip)
+                //{
+                //    if (++I == E)
+                //        break;
+                //}
+                //else
+                {
+                    skipped_all = false;
 
-                if (!StringifyValue(str, *I, options, curr_indent))
-                    return false;
+                    str += '\n';
+                    str.append(static_cast<size_t>(curr_indent), ' ');
 
-                if (++I == E)
-                    break;
+                    if (!StringifyValue(str, *I, options, curr_indent))
+                        return false;
 
-                str += ',';
+                    if (++I == E)
+                        break;
+
+                    str += ',';
+                }
             }
 
             curr_indent -= indent_width;
 
-            str += '\n';
-            str.append(static_cast<size_t>(curr_indent), ' ');
+            if (!skipped_all)
+            {
+                str += '\n';
+                str.append(static_cast<size_t>(curr_indent), ' ');
+            }
         }
         else
         {
             for (;;)
             {
-                if (!StringifyValue(str, *I, options, curr_indent))
-                    return false;
+                //bool const skip = options.ignore_null_values && I->is_null();
+                //if (skip)
+                //{
+                //    if (++I == E)
+                //        break;
+                //}
+                //else
+                {
+                    if (!StringifyValue(str, *I, options, curr_indent))
+                        return false;
 
-                if (++I == E)
-                    break;
+                    if (++I == E)
+                        break;
 
-                str += ',';
-                if (options.indent_width == 0)
-                    str += ' ';
+                    str += ',';
+                    if (options.indent_width == 0)
+                        str += ' ';
+                }
             }
         }
     }
@@ -1241,51 +1247,74 @@ static bool StringifyObject(std::string& str, Object const& value, Options const
     {
         if (options.indent_width > 0)
         {
+            bool skipped_all = true;
+
             // Prevent overflow in curr_indent + options.indent_width
             int const indent_width = (curr_indent <= INT_MAX - options.indent_width) ? options.indent_width : 0;
             curr_indent += indent_width;
 
             for (;;)
             {
-                str += '\n';
-                str.append(static_cast<size_t>(curr_indent), ' ');
+                //bool const skip = options.ignore_null_values && I->second.is_null();
+                //if (skip)
+                //{
+                //    if (++I == E)
+                //        break;
+                //}
+                //else
+                {
+                    str += '\n';
+                    str.append(static_cast<size_t>(curr_indent), ' ');
 
-                if (!StringifyString(str, I->first, options))
-                    return false;
-                str += ':';
-                str += ' ';
-                if (!StringifyValue(str, I->second, options, curr_indent))
-                    return false;
+                    if (!StringifyString(str, I->first, options))
+                        return false;
+                    str += ':';
+                    str += ' ';
+                    if (!StringifyValue(str, I->second, options, curr_indent))
+                        return false;
 
-                if (++I == E)
-                    break;
+                    if (++I == E)
+                        break;
 
-                str += ',';
+                    str += ',';
+                }
             }
 
             curr_indent -= indent_width;
 
-            str += '\n';
-            str.append(static_cast<size_t>(curr_indent), ' ');
+            if (!skipped_all)
+            {
+                str += '\n';
+                str.append(static_cast<size_t>(curr_indent), ' ');
+            }
         }
         else
         {
             for (;;)
             {
-                if (!StringifyString(str, I->first, options))
-                    return false;
-                str += ':';
-                if (options.indent_width == 0)
-                    str += ' ';
-                if (!StringifyValue(str, I->second, options, curr_indent))
-                    return false;
+                //bool const skip = options.ignore_null_values && I->second.is_null();
+                //if (skip)
+                //{
+                //    if (++I == E)
+                //        break;
+                //}
+                //else
+                {
+                    if (!StringifyString(str, I->first, options))
+                        return false;
+                    str += ':';
+                    if (options.indent_width == 0)
+                        str += ' ';
+                    if (!StringifyValue(str, I->second, options, curr_indent))
+                        return false;
 
-                if (++I == E)
-                    break;
+                    if (++I == E)
+                        break;
 
-                str += ',';
-                if (options.indent_width == 0)
-                    str += ' ';
+                    str += ',';
+                    if (options.indent_width == 0)
+                        str += ' ';
+                }
             }
         }
     }
@@ -1301,9 +1330,9 @@ static bool StringifyValue(std::string& str, Value const& value, Options const& 
     {
     case Type::undefined:
         JSON_ASSERT(false && "cannot stringify 'undefined'"); // LCOV_EXCL_LINE
-        return StringifyNull(str);
+        return StringifyNull(str, options);
     case Type::null:
-        return StringifyNull(str);
+        return StringifyNull(str, options);
     case Type::boolean:
         return StringifyBoolean(str, value.get_boolean());
     case Type::number:

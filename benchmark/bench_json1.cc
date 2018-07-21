@@ -10,19 +10,19 @@ using namespace json;
 
 namespace {
 
-struct SaxHandler : public ParseCallbacks
+struct SaxHandler
 {
     jsonstats& stats;
 
     SaxHandler(jsonstats& s) : stats(s) {}
 
-    ParseStatus HandleNull(Options const& /*options*/) override
+    ParseStatus HandleNull(Options const& /*options*/)
     {
         ++stats.null_count;
         return {};
     }
 
-    ParseStatus HandleBoolean(bool value, Options const& /*options*/) override
+    ParseStatus HandleBoolean(bool value, Options const& /*options*/)
     {
         if (value)
             ++stats.true_count;
@@ -31,75 +31,74 @@ struct SaxHandler : public ParseCallbacks
         return {};
     }
 
-    ParseStatus HandleNumber(char const* first, char const* last, NumberClass nc, Options const& /*options*/) override
+    ParseStatus HandleNumber(char const* first, char const* last, NumberClass nc, Options const& /*options*/)
     {
         ++stats.number_count;
         stats.total_number_value += json::numbers::StringToNumber(first, last, nc);
         return {};
     }
 
-    ParseStatus HandleString(char const* first, char const* last, bool needs_cleaning, Options const& /*options*/) override
+    ParseStatus HandleString(char const* first, char const* last, StringClass sc, Options const& /*options*/)
     {
         ++stats.string_count;
-        size_t len = 0;
-        if (needs_cleaning)
+        intptr_t len = 0;
+        if (sc == StringClass::needs_cleaning)
         {
             auto const res = json::strings::UnescapeString(first, last, [&](char) { ++len; });
-
-            if (res.status != json::strings::UnescapeStringStatus::success)
+            if (res.status != json::strings::Status::success)
                 return ParseStatus::invalid_string;
         }
         else
         {
-            len = static_cast<size_t>(last - first);
+            len = last - first;
         }
-        stats.total_string_length += len;
+        stats.total_string_length += static_cast<size_t>(len);
         return {};
     }
 
-    ParseStatus HandleBeginArray(Options const& /*options*/) override
+    ParseStatus HandleBeginArray(Options const& /*options*/)
     {
         ++stats.array_count;
         return {};
     }
 
-    ParseStatus HandleEndArray(size_t /*count*/, Options const& /*options*/) override
+    ParseStatus HandleEndArray(size_t /*count*/, Options const& /*options*/)
     {
         //stats.total_array_length += count;
         return {};
     }
 
-    ParseStatus HandleEndElement(size_t& /*count*/, Options const& /*options*/) override
+    ParseStatus HandleEndElement(size_t& /*count*/, Options const& /*options*/)
     {
         return {};
     }
 
-    ParseStatus HandleBeginObject(Options const& /*options*/) override
+    ParseStatus HandleBeginObject(Options const& /*options*/)
     {
         ++stats.object_count;
         return {};
     }
 
-    ParseStatus HandleEndObject(size_t /*count*/, Options const& /*options*/) override
+    ParseStatus HandleEndObject(size_t /*count*/, Options const& /*options*/)
     {
         //stats.total_object_length += count;
         return {};
     }
 
-    ParseStatus HandleEndMember(size_t& /*count*/, Options const& /*options*/) override
+    ParseStatus HandleEndMember(size_t& /*count*/, Options const& /*options*/)
     {
         return {};
     }
 
-    ParseStatus HandleKey(char const* first, char const* last, bool needs_cleaning, Options const& /*options*/) override
+    ParseStatus HandleKey(char const* first, char const* last, StringClass sc, Options const& /*options*/)
     {
         ++stats.key_count;
         size_t len = 0;
-        if (needs_cleaning)
+        if (sc == StringClass::needs_cleaning)
         {
             auto const res = json::strings::UnescapeString(first, last, [&](char) { ++len; });
 
-            if (res.status != json::strings::UnescapeStringStatus::success)
+            if (res.status != json::strings::Status::success)
                 return ParseStatus::invalid_string;
         }
         else
@@ -117,7 +116,7 @@ bool json1_sax_stats(jsonstats& stats, char const* first, char const* last)
 {
     SaxHandler handler(stats);
 
-    auto const res = json::parse(handler, first, last);
+    auto const res = json::ParseSAX(handler, first, last);
     return res.ec == json::ParseStatus::success;
 }
 

@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include "json_parse.h"
+#include "json_parser.h"
 
 #include <cassert>
 #include <cstdint>
@@ -1422,6 +1422,54 @@ ParseStatus parse(Value& value, std::string const& str, Options const& options =
 // Returns false only if the JSON value contains invalid UTF-8 strings and
 // options.allow_invalid_unicode is false.
 bool stringify(std::string& str, Value const& value, Options const& options = {});
+
+//==================================================================================================
+// traverse
+//==================================================================================================
+
+//enum class TraverseResult {
+//    done,
+//    skip,
+//    continue_,
+//};
+
+//template <typename TraverseCallbacks>
+//bool traverse(TraverseCallbacks cb, Value const& value)
+//{
+//    switch (value.type())
+//    {
+//    case json::Type::undefined:
+//        return false;
+//    case json::Type::null:
+//        return cb.HandleNull();
+//    case json::Type::boolean:
+//        return cb.HandleBoolean(value.get_boolean());
+//    case json::Type::number:
+//        return cb.HandleNumber(value.get_number());
+//    case json::Type::string:
+//        return cb.HandleString(value.get_string());
+//    case json::Type::array:
+//        if (!cb.HandleBeginArray(value.get_array().size())) {
+//            return false;
+//        }
+//        for (auto const& e : value.get_array()) {
+//            if (!json::traverse(cb, e)) {
+//                return false;
+//            }
+//        }
+//        return cb.HandleEndArray();
+//    case json::Type::object:
+//        if (!cb.HandleBeginObject(value.get_object().size())) {
+//            return false;
+//        }
+//        for (auto const& e : value.get_object()) {
+//            if (!cb.HandleKey(e.first) || !json::traverse(cb, e.second)) {
+//                return false;
+//            }
+//        }
+//        return cb.HandleEndObject();
+//    }
+//}
 
 } // namespace json
 

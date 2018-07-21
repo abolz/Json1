@@ -1,136 +1,76 @@
-Implementation,File,MB/s
 ---
-json1_template sax  test_data/floats.json                                 174.99 MB/sec
-json1 sax           test_data/floats.json                                 166.65 MB/sec x1.0501
-rapidjson sax       test_data/floats.json                                 203.34 MB/sec x0.8606
-nlohmann sax        test_data/floats.json                                  16.43 MB/sec x10.6494
+rapidjson sax       test_data/floats.json                      118.77 ms (  190.88 MB/sec)
+json1 sax           test_data/floats.json                      121.01 ms (  187.35 MB/sec) --- x0.9815
 ---
-json1_template sax  test_data/signed_ints.json                            356.68 MB/sec
-json1 sax           test_data/signed_ints.json                            309.52 MB/sec x1.1524
-rapidjson sax       test_data/signed_ints.json                            252.31 MB/sec x1.4137
-nlohmann sax        test_data/signed_ints.json                             37.61 MB/sec x9.4846
+rapidjson sax       test_data/signed_ints.json                 101.64 ms (  249.70 MB/sec)
+json1 sax           test_data/signed_ints.json                  63.97 ms (  396.71 MB/sec) --- x1.5888
 ---
-json1_template sax  test_data/unsigned_ints.json                          344.09 MB/sec
-json1 sax           test_data/unsigned_ints.json                          299.35 MB/sec x1.1494
-rapidjson sax       test_data/unsigned_ints.json                          252.77 MB/sec x1.3613
-nlohmann sax        test_data/unsigned_ints.json                           38.65 MB/sec x8.9017
+rapidjson sax       test_data/unsigned_ints.json               100.56 ms (  252.56 MB/sec)
+json1 sax           test_data/unsigned_ints.json                66.23 ms (  383.49 MB/sec) --- x1.5184
 ---
-json1_template sax  test_data/allthethings.json                           498.70 MB/sec
-json1 sax           test_data/allthethings.json                           423.43 MB/sec x1.1777
-rapidjson sax       test_data/allthethings.json                           223.62 MB/sec x2.2301
-nlohmann sax        test_data/allthethings.json                            75.17 MB/sec x6.6343
+rapidjson sax       test_data/allthethings.json                 20.65 ms (  221.72 MB/sec)
+json1 sax           test_data/allthethings.json                  5.03 ms (  910.86 MB/sec) --- x4.1083
 ---
-json1_template sax  test_data/apache_builds.json                          448.53 MB/sec
-json1 sax           test_data/apache_builds.json                          375.14 MB/sec x1.1957
-rapidjson sax       test_data/apache_builds.json                          206.67 MB/sec x2.1703
-nlohmann sax        test_data/apache_builds.json                           74.89 MB/sec x5.9891
+rapidjson sax       test_data/apache_builds.json                 0.62 ms (  204.31 MB/sec)
+json1 sax           test_data/apache_builds.json                 0.15 ms (  833.33 MB/sec) --- x4.0788
 ---
-json1_template sax  test_data/canada.json                                 160.83 MB/sec
-json1 sax           test_data/canada.json                                 140.80 MB/sec x1.1423
-rapidjson sax       test_data/canada.json                                 157.73 MB/sec x1.0196
-nlohmann sax        test_data/canada.json                                  12.71 MB/sec x12.6531
+rapidjson sax       test_data/canada.json                       14.39 ms (  156.46 MB/sec)
+json1 sax           test_data/canada.json                       12.54 ms (  179.49 MB/sec) --- x1.1472
 ---
-json1_template sax  test_data/citm_catalog.json                           526.11 MB/sec
-json1 sax           test_data/citm_catalog.json                           454.54 MB/sec x1.1575
-rapidjson sax       test_data/citm_catalog.json                           495.65 MB/sec x1.0615
-nlohmann sax        test_data/citm_catalog.json                           114.23 MB/sec x4.6058
+rapidjson sax       test_data/citm_catalog.json                  3.67 ms (  484.03 MB/sec)
+json1 sax           test_data/citm_catalog.json                  2.48 ms (  715.84 MB/sec) --- x1.4789
 ---
-json1_template sax  test_data/github_events.json                          471.01 MB/sec
-json1 sax           test_data/github_events.json                          416.78 MB/sec x1.1301
-rapidjson sax       test_data/github_events.json                          187.71 MB/sec x2.5093
-nlohmann sax        test_data/github_events.json                           64.02 MB/sec x7.3569
+rapidjson sax       test_data/github_events.json                 0.35 ms (  184.88 MB/sec)
+json1 sax           test_data/github_events.json                 0.08 ms (  851.58 MB/sec) --- x4.6061
 ---
-json1_template sax  test_data/instruments.json                            364.18 MB/sec
-json1 sax           test_data/instruments.json                            308.38 MB/sec x1.1810
-rapidjson sax       test_data/instruments.json                            355.13 MB/sec x1.0255
-nlohmann sax        test_data/instruments.json                             84.59 MB/sec x4.3050
+rapidjson sax       test_data/instruments.json                   0.63 ms (  349.20 MB/sec)
+json1 sax           test_data/instruments.json                   0.40 ms (  546.04 MB/sec) --- x1.5637
 ---
-json1_template sax  test_data/mesh.json                                   273.31 MB/sec
-json1 sax           test_data/mesh.json                                   238.73 MB/sec x1.1448
-rapidjson sax       test_data/mesh.json                                   275.22 MB/sec x0.9931
-nlohmann sax        test_data/mesh.json                                    28.93 MB/sec x9.4482
+rapidjson sax       test_data/mesh.json                          5.83 ms (  270.45 MB/sec)
+json1 sax           test_data/mesh.json                          5.23 ms (  301.74 MB/sec) --- x1.1157
 ---
-json1_template sax  test_data/svg_menu.json                               283.04 MB/sec
-json1 sax           test_data/svg_menu.json                               212.28 MB/sec x1.3333
-rapidjson sax       test_data/svg_menu.json                               242.61 MB/sec x1.1667
-nlohmann sax        test_data/svg_menu.json                                77.19 MB/sec x3.6667
+rapidjson sax       test_data/twitter.json                       2.54 ms (  254.24 MB/sec)
+json1 sax           test_data/twitter.json                       1.60 ms (  404.73 MB/sec) --- x1.5919
 ---
-json1_template sax  test_data/twitter.json                                377.28 MB/sec
-json1 sax           test_data/twitter.json                                318.80 MB/sec x1.1835
-rapidjson sax       test_data/twitter.json                                259.45 MB/sec x1.4541
-nlohmann sax        test_data/twitter.json                                 80.29 MB/sec x4.6987
----
-json1_template sax  test_data/update-center.json                          487.02 MB/sec
-json1 sax           test_data/update-center.json                          431.13 MB/sec x1.1296
-rapidjson sax       test_data/update-center.json                          237.37 MB/sec x2.0517
-nlohmann sax        test_data/update-center.json                           78.81 MB/sec x6.1793
+rapidjson sax       test_data/update-center.json                 3.62 ms (  232.61 MB/sec)
+json1 sax           test_data/update-center.json                 1.03 ms (  817.39 MB/sec) --- x3.5140
 
 
 
 
-Implementation,File,MB/s
 ---
-json1_template dom  test_data/floats.json                                 119.31 MB/sec
-json1 dom           test_data/floats.json                                 115.84 MB/sec x1.0299
-rapidjson dom       test_data/floats.json                                 141.48 MB/sec x0.8433
-nlohmann dom        test_data/floats.json                                  16.03 MB/sec x7.4430
+rapidjson dom       test_data/floats.json                      166.10 ms (  136.49 MB/sec)
+json1 dom           test_data/floats.json                      187.82 ms (  120.70 MB/sec) --- x0.8843
 ---
-json1_template dom  test_data/signed_ints.json                            189.26 MB/sec
-json1 dom           test_data/signed_ints.json                            176.73 MB/sec x1.0709
-rapidjson dom       test_data/signed_ints.json                            172.45 MB/sec x1.0975
-nlohmann dom        test_data/signed_ints.json                             35.73 MB/sec x5.2964
+rapidjson dom       test_data/signed_ints.json                 149.88 ms (  169.33 MB/sec)
+json1 dom           test_data/signed_ints.json                 132.65 ms (  191.32 MB/sec) --- x1.1298
 ---
-json1_template dom  test_data/unsigned_ints.json                          183.11 MB/sec
-json1 dom           test_data/unsigned_ints.json                          175.13 MB/sec x1.0456
-rapidjson dom       test_data/unsigned_ints.json                          171.68 MB/sec x1.0666
-nlohmann dom        test_data/unsigned_ints.json                           36.78 MB/sec x4.9782
+rapidjson dom       test_data/unsigned_ints.json               148.69 ms (  170.81 MB/sec)
+json1 dom           test_data/unsigned_ints.json               135.83 ms (  186.99 MB/sec) --- x1.0947
 ---
-json1_template dom  test_data/allthethings.json                            90.42 MB/sec
-json1 dom           test_data/allthethings.json                            86.83 MB/sec x1.0414
-rapidjson dom       test_data/allthethings.json                            79.57 MB/sec x1.1364
-nlohmann dom        test_data/allthethings.json                            42.69 MB/sec x2.1181
+rapidjson dom       test_data/allthethings.json                 64.48 ms (   71.01 MB/sec)
+json1 dom           test_data/allthethings.json                 51.90 ms (   88.23 MB/sec) --- x1.2424
 ---
-json1_template dom  test_data/apache_builds.json                           95.82 MB/sec
-json1 dom           test_data/apache_builds.json                           90.93 MB/sec x1.0538
-rapidjson dom       test_data/apache_builds.json                           84.82 MB/sec x1.1296
-nlohmann dom        test_data/apache_builds.json                           45.24 MB/sec x2.1180
+rapidjson dom       test_data/apache_builds.json                 1.54 ms (   82.59 MB/sec)
+json1 dom           test_data/apache_builds.json                 1.34 ms (   95.26 MB/sec) --- x1.1535
 ---
-json1_template dom  test_data/canada.json                                  73.99 MB/sec
-json1 dom           test_data/canada.json                                  69.39 MB/sec x1.0663
-rapidjson dom       test_data/canada.json                                  74.37 MB/sec x0.9949
-nlohmann dom        test_data/canada.json                                  11.20 MB/sec x6.6045
+rapidjson dom       test_data/canada.json                       30.53 ms (   73.73 MB/sec)
+json1 dom           test_data/canada.json                       31.00 ms (   72.61 MB/sec) --- x0.9848
 ---
-json1_template dom  test_data/citm_catalog.json                           149.33 MB/sec
-json1 dom           test_data/citm_catalog.json                           141.13 MB/sec x1.0581
-rapidjson dom       test_data/citm_catalog.json                           144.86 MB/sec x1.0309
-nlohmann dom        test_data/citm_catalog.json                            68.49 MB/sec x2.1803
+rapidjson dom       test_data/citm_catalog.json                 13.01 ms (  136.65 MB/sec)
+json1 dom           test_data/citm_catalog.json                 12.72 ms (  139.75 MB/sec) --- x1.0227
 ---
-json1_template dom  test_data/github_events.json                           97.84 MB/sec
-json1 dom           test_data/github_events.json                           94.84 MB/sec x1.0317
-rapidjson dom       test_data/github_events.json                           84.64 MB/sec x1.1560
-nlohmann dom        test_data/github_events.json                           41.07 MB/sec x2.3822
+rapidjson dom       test_data/github_events.json                 0.79 ms (   82.32 MB/sec)
+json1 dom           test_data/github_events.json                 0.65 ms (   99.74 MB/sec) --- x1.2117
 ---
-json1_template dom  test_data/instruments.json                            101.41 MB/sec
-json1 dom           test_data/instruments.json                             95.61 MB/sec x1.0606
-rapidjson dom       test_data/instruments.json                             99.99 MB/sec x1.0142
-nlohmann dom        test_data/instruments.json                             48.49 MB/sec x2.0913
+rapidjson dom       test_data/instruments.json                   2.27 ms (   96.87 MB/sec)
+json1 dom           test_data/instruments.json                   2.25 ms (   97.86 MB/sec) --- x1.0102
 ---
-json1_template dom  test_data/mesh.json                                   183.57 MB/sec
-json1 dom           test_data/mesh.json                                   175.24 MB/sec x1.0476
-rapidjson dom       test_data/mesh.json                                   206.68 MB/sec x0.8882
-nlohmann dom        test_data/mesh.json                                    27.40 MB/sec x6.6988
+rapidjson dom       test_data/mesh.json                          7.74 ms (  203.72 MB/sec)
+json1 dom           test_data/mesh.json                          8.73 ms (  180.69 MB/sec) --- x0.8869
 ---
-json1_template dom  test_data/svg_menu.json                                62.90 MB/sec
-json1 dom           test_data/svg_menu.json                                58.56 MB/sec x1.0741
-rapidjson dom       test_data/svg_menu.json                                60.65 MB/sec x1.0370
-nlohmann dom        test_data/svg_menu.json                                37.74 MB/sec x1.6667
+rapidjson dom       test_data/twitter.json                       7.45 ms (   86.85 MB/sec)
+json1 dom           test_data/twitter.json                       7.14 ms (   90.59 MB/sec) --- x1.0431
 ---
-json1_template dom  test_data/twitter.json                                 95.92 MB/sec
-json1 dom           test_data/twitter.json                                 90.87 MB/sec x1.0556
-rapidjson dom       test_data/twitter.json                                 92.21 MB/sec x1.0402
-nlohmann dom        test_data/twitter.json                                 48.14 MB/sec x1.9926
----
-json1_template dom  test_data/update-center.json                          105.79 MB/sec
-json1 dom           test_data/update-center.json                          100.16 MB/sec x1.0563
-rapidjson dom       test_data/update-center.json                           92.42 MB/sec x1.1446
-nlohmann dom        test_data/update-center.json                           47.03 MB/sec x2.2495
+rapidjson dom       test_data/update-center.json                 9.74 ms (   86.47 MB/sec)
+json1 dom           test_data/update-center.json                 8.41 ms (  100.12 MB/sec) --- x1.1580

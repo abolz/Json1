@@ -1,6 +1,7 @@
 /.vscode/
 /.vs/
 /backups/
+/benchmark/absl/
 /bin/
 /build/
 /ext/

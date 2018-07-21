@@ -9,6 +9,8 @@
 #include <algorithm>
 #include <vector>
 #include <time.h>
+#include <cmath>
+#include <chrono>
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN 1
@@ -17,9 +19,7 @@
 #endif
 
 #include "bench_json1.h"
-#include "bench_json1_template.h"
 #include "bench_rapidjson.h"
-#include "bench_nlohmann.h"
 
 struct TestFile {
     const char* name;
@@ -96,23 +96,23 @@ namespace json1_dom_test {
     }
 }
 
-namespace json1_template_sax_test {
-    void test(jsonstats& stats, const TestFile& file) {
-        if (!json1_template_sax_stats(stats, reinterpret_cast<char const*>(file.data), reinterpret_cast<char const*>(file.data) + file.length)) {
-            fprintf(stderr, "json1 sax parse error\n");
-            abort();
-        }
-    }
-}
-
-namespace json1_template_dom_test {
-    void test(jsonstats& stats, const TestFile& file) {
-        if (!json1_template_dom_stats(stats, reinterpret_cast<char const*>(file.data), reinterpret_cast<char const*>(file.data) + file.length)) {
-            fprintf(stderr, "json1 dom parse error\n");
-            abort();
-        }
-    }
-}
+//namespace json1_template_sax_test {
+//    void test(jsonstats& stats, const TestFile& file) {
+//        if (!json1_template_sax_stats(stats, reinterpret_cast<char const*>(file.data), reinterpret_cast<char const*>(file.data) + file.length)) {
+//            fprintf(stderr, "json1 sax parse error\n");
+//            abort();
+//        }
+//    }
+//}
+//
+//namespace json1_template_dom_test {
+//    void test(jsonstats& stats, const TestFile& file) {
+//        if (!json1_template_dom_stats(stats, reinterpret_cast<char const*>(file.data), reinterpret_cast<char const*>(file.data) + file.length)) {
+//            fprintf(stderr, "json1 dom parse error\n");
+//            abort();
+//        }
+//    }
+//}
 
 namespace rapidjson_sax_test {
     void test(jsonstats& stats, const TestFile& file) {
@@ -132,23 +132,23 @@ namespace rapidjson_dom_test {
     }
 }
 
-namespace nlohmann_sax_test {
-    void test(jsonstats& stats, const TestFile& file) {
-        if (!nlohmann_sax_stats(stats, reinterpret_cast<char const*>(file.data), reinterpret_cast<char const*>(file.data) + file.length)) {
-            fprintf(stderr, "rapidjson sax parse error\n");
-            abort();
-        }
-    }
-}
-
-namespace nlohmann_dom_test {
-    void test(jsonstats& stats, const TestFile& file) {
-        if (!nlohmann_dom_stats(stats, reinterpret_cast<char const*>(file.data), reinterpret_cast<char const*>(file.data) + file.length)) {
-            fprintf(stderr, "rapidjson dom parse error\n");
-            abort();
-        }
-    }
-}
+//namespace nlohmann_sax_test {
+//    void test(jsonstats& stats, const TestFile& file) {
+//        if (!nlohmann_sax_stats(stats, reinterpret_cast<char const*>(file.data), reinterpret_cast<char const*>(file.data) + file.length)) {
+//            fprintf(stderr, "rapidjson sax parse error\n");
+//            abort();
+//        }
+//    }
+//}
+//
+//namespace nlohmann_dom_test {
+//    void test(jsonstats& stats, const TestFile& file) {
+//        if (!nlohmann_dom_stats(stats, reinterpret_cast<char const*>(file.data), reinterpret_cast<char const*>(file.data) + file.length)) {
+//            fprintf(stderr, "rapidjson dom parse error\n");
+//            abort();
+//        }
+//    }
+//}
 
 struct TestImplementation {
     typedef void (*TestFunction)(jsonstats&, const TestFile&);
@@ -157,20 +157,20 @@ struct TestImplementation {
     TestFunction func;
 };
 TestImplementation test_implementations[] = {
-#if 0
-    { "json1_template sax", &json1_template_sax_test::test },
-    { "json1 sax", &json1_sax_test::test },
+#if 1
     { "rapidjson sax", &rapidjson_sax_test::test },
-    { "nlohmann sax", &nlohmann_sax_test::test },
+    { "json1 sax", &json1_sax_test::test },
+    //{ "nlohmann sax", &nlohmann_sax_test::test },
 #else
-    { "json1_template dom", &json1_template_dom_test::test },
-    { "json1 dom", &json1_dom_test::test },
     { "rapidjson dom", &rapidjson_dom_test::test },
-    { "nlohmann dom", &nlohmann_dom_test::test },
+    { "json1 dom", &json1_dom_test::test },
+    //{ "nlohmann dom", &nlohmann_dom_test::test },
 #endif
 };
 
 const char* benchmark_files[] = {
+    "test_data/truenull.json",
+    "test_data/whitespace.json",
     "test_data/floats.json",
     "test_data/signed_ints.json",
     "test_data/unsigned_ints.json",
@@ -182,49 +182,57 @@ const char* benchmark_files[] = {
     "test_data/instruments.json",
     "test_data/mesh.json",
     //"test_data/sample.json", // XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX stack overflow
-    "test_data/svg_menu.json",
+    //"test_data/svg_menu.json",
     "test_data/twitter.json",
     "test_data/update-center.json",
 };
-
-const double SECONDS_PER_TEST = 8.0;
 
 template<typename T, size_t L>
 size_t array_length(T(&)[L]) {
     return L;
 }
 
-#ifdef _WIN32
+using Clock = std::chrono::high_resolution_clock;
+//using Clock = std::chrono::steady_clock;
 
-struct QPCFrequency {
-    QPCFrequency() {
-        LARGE_INTEGER li;
-        li.QuadPart = 1;
-        QueryPerformanceFrequency(&li);
-        frequency = double(li.QuadPart);
+const auto SECONDS_PER_TEST = std::chrono::seconds(8);
 
-        QueryPerformanceCounter(&li);
-        start = li.QuadPart;
-    }
+#if 0
+struct Timing
+{
+    int n = 0;
+    double mean = 0.0;
+    double var2 = 0.0;
+};
 
-    __int64 start;
-    double frequency;
-} QPC;
+static inline void Update(Timing& t, double x)
+{
+    const int n = t.n + 1;
 
-static double get_time() {
-    LARGE_INTEGER li;
-    QueryPerformanceCounter(&li);
-    return double(li.QuadPart - QPC.start) / QPC.frequency;
+    // x_n - mu_{n-1}
+    const double diff = x - t.mean;
+
+    // mu_n = mu_{n-1} + (x_n - mu_{n-1}) / n
+    const double mean = t.mean + diff / n;
+
+    // S_n = S_{n-1} + (x_n - mu_{n-1}) * (x_n - mu_n)
+    const double var2 = t.var2 + diff * (x - mean);
+
+    t.n = n;
+    t.mean = mean;
+    t.var2 = var2;
 }
 
-#else
-
-static double get_time() {
-    timespec ts;
-    clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts);
-    return double(ts.tv_sec) + double(ts.tv_nsec) / 1000000000.0;
+static inline double Mean(Timing const& t)
+{
+    return t.mean;
 }
 
+static inline double Var2(Timing const& t)
+{
+    return t.var2 / static_cast<double>(t.n - 1);
+//  return t.var2 / static_cast<double>(t.n);
+}
 #endif
 
 void benchmark(const char* filename) {
@@ -250,7 +258,7 @@ void benchmark(const char* filename) {
     TestFile file = { filename, length, reinterpret_cast<unsigned char*>(&contents[0]) };
 
     jsonstats expected_stats;
-    double reference_time = 0;
+    double reference = 0;
     bool first = true;
     for (size_t i = 0; i < array_length(test_implementations); ++i) {
         auto& implementation = test_implementations[i];
@@ -267,28 +275,32 @@ void benchmark(const char* filename) {
             }
         }
 
-        double start = get_time();
-        double until = start + SECONDS_PER_TEST;
-        double end = start;
-        double fastest = DBL_MAX;
+        auto const start = Clock::now();
+        auto end = start;
+
         int parses = 0;
-        do {
+        for (;;) {
             implementation.func(this_stats, file);
             ++parses;
-            double next_end = get_time();
-            fastest = std::min(fastest, next_end - end);
-            end = next_end;
-        } while (end < until);
-
-        if (first) {
-            reference_time = fastest;
+            end = Clock::now();
+            if (end - start > SECONDS_PER_TEST)
+                break;
         }
 
-        printf("%-20s%-50s%10.2f MB/sec", implementation.name, filename, static_cast<double>(length) / fastest / 1000000.0);
+        auto const mean = std::chrono::duration<double>(end - start).count() / static_cast<double>(parses);
+
+        const double MB = static_cast<double>(length) / 1000000.0;
+        const double MBPerSec = MB / mean;
+
+        if (first) {
+            reference = mean;
+        }
+
+        printf("%-20s%-40s %8.2f ms (%8.2f MB/sec)", implementation.name,  filename, 1000.0*mean, MBPerSec);
         if (first) {
             printf("\n");
         } else {
-            printf(" x%.4f\n", fastest / reference_time);
+            printf(" --- x%.4f\n", reference / mean);
         }
         fflush(stdout);
 
@@ -297,8 +309,6 @@ void benchmark(const char* filename) {
 }
 
 int main(int argc, const char** argv) {
-    printf("Implementation,File,MB/s\n");
-
     if (argc <= 1) {
         for (size_t i = 0; i < array_length(benchmark_files); ++i) {
             fprintf(stderr, "---\n");
