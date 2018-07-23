@@ -37,7 +37,7 @@
 
 #ifndef STRTOD_INLINE
 #if _MSC_VER
-#define STRTOD_INLINE __forceinline
+#define STRTOD_INLINE inline // __forceinline
 #else
 #define STRTOD_INLINE inline
 #endif
@@ -304,6 +304,11 @@ STRTOD_INLINE bool FastPath(double& /*result*/, uint64_t /*digits*/, int /*num_d
 
 #endif // ^^^ !STRTOD_CORRECT_DOUBLE_OPERATIONS
 
+STRTOD_INLINE bool FastPath(float& /*result*/, uint64_t /*digits*/, int /*num_digits*/, int /*exponent*/)
+{
+    return false;
+}
+
 //--------------------------------------------------------------------------------------------------
 // StrtodApprox
 //--------------------------------------------------------------------------------------------------
@@ -482,33 +487,6 @@ STRTOD_INLINE DiyFp UpperBoundary(Float value)
     return DiyFp(4*v.f + 2, v.e - 2);
 }
 
-// template <typename Float>
-// STRTOD_INLINE bool LowerBoundaryIsCloser(Float value)
-// {
-//     IEEE<Float> const v(value);
-//
-//     STRTOD_ASSERT(v.IsFinite());
-//     STRTOD_ASSERT(!v.SignBit());
-//
-//     auto const F = v.PhysicalSignificand();
-//     auto const E = v.PhysicalExponent();
-//     return F == 0 && E > 1;
-// }
-
-// Returns the lower boundary of `value`, i.e. the lower bound of the rounding
-// interval for `value`.
-// The result is not normalized.
-// PRE: `value` must be finite and strictly positive.
-// template <typename Float>
-// STRTOD_INLINE DiyFp LowerBoundary(Float value)
-// {
-//     STRTOD_ASSERT(IEEE<Float>(value).IsFinite());
-//     STRTOD_ASSERT(value > 0);
-//
-//     auto const v = DiyFpFromFloat(value);
-//     return DiyFp(4*v.f - 2 + (LowerBoundaryIsCloser(value) ? 1 : 0), v.e - 2);
-// }
-
 struct DiyFpWithError // value = (x.f + delta) * 2^x.e, where |delta| <= error
 {
     // We don't want to deal with fractions and therefore work with a common denominator.
@@ -568,10 +546,6 @@ STRTOD_INLINE void Normalize(DiyFpWithError& num)
     num.x.e    -= s;
     num.error <<= s;
 }
-
-// 2^64 = 18446744073709551616 > 10^19
-// Any integer with at most 19 decimal digits will hence fit into an uint64_t.
-constexpr int kMaxUint64DecimalDigits = 19;
 
 template <typename CharT, typename Int>
 STRTOD_INLINE Int ReadInt(CharT const* f, CharT const* l)
@@ -1469,14 +1443,15 @@ constexpr int kMinDecimalPower = -324;
 // once it's encoded into a 'double'. In almost all cases this is equal to
 // Double::SignificandSize. The only exceptions are subnormals. They start with
 // leading zeroes and their effective significand-size is hence smaller.
+template <typename Float>
 STRTOD_INLINE int EffectiveSignificandSize(int order)
 {
-    using Double = IEEE<double>;
+    using IEEEFloat = IEEE<Float>;
 
-    int const s = order - Double::MinExponent;
+    int const s = order - IEEEFloat::MinExponent;
 
-    if (s > Double::SignificandSize)
-        return Double::SignificandSize;
+    if (s > IEEEFloat::SignificandSize)
+        return IEEEFloat::SignificandSize;
     if (s < 0)
         return 0;
 
@@ -1484,29 +1459,29 @@ STRTOD_INLINE int EffectiveSignificandSize(int order)
 }
 
 // Returns `f * 2^e`.
-STRTOD_INLINE double LoadDouble(uint64_t f, int e)
+template <typename Float>
+STRTOD_INLINE Float LoadFloat(uint64_t f, int e)
 {
-    using Double = IEEE<double>;
+    using IEEEFloat = IEEE<Float>;
+    using IEEEBits = typename IEEEFloat::bits_type;
 
-    STRTOD_ASSERT(f <= Double::HiddenBit + Double::SignificandMask);
-    STRTOD_ASSERT(e <= Double::MinExponent || (f & Double::HiddenBit) != 0);
+    STRTOD_ASSERT(f <= IEEEFloat::HiddenBit + IEEEFloat::SignificandMask);
+    STRTOD_ASSERT(e <= IEEEFloat::MinExponent || (f & IEEEFloat::HiddenBit) != 0);
 
-    if (e > Double::MaxExponent)
+    if (e > IEEEFloat::MaxExponent)
     {
-        return std::numeric_limits<double>::infinity();
+        return std::numeric_limits<Float>::infinity();
     }
-    if (e < Double::MinExponent)
+    if (e < IEEEFloat::MinExponent)
     {
-        return 0.0;
+        return 0;
     }
 
-    uint64_t const exponent = (e == Double::MinExponent && (f & Double::HiddenBit) == 0)
+    IEEEBits const exponent = (e == IEEEFloat::MinExponent && (f & IEEEFloat::HiddenBit) == 0)
         ? 0 // subnormal
-        : static_cast<uint64_t>(e + Double::ExponentBias);
+        : static_cast<IEEEBits>(e + IEEEFloat::ExponentBias);
 
-    uint64_t const bits = (exponent << Double::PhysicalSignificandSize) | (f & Double::SignificandMask);
-
-    return ReinterpretBits<double>(bits);
+    return IEEEFloat((exponent << IEEEFloat::PhysicalSignificandSize) | (static_cast<IEEEBits>(f) & IEEEFloat::SignificandMask)).Value();
 }
 
 // Use DiyFp's to approximate digits * 10^exponent.
@@ -1517,10 +1492,10 @@ STRTOD_INLINE double LoadDouble(uint64_t f, int e)
 //
 // PRE: num_digits + exponent <= kMaxDecimalPower
 // PRE: num_digits + exponent >  kMinDecimalPower
-template <typename CharT>
-STRTOD_INLINE bool StrtodApprox(double& result, CharT const* digits, int num_digits, int exponent)
+template <typename Float, typename CharT>
+STRTOD_INLINE bool StrtodApprox(Float& result, CharT const* digits, int num_digits, int exponent)
 {
-    using Double = IEEE<double>;
+    using IEEEFloat = IEEE<Float>;
 
     static_assert(DiyFp::SignificandSize == 64,
         "We use uint64's. This only works if the DiyFp uses uint64's too.");
@@ -1542,7 +1517,7 @@ STRTOD_INLINE bool StrtodApprox(double& result, CharT const* digits, int num_dig
 
     constexpr int kULP = DiyFpWithError::kDenominator;
 
-    int const read_digits = Min(num_digits, kMaxUint64DecimalDigits);
+    int const read_digits = Min(num_digits, std::numeric_limits<uint64_t>::digits10);
 
     DiyFpWithError input;
 
@@ -1550,11 +1525,13 @@ STRTOD_INLINE bool StrtodApprox(double& result, CharT const* digits, int num_dig
     input.x.e = 0;
     input.error = 0;
 
+    // if constexpr (IsDouble<Float>) {
     if (num_digits <= kMaxExactDoubleIntegerDecimalDigits)
     {
         if (FastPath(result, input.x.f, num_digits, exponent))
             return true;
     }
+    // }
 
     if (read_digits < num_digits)
     {
@@ -1632,7 +1609,7 @@ STRTOD_INLINE bool StrtodApprox(double& result, CharT const* digits, int num_dig
         // The adjustment_power is exact (err_y = 0).
         // There is hence only an additional error of (at most) 1/2.
 
-        if (num_digits + adjustment_exponent <= kMaxUint64DecimalDigits)
+        if (num_digits + adjustment_exponent <= std::numeric_limits<uint64_t>::digits10)
         {
             // x and adjustment_power are exact.
             // The product (digits * 10^adjustment_exponent) fits into an uint64_t.
@@ -1695,7 +1672,7 @@ STRTOD_INLINE bool StrtodApprox(double& result, CharT const* digits, int num_dig
     // double-precision number, we need to drop some 'excess_bits' bits of
     // precision.
 
-    int const prec = EffectiveSignificandSize(DiyFp::SignificandSize + input.x.e);
+    int const prec = EffectiveSignificandSize<Float>(DiyFp::SignificandSize + input.x.e);
     STRTOD_ASSERT(prec >= 0);
     STRTOD_ASSERT(prec <= 53);
 
@@ -1767,9 +1744,9 @@ STRTOD_INLINE bool StrtodApprox(double& result, CharT const* digits, int num_dig
         // But in this case the significand is 2^53 and we don't loose any
         // bits by normalizing 'input' (we just move a factor of 2 into the
         // binary exponent).
-        if (input.x.f > Double::HiddenBit + Double::SignificandMask)
+        if (input.x.f > IEEEFloat::HiddenBit + IEEEFloat::SignificandMask)
         {
-            STRTOD_ASSERT(input.x.f == (Double::HiddenBit << 1));
+            STRTOD_ASSERT(input.x.f == (IEEEFloat::HiddenBit << 1));
 
             input.x.f >>= 1;
             input.x.e  += 1;
@@ -1797,12 +1774,12 @@ STRTOD_INLINE bool StrtodApprox(double& result, CharT const* digits, int num_dig
         success = false;
     }
 
-    result = LoadDouble(input.x.f, input.x.e);
+    result = LoadFloat<Float>(input.x.f, input.x.e);
     return success;
 }
 
-template <typename CharT>
-STRTOD_INLINE bool ComputeGuess(double& result, CharT const* digits, int num_digits, int exponent)
+template <typename Float, typename CharT>
+inline bool ComputeGuess(Float& result, CharT const* digits, int num_digits, int exponent)
 {
     STRTOD_ASSERT(num_digits > 0);
     STRTOD_ASSERT(num_digits <= kMaxSignificantDigits);
@@ -1813,7 +1790,7 @@ STRTOD_INLINE bool ComputeGuess(double& result, CharT const* digits, int num_dig
     if (num_digits + exponent > kMaxDecimalPower)
     {
         // Overflow.
-        result = std::numeric_limits<double>::infinity();
+        result = std::numeric_limits<Float>::infinity();
         return true;
     }
 
@@ -2027,7 +2004,7 @@ STRTOD_INLINE int Compare(DiyInt const& lhs, DiyInt const& rhs)
 // PRE: num_digits + exponent >  kMinDecimalPower
 // PRE: num_digits            <= kMaxSignificantDigits
 template <typename CharT>
-STRTOD_INLINE int CompareBufferWithDiyFp(CharT const* digits, int num_digits, int exponent, bool nonzero_tail, DiyFp v)
+inline int CompareBufferWithDiyFp(CharT const* digits, int num_digits, int exponent, bool nonzero_tail, DiyFp v)
 {
     STRTOD_ASSERT(num_digits > 0);
     STRTOD_ASSERT(num_digits + exponent <= kMaxDecimalPower);
@@ -2137,16 +2114,18 @@ STRTOD_INLINE int CompareBufferWithDiyFp(CharT const* digits, int num_digits, in
 //--------------------------------------------------------------------------------------------------
 
 // Returns whether the significand f of v = f * 2^e is even.
-STRTOD_INLINE bool SignificandIsEven(double v)
+template <typename Float>
+STRTOD_INLINE bool SignificandIsEven(Float v)
 {
-    return (IEEE<double>(v).PhysicalSignificand() & 1) == 0;
+    return (IEEE<Float>(v).PhysicalSignificand() & 1) == 0;
 }
 
 // Returns the next larger double-precision value.
 // If v is +Infinity returns v.
-STRTOD_INLINE double NextFloat(double v)
+template <typename Float>
+STRTOD_INLINE Float NextFloat(Float v)
 {
-    return IEEE<double>(v).NextValue();
+    return IEEE<Float>(v).NextValue();
 }
 
 // Convert the decimal representation 'digits * 10^exponent' into an IEEE
@@ -2155,8 +2134,8 @@ STRTOD_INLINE double NextFloat(double v)
 // PRE: digits must contain only ASCII characters in the range '0'...'9'.
 // PRE: num_digits >= 0
 // PRE: num_digits + exponent must not overflow.
-template <typename CharT>
-STRTOD_INLINE double DecimalToDouble(CharT const* digits, int num_digits, int exponent, bool nonzero_tail)
+template <typename Float = double, typename CharT>
+STRTOD_INLINE Float DecimalToDouble(CharT const* digits, int num_digits, int exponent, bool nonzero_tail)
 {
     STRTOD_ASSERT(num_digits >= 0);
     STRTOD_ASSERT(exponent <= INT_MAX - num_digits);
@@ -2194,7 +2173,7 @@ STRTOD_INLINE double DecimalToDouble(CharT const* digits, int num_digits, int ex
         return 0;
     }
 
-    double v;
+    Float v;
     if (ComputeGuess(v, digits, num_digits, exponent))
     {
         return v;
@@ -2225,7 +2204,18 @@ STRTOD_INLINE double DecimalToDouble(CharT const* digits, int num_digits, int ex
 // PRE: num_digits + exponent must not overflow.
 inline double DecimalToDouble(char const* digits, int num_digits, int exponent, bool nonzero_tail = false)
 {
-    return baseconv::strtod_impl::DecimalToDouble(digits, num_digits, exponent, nonzero_tail);
+    return baseconv::strtod_impl::DecimalToDouble<double>(digits, num_digits, exponent, nonzero_tail);
+}
+
+// Convert the decimal representation 'digits * 10^exponent' into an IEEE
+// double-precision number.
+//
+// PRE: digits must contain only ASCII characters in the range '0'...'9'.
+// PRE: num_digits >= 0
+// PRE: num_digits + exponent must not overflow.
+inline float DecimalToFloat(char const* digits, int num_digits, int exponent, bool nonzero_tail = false)
+{
+    return baseconv::strtod_impl::DecimalToDouble<float>(digits, num_digits, exponent, nonzero_tail);
 }
 
 //==================================================================================================
@@ -2242,8 +2232,8 @@ enum class StrtodResult {
     // XXX: underflow,
 };
 
-template <typename CharT>
-inline StrtodResult Strtod(double& result, CharT const*& next, CharT const* last)
+template <typename Float, typename CharT>
+inline StrtodResult Strtod(Float& result, CharT const*& next, CharT const* last)
 {
     using baseconv::strtod_impl::IsDigit;
     using baseconv::strtod_impl::DigitValue;
@@ -2253,7 +2243,7 @@ inline StrtodResult Strtod(double& result, CharT const*& next, CharT const* last
     constexpr int const kMaxInt = INT_MAX / 4;
 
     StrtodResult status = StrtodResult::success;
-    double       value  = 0;
+    Float        value  = 0;
     CharT const* curr   = next;
 
     CharT digits[kMaxSignificantDigits];
@@ -2445,7 +2435,7 @@ inline StrtodResult Strtod(double& result, CharT const*& next, CharT const* last
     }
 
 L_convert:
-    value = baseconv::DecimalToDouble(digits, num_digits, exponent, nonzero_tail);
+    value = baseconv::strtod_impl::DecimalToDouble<Float>(digits, num_digits, exponent, nonzero_tail);
 
 L_done:
     result = is_neg ? -value : value;
