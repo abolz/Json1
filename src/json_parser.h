@@ -40,8 +40,11 @@
 //#define JSON_NEVER_INLINE inline
 //#endif
 
-#ifndef JSON_USE_SSE42
 #define JSON_USE_SSE42 1
+#ifndef JSON_USE_SSE42
+#if defined(__SSE_4_2__) || (/* for MSVC: */ defined(__AVX__) || defined(__AVX2__))
+#define JSON_USE_SSE42 1
+#endif
 #endif
 
 #if JSON_USE_SSE42
@@ -114,7 +117,7 @@ inline bool IsWhitespace      (char ch) { return ch == ' ' || ch == '\t' || ch =
 #else
 inline bool IsWhitespace      (char ch) { return (CharClass(ch) & CC_Whitespace      ) != 0; }
 #endif
-#if 1
+#if 0
 inline bool IsDigit           (char ch) { return '0' <= ch && ch <= '9'; }
 #else
 inline bool IsDigit           (char ch) { return (CharClass(ch) & CC_Digit           ) != 0; }
@@ -429,32 +432,6 @@ L_again:
     case '8':
     case '9':
         return LexNumber(p, options);
-    case 'a':
-    case 'b':
-    case 'c':
-    case 'd':
-    case 'e':
-    case 'f':
-    case 'g':
-    case 'h':
-    case 'i':
-    case 'j':
-    case 'k':
-    case 'l':
-    case 'm':
-    case 'n':
-    case 'o':
-    case 'p':
-    case 'q':
-    case 'r':
-    case 's':
-    case 't':
-    case 'u':
-    case 'v':
-    case 'w':
-    case 'x':
-    case 'y':
-    case 'z':
     case 'A':
     case 'B':
     case 'C':
@@ -482,6 +459,32 @@ L_again:
     case 'Y':
     case 'Z':
     case '_':
+    case 'a':
+    case 'b':
+    case 'c':
+    case 'd':
+    case 'e':
+    case 'f':
+    case 'g':
+    case 'h':
+    case 'i':
+    case 'j':
+    case 'k':
+    case 'l':
+    case 'm':
+    case 'n':
+    case 'o':
+    case 'p':
+    case 'q':
+    case 'r':
+    case 's':
+    case 't':
+    case 'u':
+    case 'v':
+    case 'w':
+    case 'x':
+    case 'y':
+    case 'z':
         return LexIdentifier(p);
     case '/':
         if (options.skip_comments)
@@ -508,22 +511,29 @@ inline Token Lexer::LexString(char const* p/*, char quote_char*/)
 
     ptr = ++p; // skip " or '
 
+#if JSON_USE_SSE42
+    const __m128i kSpecialChars = _mm_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, '\xFF', '\x80', '\x1F', '\x00', '\\', '\\', '"', '"');
+    int special_chars_length = 8;
+#endif
+
     unsigned mask = 0;
     for (;;)
     {
-#if 1
 #if JSON_USE_SSE42
-        const __m128i special_chars = _mm_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, '\xFF', '\x80', '\x1F', '\x00', '\\', '\\', '\"', '\"');
-
         for ( ; end - p >= 16; p += 16)
         {
             const auto bytes = _mm_loadu_si128(reinterpret_cast<__m128i const*>(p));
-            const auto index = _mm_cmpestri(special_chars, 8, bytes, 16, _SIDD_UBYTE_OPS | _SIDD_CMP_RANGES | _SIDD_LEAST_SIGNIFICANT);
+            const auto index = _mm_cmpestri(kSpecialChars, special_chars_length, bytes, 16, _SIDD_UBYTE_OPS | _SIDD_CMP_RANGES | _SIDD_LEAST_SIGNIFICANT);
             if (index != 16) {
                 p += index;
                 break;
             }
         }
+
+        if (p == end)
+            return MakeToken(p, TokenKind::incomplete);
+        if (*p == '"')
+            break;
 #else
         for ( ; end - p >= 4; p += 4)
         {
@@ -533,8 +543,9 @@ inline Token Lexer::LexString(char const* p/*, char quote_char*/)
             mask |= m;
         }
 #endif
-#endif
 
+        // Scan inputs smaller than 16 characters (or the rest of small inputs)
+        // or initial runs of UTF-8 sequences.
         for ( ; p != end; ++p)
         {
             auto const m = CharClass(*p);
@@ -544,23 +555,22 @@ inline Token Lexer::LexString(char const* p/*, char quote_char*/)
         }
 
         if (p == end)
-            break;
-
+            return MakeToken(p, TokenKind::incomplete);
         if (*p == '"')
-        {
-            auto tok = MakeStringToken(p, (mask & CC_NeedsCleaning) == 0 ? StringClass::plain_ascii : StringClass::needs_cleaning);
-            ptr = ++p; // skip " or '
-            return tok;
-        }
+            break;
 
         JSON_ASSERT(*p == '\\');
         ++p;
         if (p == end)
-            break;
+            return MakeToken(p, TokenKind::incomplete);
         ++p; // Skip the escaped character.
+
+#if JSON_USE_SSE42
+        special_chars_length = ((mask & CC_NeedsCleaning) != 0) ? 4 : special_chars_length;
+#endif
     }
 
-    return MakeToken(p, TokenKind::incomplete); // incomplete string
+    return MakeStringToken(p, (mask & CC_NeedsCleaning) != 0 ? StringClass::needs_cleaning : StringClass::plain_ascii);
 }
 
 inline Token Lexer::LexNumber(char const* p, Options const& options)
@@ -574,16 +584,17 @@ inline Token Lexer::LexIdentifier(char const* p)
 {
     using namespace json::charclass;
 
-#if 1
-    for ( ; end - p >= 4; p += 4)
+#if 0 && JSON_USE_SSE42
+    const __m128i kSpecialChars = _mm_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 'z', 'a', '_', '_', 'Z', 'A', '9', '0');
+
+    for ( ; end - p >= 16; p += 16)
     {
-        auto const m0 = CharClass(p[0]);
-        auto const m1 = CharClass(p[1]);
-        auto const m2 = CharClass(p[2]);
-        auto const m3 = CharClass(p[3]);
-        auto const m = m0 & m1 & m2 & m3;
-        if ((m & CC_IdentifierBody) == 0)
-            break;
+        const auto bytes = _mm_loadu_si128(reinterpret_cast<__m128i const*>(p));
+        const auto index = _mm_cmpestri(kSpecialChars, 8, bytes, 16, _SIDD_UBYTE_OPS | _SIDD_CMP_RANGES | _SIDD_LEAST_SIGNIFICANT | _SIDD_NEGATIVE_POLARITY);
+        if (index != 16) {
+            p += index;
+            return MakeToken(p, TokenKind::identifier);
+        }
     }
 #endif
 
@@ -668,7 +679,9 @@ inline Token Lexer::MakeStringToken(char const* p, StringClass string_class)
     tok.kind = TokenKind::string;
     tok.string_class = string_class;
 
-    ptr = p;
+    JSON_ASSERT(p != end);
+    JSON_ASSERT(*p == '"');
+    ptr = ++p; // skip " or '
 
     return tok;
 }

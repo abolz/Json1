@@ -389,27 +389,30 @@ UnescapeStringResult UnescapeString(char const* next, char const* last, Fn yield
     namespace unicode = json::impl::unicode;
     using namespace json::charclass;
 
+#if JSON_USE_SSE42
+    const __m128i kSpecialChars = _mm_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, '\xFF', '\x80', '\x1F', '\x00', '\\', '\\', '"', '"');
+#endif
+
     for (;;)
     {
-#if 1
 #if JSON_USE_SSE42
-        const __m128i special_chars = _mm_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, '\xFF', '\x80', '\x1F', '\x00', '\\', '\\', '\"', '\"');
-
-        char const* p = next;
-        for ( ; last - next >= 16; next += 16)
+        if (last - next >= 16)
         {
-            const auto bytes = _mm_loadu_si128(reinterpret_cast<__m128i const*>(next));
-            const auto index = _mm_cmpestri(special_chars, 8, bytes, 16, _SIDD_UBYTE_OPS | _SIDD_CMP_RANGES | _SIDD_LEAST_SIGNIFICANT);
-            if (index != 16) {
-                next += index;
-                break;
+            char const* const p = next;
+            for ( ; last - next >= 16; next += 16)
+            {
+                const auto bytes = _mm_loadu_si128(reinterpret_cast<__m128i const*>(next));
+                const auto index = _mm_cmpestri(kSpecialChars, 8, bytes, 16, _SIDD_UBYTE_OPS | _SIDD_CMP_RANGES | _SIDD_LEAST_SIGNIFICANT);
+                if (index != 16) {
+                    next += index;
+                    break;
+                }
+            }
+            for (intptr_t i = 0; i < next - p; ++i)
+            {
+                yield(p[i]);
             }
         }
-        for (intptr_t i = 0; i < next - p; ++i)
-        {
-            yield(p[i]);
-        }
-#endif
 #endif
 
         for ( ; next != last; ++next)
@@ -527,36 +530,6 @@ struct EscapeStringResult
     Status status;
 };
 
-#if 0
-template <typename Fn>
-inline char const* SkipNonSpecialEscapeFast(char const* p, char const* end, Fn yield)
-{
-    using namespace json::charclass;
-
-    static const __m128i chars = _mm_set_epi8(0,0, 0,0, 0,0, '/','/', '\xFF','\x80', '\x1F','\x00', '\\','\\', '\"','\"');
-
-    for ( ; end - p >= 16; p += 16)
-    {
-        const auto bytes = _mm_loadu_si128(reinterpret_cast<__m128i const*>(p));
-        const auto index = _mm_cmpestri(chars, 8, bytes, 16, _SIDD_UBYTE_OPS | _SIDD_CMP_RANGES | _SIDD_LEAST_SIGNIFICANT);
-        if (index != 16)
-            return p + index;
-        for (int i = 0; i < 16; ++i)
-            yield(p[i]);
-    }
-
-    for ( ; p != end; ++p)
-    {
-        auto const m = CharClass(*p);
-        if ((m & (CC_StringSpecial | CC_NeedsCleaning)) != 0)
-            return p;
-        yield(*p);
-    }
-
-    return p;
-}
-#endif
-
 template <typename Fn>
 EscapeStringResult EscapeString(char const* next, char const* last, Fn yield)
 {
@@ -564,14 +537,37 @@ EscapeStringResult EscapeString(char const* next, char const* last, Fn yield)
 
     static constexpr char const kHexDigits[] = "0123456789ABCDEF";
 
-    char ch_prev = '\0';
-    char ch = '\0';
+#if JSON_USE_SSE42
+    const __m128i kSpecialChars = _mm_set_epi8(0, 0, 0, 0, 0, 0, '/','/', '\xFF','\x80', '\x1F','\x00', '\\','\\', '"','"');
+#endif
 
-    while (next != last)
+    char const* const first = next;
+    for (;;)
     {
-        ch_prev = ch;
-        ch = *next;
+#if JSON_USE_SSE42
+        if (last - next >= 16)
+        {
+            char const* const p = next;
+            for ( ; last - next >= 16; next += 16)
+            {
+                const auto bytes = _mm_loadu_si128(reinterpret_cast<__m128i const*>(next));
+                const auto index = _mm_cmpestri(kSpecialChars, 10, bytes, 16, _SIDD_UBYTE_OPS | _SIDD_CMP_RANGES | _SIDD_LEAST_SIGNIFICANT);
+                if (index != 16) {
+                    next += index;
+                    break;
+                }
+            }
+            for (intptr_t i = 0; i < next - p; ++i)
+            {
+                yield(p[i]);
+            }
+        }
+#endif
 
+        if (next == last)
+            break;
+
+        char const ch = *next;
         auto const uc = static_cast<unsigned char>(ch);
 
         if (uc < 0x20) // (ASCII) control character
@@ -613,7 +609,7 @@ EscapeStringResult EscapeString(char const* next, char const* last, Fn yield)
                 yield('\\');
                 break;
             case '/':   // U+002F
-                if (ch_prev == '<')
+                if (next != first && next[-1] == '<')
                 {
                     yield('\\');
                 }
@@ -662,9 +658,9 @@ EscapeStringResult EscapeString(char const* next, char const* last, Fn yield)
                 break;
             default:
                 // The UTF-8 sequence is valid. No need to re-encode.
-                for ( ; f != next; ++f)
+                for (intptr_t i = 0; i < next - f; ++i)
                 {
-                    yield(*f);
+                    yield(f[i]);
                 }
                 break;
             }
