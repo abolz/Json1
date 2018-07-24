@@ -37,7 +37,7 @@
 
 #ifndef STRTOD_INLINE
 #if _MSC_VER
-#define STRTOD_INLINE inline // __forceinline
+#define STRTOD_INLINE __forceinline
 #else
 #define STRTOD_INLINE inline
 #endif
@@ -220,12 +220,12 @@ STRTOD_INLINE int DigitValue(CharT ch)
 #endif
 #endif
 
+#if STRTOD_CORRECT_DOUBLE_OPERATIONS
+
 // 2^53 = 9007199254740992.
 // Any integer with at most 15 decimal digits will hence fit into a double
 // (which has a 53bit significand) without loss of precision.
 constexpr int kMaxExactDoubleIntegerDecimalDigits = 15;
-
-#if STRTOD_CORRECT_DOUBLE_OPERATIONS
 
 STRTOD_INLINE bool FastPath(double& result, uint64_t digits, int num_digits, int exponent)
 {
@@ -257,7 +257,8 @@ STRTOD_INLINE bool FastPath(double& result, uint64_t digits, int num_digits, int
 //      1.0e+23,
     };
 
-    STRTOD_ASSERT(num_digits <= kMaxExactDoubleIntegerDecimalDigits);
+    if (num_digits > kMaxExactDoubleIntegerDecimalDigits)
+        return false;
 
     // The significand fits into a double.
     // If 10^exponent (resp. 10^-exponent) fits into a double too then we can
@@ -304,10 +305,70 @@ STRTOD_INLINE bool FastPath(double& /*result*/, uint64_t /*digits*/, int /*num_d
 
 #endif // ^^^ !STRTOD_CORRECT_DOUBLE_OPERATIONS
 
+#if defined(_M_X64) || defined(__x86_64__) || defined(__SSE2__)
+#define STRTOD_CORRECT_FLOAT_OPERATIONS 1
+#endif
+
+#if STRTOD_CORRECT_FLOAT_OPERATIONS
+
+// 2^24 = 16777216.
+// Any integer with at most 7 decimal digits will hence fit into a single
+// (which has a 24bit significand) without loss of precision.
+constexpr int kMaxExactFloatIntegerDecimalDigits = 7;
+
+STRTOD_INLINE bool FastPath(float& result, uint64_t digits, int num_digits, int exponent)
+{
+    static constexpr int kMaxExactPowerOfTen = 10;
+    static constexpr float kExactPowersOfTen[] = {
+        1.0e+00f,
+        1.0e+01f,
+        1.0e+02f,
+        1.0e+03f,
+        1.0e+04f,
+        1.0e+05f,
+        1.0e+06f,
+        1.0e+07f, // log_2(10^7) = 23.253...
+        1.0e+08f,
+        1.0e+09f,
+        1.0e+10f, // log_2(5^10) = 23.219...
+//      1.0e+11f, // log_2(5^11) = 25.541...
+    };
+
+    if (num_digits > kMaxExactFloatIntegerDecimalDigits)
+        return false;
+
+    int const remaining_digits = kMaxExactFloatIntegerDecimalDigits - num_digits; // 0 <= rd <= 7
+    if (-kMaxExactPowerOfTen <= exponent && exponent <= remaining_digits + kMaxExactPowerOfTen)
+    {
+        float d = static_cast<float>(static_cast<int32_t>(digits));
+        if (exponent < 0)
+        {
+            d /= kExactPowersOfTen[-exponent];
+        }
+        else if (exponent <= kMaxExactPowerOfTen)
+        {
+            d *= kExactPowersOfTen[exponent];
+        }
+        else
+        {
+            d *= kExactPowersOfTen[remaining_digits]; // exact
+            d *= kExactPowersOfTen[exponent - remaining_digits];
+        }
+        result = d;
+        return true;
+    }
+
+    return false;
+}
+
+#else // ^^^
+
 STRTOD_INLINE bool FastPath(float& /*result*/, uint64_t /*digits*/, int /*num_digits*/, int /*exponent*/)
 {
     return false;
 }
+
+#endif
 
 //--------------------------------------------------------------------------------------------------
 // StrtodApprox
@@ -1525,13 +1586,8 @@ STRTOD_INLINE bool StrtodApprox(Float& result, CharT const* digits, int num_digi
     input.x.e = 0;
     input.error = 0;
 
-    // if constexpr (IsDouble<Float>) {
-    if (num_digits <= kMaxExactDoubleIntegerDecimalDigits)
-    {
-        if (FastPath(result, input.x.f, num_digits, exponent))
-            return true;
-    }
-    // }
+    if (FastPath(result, input.x.f, num_digits, exponent))
+        return true;
 
     if (read_digits < num_digits)
     {

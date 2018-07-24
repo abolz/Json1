@@ -211,14 +211,16 @@ DTOA_INLINE uint64_t ShiftRight128(Uint64x2 x, int dist)
     DTOA_ASSERT(dist > 0);
     DTOA_ASSERT(dist < 64);
 
+    unsigned char const amt = static_cast<unsigned char>(dist);
+
 #if 0 && DTOA_HAS_UINT128
     __extension__ using uint128_t = unsigned __int128;
 
-    return static_cast<uint64_t>(((uint128_t{x.hi} << 64) | x.lo) >> dist);
+    return static_cast<uint64_t>(((uint128_t{x.hi} << 64) | x.lo) >> amt);
 #elif DTOA_HAS_64_BIT_INTRINSICS
-    return __shiftright128(x.lo, x.hi, static_cast<unsigned char>(dist));
+    return __shiftright128(x.lo, x.hi, amt);
 #else
-    return (x.hi << (64 - dist)) | (x.lo >> dist);
+    return (x.hi << (64 - amt)) | (x.lo >> amt);
 #endif
 }
 
@@ -226,7 +228,7 @@ DTOA_INLINE int Pow5BitLength(int e) // e == 0 ? 1 : ceil(log_2(5^e))
 {
     DTOA_ASSERT(e >= 0);
     DTOA_ASSERT(e <= 1500); // Only tested for e <= 1500
-    return ((e * 1217359) >> 19) + 1;
+    return static_cast<int>((static_cast<uint32_t>(e) * 1217359) >> 19) + 1;
 }
 
 #if DTOA_OPTIMIZE_SIZE
@@ -1218,7 +1220,7 @@ DTOA_INLINE int Pow5Factor(uint64_t value)
     }
 }
 
-DTOA_INLINE char* Utoa100(char* buf, uint32_t digits)
+DTOA_INLINE void Utoa100(char* buf, uint32_t digits)
 {
     static constexpr char kDigits100[] = {
         '0','0','0','1','0','2','0','3','0','4','0','5','0','6','0','7','0','8','0','9',
@@ -1235,7 +1237,6 @@ DTOA_INLINE char* Utoa100(char* buf, uint32_t digits)
 
     DTOA_ASSERT(digits < 100);
     std::memcpy(buf, kDigits100 + 2*digits, 2 * sizeof(char));
-    return buf + 2;
 }
 
 DTOA_INLINE int DecimalLengthDouble(uint64_t v)
@@ -1290,7 +1291,6 @@ DTOA_INLINE int PrintDecimalDigitsDouble(char* buf, uint64_t output)
     uint64_t output2 = output;
 #endif
 
-#if 1
     while (output2 >= 10000)
     {
         DTOA_ASSERT(i > 4);
@@ -1302,9 +1302,8 @@ DTOA_INLINE int PrintDecimalDigitsDouble(char* buf, uint64_t output)
         Utoa100(buf + (i - 4), c1);
         i -= 4;
     }
-#endif
 
-    while (output2 >= 100)
+    if (output2 >= 100)
     {
         DTOA_ASSERT(i > 2);
         uint32_t const c = static_cast<uint32_t>(output2 % 100);
@@ -1744,7 +1743,6 @@ DTOA_INLINE int PrintDecimalDigitsFloat(char* buf, uint32_t output)
     int const output_length = DecimalLengthFloat(output);
     int i = output_length;
 
-#if 1
     while (output >= 10000)
     {
         DTOA_ASSERT(i >= 4);
@@ -1756,9 +1754,8 @@ DTOA_INLINE int PrintDecimalDigitsFloat(char* buf, uint32_t output)
         Utoa100(buf + (i - 4), c1);
         i -= 4;
     }
-#endif
 
-    while (output >= 100)
+    if (output >= 100)
     {
         DTOA_ASSERT(i >= 2);
         uint32_t const c = output % 100;
@@ -2034,34 +2031,38 @@ DTOA_INLINE char* ExponentToDecimal(char* buffer, int value)
     DTOA_ASSERT(value > -1000);
     DTOA_ASSERT(value <  1000);
 
+    int n = 0;
+
     if (value < 0)
     {
+        buffer[n++] = '-';
         value = -value;
-        *buffer++ = '-';
     }
     else
     {
-        *buffer++ = '+';
+        buffer[n++] = '+';
     }
 
     uint32_t const k = static_cast<uint32_t>(value);
     if (k < 10)
     {
-        *buffer++ = static_cast<char>('0' + k);
+        buffer[n++] = static_cast<char>('0' + k);
     }
     else if (k < 100)
     {
-        buffer = Utoa100(buffer, k);
+        Utoa100(buffer + n, k);
+        n += 2;
     }
     else
     {
-        uint32_t const q = k / 100;
-        uint32_t const r = k % 100;
-        *buffer++ = static_cast<char>('0' + q);
-        buffer = Utoa100(buffer, r);
+        uint32_t const r = k % 10;
+        uint32_t const q = k / 10;
+        Utoa100(buffer + n, q);
+        n += 2;
+        buffer[n++] = static_cast<char>('0' + r);
     }
 
-    return buffer;
+    return buffer + n;
 }
 
 DTOA_INLINE char* FormatFixed(char* buffer, int length, int decimal_point, bool force_trailing_dot_zero)
@@ -2158,6 +2159,14 @@ inline char* PositiveDtoa(char* buf, Fp value, bool force_trailing_dot_zero = fa
 
     int const decimal_point = num_digits + exponent;
 
+#if 0
+#if 1
+    buf[num_digits] = 'e';
+    char* const end = baseconv::dtoa_impl::ExponentToDecimal(buf + (num_digits + 1), decimal_point - 1);
+#else
+    char* const end = baseconv::dtoa_impl::FormatExponential(buf, num_digits, decimal_point - 1);
+#endif
+#else
     // Changing these constants requires changing kPositiveDtoaMaxLength too.
     // XXX:
     // Compute kPositiveDtoaMaxLength using these constants...?!
@@ -2174,6 +2183,7 @@ inline char* PositiveDtoa(char* buf, Fp value, bool force_trailing_dot_zero = fa
     char* const end = use_fixed
         ? baseconv::dtoa_impl::FormatFixed(buf, num_digits, decimal_point, force_trailing_dot_zero)
         : baseconv::dtoa_impl::FormatExponential(buf, num_digits, decimal_point - 1);
+#endif
 
     DTOA_ASSERT(end - buf <= kPositiveDtoaMaxLength);
     return end;
