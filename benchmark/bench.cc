@@ -169,11 +169,11 @@ TestImplementation test_implementations[] = {
 };
 
 const char* benchmark_files[] = {
-    "test_data/truenull.json",
-    "test_data/whitespace.json",
-    "test_data/floats.json",
-    "test_data/signed_ints.json",
-    "test_data/unsigned_ints.json",
+    // "test_data/truenull.json",
+    // "test_data/whitespace.json",
+    // "test_data/floats.json",
+    // "test_data/signed_ints.json",
+    // "test_data/unsigned_ints.json",
     "test_data/allthethings.json",
     "test_data/apache_builds.json",
     "test_data/canada.json",
