@@ -884,22 +884,19 @@ ParseStatus Parser<ParseCallbacks>::ParsePrimitive()
 template <typename ParseCallbacks>
 ParseStatus Parser<ParseCallbacks>::ParseValue()
 {
-    enum class Structure {
+    enum class Structure : unsigned char {
         object,
         array,
     };
 
     struct StackElement
     {
-        Structure structure;
         size_t count; // number of elements or members in the current array resp. object
-
-        StackElement() = default;
-        StackElement(Structure structure_, size_t count_) : structure(structure_) , count(count_) {}
+        Structure structure;
     };
 
-    StackElement stack[kMaxDepth];
     size_t stack_size = 0;
+    StackElement stack[kMaxDepth];
 
     // parse 'value'
     if (token.kind == TokenKind::l_brace)
@@ -925,7 +922,7 @@ L_begin_object:
     if (stack_size >= kMaxDepth)
         return ParseStatus::max_depth_reached;
 
-    stack[stack_size++] = {Structure::object, 0};
+    stack[stack_size++] = {0, Structure::object};
 
     // skip '{'
     token = lexer.Lex(options);
@@ -1004,7 +1001,7 @@ L_begin_array:
     if (stack_size >= kMaxDepth)
         return ParseStatus::max_depth_reached;
 
-    stack[stack_size++] = {Structure::array, 0};
+    stack[stack_size++] = {0, Structure::array};
 
     // skip '['
     token = lexer.Lex(options);
