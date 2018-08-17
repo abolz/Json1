@@ -106,7 +106,7 @@ char* json::numbers::NumberToString(char* buffer, double value, bool force_trail
         *buffer++ = '-';
     }
 
-    return baseconv::Dtoa(buffer, value, force_trailing_dot_zero);
+    return baseconv::PositiveDtoa(buffer, value, force_trailing_dot_zero);
 }
 
 //==================================================================================================

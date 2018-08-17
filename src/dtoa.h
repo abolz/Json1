@@ -37,6 +37,12 @@
 #define DTOA_HAS_64_BIT_INTRINSICS 1
 #endif
 
+#if defined(_M_IX86) || defined(_M_ARM) || defined(__arm__)
+#define DTOA_32_BIT_PLATFORM 1
+#else
+// Assume 64-bit platform
+#endif
+
 #if DTOA_HAS_64_BIT_INTRINSICS
 #include <intrin.h>
 #endif
@@ -194,15 +200,20 @@ DTOA_INLINE Uint64x2 Mul128(uint64_t a, uint64_t b)
     uint64_t const b10 = uint64_t{aHi} * bLo;
     uint64_t const b11 = uint64_t{aHi} * bHi;
 
-    uint64_t const midSum = b01 + b10;
-    uint64_t const midSumCarry = midSum < b01;
+    uint32_t const b00Lo = static_cast<uint32_t>(b00);
+    uint32_t const b00Hi = static_cast<uint32_t>(b00 >> 32);
 
-    uint64_t const productLo = b00 + (midSum << 32);
-    uint64_t const productLoCarry = productLo < b00;
+    uint64_t const mid1 = b10 + b00Hi;
+    uint32_t const mid1Lo = static_cast<uint32_t>(mid1);
+    uint32_t const mid1Hi = static_cast<uint32_t>(mid1 >> 32);
 
-    uint64_t const productHi = b11 + (midSum >> 32) + (midSumCarry << 32) + productLoCarry;
+    uint64_t const mid2 = b01 + mid1Lo;
+    uint32_t const mid2Lo = static_cast<uint32_t>(mid2);
+    uint32_t const mid2Hi = static_cast<uint32_t>(mid2 >> 32);
 
-    return {productLo, productHi};
+    uint64_t const hi = b11 + mid1Hi + mid2Hi;
+    uint64_t const lo = (uint64_t{mid2Lo} << 32) + b00Lo;
+    return {lo, hi};
 #endif
 }
 
@@ -1100,20 +1111,20 @@ static constexpr Uint64x2 kPow5Double[326] = { // 5216 bytes
 //       no internal overflow, but requires extra work since the intermediate
 //       results are not perfectly aligned.
 
-DTOA_INLINE uint64_t MulShift(uint64_t m, Uint64x2 mul, int j)
+DTOA_INLINE uint64_t MulShift(uint64_t m, Uint64x2 const* mul, int j)
 {
     DTOA_ASSERT((m >> 55) == 0); // m is maximum 55 bits
 
-#if 0 && DTOA_HAS_UINT128
+#if 1 && DTOA_HAS_UINT128
     __extension__ using uint128_t = unsigned __int128;
 
-    uint128_t const b0 = uint128_t{m} * mul.lo;
-    uint128_t const b2 = uint128_t{m} * mul.hi;
+    uint128_t const b0 = uint128_t{m} * mul->lo;
+    uint128_t const b2 = uint128_t{m} * mul->hi;
 
     return static_cast<uint64_t>(((b0 >> 64) + b2) >> (j - 64));
 #else
-    auto b0 = Mul128(m, mul.lo);
-    auto b2 = Mul128(m, mul.hi);
+    auto b0 = Mul128(m, mul->lo);
+    auto b2 = Mul128(m, mul->hi);
 
     b2.lo += b0.hi;
     b2.hi += (b2.lo < b0.hi);
@@ -1122,36 +1133,40 @@ DTOA_INLINE uint64_t MulShift(uint64_t m, Uint64x2 mul, int j)
 #endif
 }
 
-DTOA_INLINE uint64_t MulShiftAll(uint64_t mv, uint64_t mp, uint64_t mm, Uint64x2 mul, int j, uint64_t* vp, uint64_t* vm)
+#if 1 && (DTOA_HAS_UINT128 || DTOA_HAS_64_BIT_INTRINSICS)
+DTOA_INLINE void MulShiftAll(uint64_t mv, uint64_t mp, uint64_t mm, Uint64x2 const* mul, int j, uint64_t* vr, uint64_t* vp, uint64_t* vm)
 {
     DTOA_ASSERT((mv >> 55) == 0); // m2 is maximum 55 bits
 
-#if 1 && (DTOA_HAS_UINT128 || DTOA_HAS_64_BIT_INTRINSICS)
-
+    *vr = MulShift(mv, mul, j);
     *vp = MulShift(mp, mul, j);
     *vm = MulShift(mm, mul, j);
-    return MulShift(mv, mul, j);
-
+}
 #else
+DTOA_INLINE void MulShiftAll(uint64_t mv, uint64_t /*mp*/, uint64_t mm, Uint64x2 const* mul, int j, uint64_t* vr, uint64_t* vp, uint64_t* vm)
+{
+    DTOA_ASSERT((mv >> 55) == 0); // m2 is maximum 55 bits
 
     uint64_t const m2 = mv / 2;
-    uint32_t const mmShift = mv - mm - 1;
+    uint32_t const mmShift = static_cast<uint32_t>(mv - mm - 1);
 
-    auto b0 = Mul128(m2, mul.lo);
-    auto b2 = Mul128(m2, mul.hi);
+    auto const b0 = Mul128(m2, mul->lo);
+    auto const b2 = Mul128(m2, mul->hi);
+
     uint64_t const lo  = b0.lo;
     uint64_t const mid = b2.lo + b0.hi;
     uint64_t const hi  = b2.hi + (mid < b0.hi);
+    *vr = ShiftRight128({mid, hi}, j - 64 - 1);
 
-    uint64_t const lo2  = lo + mul.lo;
-    uint64_t const mid2 = mid + mul.hi + (lo2 < lo);
+    uint64_t const lo2  = lo + mul->lo;
+    uint64_t const mid2 = mid + mul->hi + (lo2 < lo);
     uint64_t const hi2  = hi + (mid2 < mid);
     *vp = ShiftRight128({mid2, hi2}, j - 64 - 1);
 
     if (mmShift == 1)
     {
-        uint64_t const lo3  = lo - mul.lo;
-        uint64_t const mid3 = mid - mul.hi - (lo3 > lo);
+        uint64_t const lo3  = lo - mul->lo;
+        uint64_t const mid3 = mid - mul->hi - (lo3 > lo);
         uint64_t const hi3  = hi - (mid3 > mid);
         *vm = ShiftRight128({mid3, hi3}, j - 64 - 1);
     }
@@ -1160,16 +1175,48 @@ DTOA_INLINE uint64_t MulShiftAll(uint64_t mv, uint64_t mp, uint64_t mm, Uint64x2
         uint64_t const lo3  = lo + lo;
         uint64_t const mid3 = mid + mid + (lo3 < lo);
         uint64_t const hi3  = hi + hi + (mid3 < mid);
-        uint64_t const lo4  = lo3 - mul.lo;
-        uint64_t const mid4 = mid3 - mul.hi - (lo4 > lo3);
+        uint64_t const lo4  = lo3 - mul->lo;
+        uint64_t const mid4 = mid3 - mul->hi - (lo4 > lo3);
         uint64_t const hi4  = hi3 - (mid4 > mid3);
         *vm = ShiftRight128({mid4, hi4}, j - 64);
     }
-
-    return ShiftRight128({mid, hi}, j - 64 - 1);
-
-#endif
 }
+#endif
+
+#if DTOA_32_BIT_PLATFORM
+
+// On x86 platforms, compilers typically generate calls to library
+// functions for 64-bit divisions, even if the divisor is a constant.
+//
+// E.g.:
+// https://bugs.llvm.org/show_bug.cgi?id=37932
+// https://gcc.gnu.org/bugzilla/show_bug.cgi?id=17958
+// https://gcc.gnu.org/bugzilla/show_bug.cgi?id=37443
+//
+// The functions here perform division-by-constant using multiplications
+// in the same way as 64-bit compilers would do.
+//
+// NB:
+// The multipliers and shift values are the ones generated by clang x64
+// for expressions like x/5, x/10, etc.
+
+DTOA_INLINE uint64_t Div5(const uint64_t x) {
+    return Mul128(x, 0xCCCCCCCCCCCCCCCDu).hi >> 2;
+}
+
+DTOA_INLINE uint64_t Div10(const uint64_t x) {
+    return Mul128(x, 0xCCCCCCCCCCCCCCCDu).hi >> 3;
+}
+
+DTOA_INLINE uint64_t Div100(const uint64_t x) {
+    return Mul128(x >> 2, 0x28F5C28F5C28F5C3u).hi >> 2;
+}
+
+DTOA_INLINE uint64_t Div100000000(const uint64_t x) {
+    return Mul128(x, 0xABCC77118461CEFDu).hi >> 26;
+}
+
+#endif // DTOA_32_BIT_PLATFORM
 
 DTOA_INLINE int Max0(int y)
 {
@@ -1213,11 +1260,33 @@ DTOA_INLINE int Pow5Factor(uint64_t value)
         DTOA_ASSERT(value != 0);
         DTOA_ASSERT(factor <= 23);
 
+#if DTOA_32_BIT_PLATFORM
+        uint64_t const q = Div5(value);
+        uint32_t const r = static_cast<uint32_t>(value - 5 * q);
+        if (r != 0)
+            return factor;
+        value = q;
+#else
         if (value % 5 != 0)
             return factor;
         value /= 5;
+#endif
         ++factor;
     }
+}
+
+DTOA_INLINE bool MultipleOfPow5(uint64_t value, int p)
+{
+    return Pow5Factor(value) >= p;
+}
+
+DTOA_INLINE bool MultipleOfPow2(uint64_t value, int p)
+{
+    DTOA_ASSERT(p >= 0);
+    DTOA_ASSERT(p <= 63);
+
+//  return (value & ((uint64_t{1} << p) - 1)) == 0;
+    return (value << (64 - p)) == 0;
 }
 
 DTOA_INLINE void Utoa100(char* buf, uint32_t digits)
@@ -1267,14 +1336,25 @@ DTOA_INLINE int PrintDecimalDigitsDouble(char* buf, uint64_t output)
     int const output_length = DecimalLengthDouble(output);
     int i = output_length;
 
-#if 1
-    while (output >= 100000000)
+    // We prefer 32-bit operations, even on 64-bit platforms.
+    // We have at most 17 digits, and uint32_t can store 9 digits.
+    // If output doesn't fit into uint32_t, we cut off 8 digits,
+    // so the rest will fit into uint32_t.
+    if (static_cast<uint32_t>(output >> 32) != 0)
     {
         DTOA_ASSERT(i > 8);
-        uint32_t const c0 = static_cast<uint32_t>(output % 10000);
-        output /= 10000;
-        uint32_t const c1 = static_cast<uint32_t>(output % 10000);
-        output /= 10000;
+#if DTOA_32_BIT_PLATFORM
+        uint64_t const q = Div100000000(output);
+        uint32_t r = static_cast<uint32_t>(output - 100000000 * q);
+#else
+        uint64_t const q = output / 100000000;
+        uint32_t r = static_cast<uint32_t>(output % 100000000);
+#endif
+        output = q;
+
+        uint32_t const c0 = r % 10000;
+        r /= 10000;
+        uint32_t const c1 = r % 10000;
         uint32_t const c00 = c0 % 100;
         uint32_t const c01 = c0 / 100;
         uint32_t const c10 = c1 % 100;
@@ -1286,15 +1366,13 @@ DTOA_INLINE int PrintDecimalDigitsDouble(char* buf, uint64_t output)
         i -= 8;
     }
 
+    DTOA_ASSERT(output <= UINT32_MAX);
     uint32_t output2 = static_cast<uint32_t>(output);
-#else
-    uint64_t output2 = output;
-#endif
 
     while (output2 >= 10000)
     {
         DTOA_ASSERT(i > 4);
-        uint32_t const c = static_cast<uint32_t>(output2 % 10000);
+        uint32_t const c = output2 % 10000;
         output2 /= 10000;
         uint32_t const c0 = c % 100;
         uint32_t const c1 = c / 100;
@@ -1306,7 +1384,7 @@ DTOA_INLINE int PrintDecimalDigitsDouble(char* buf, uint64_t output)
     if (output2 >= 100)
     {
         DTOA_ASSERT(i > 2);
-        uint32_t const c = static_cast<uint32_t>(output2 % 100);
+        uint32_t const c = output2 % 100;
         output2 /= 100;
         Utoa100(buf + (i - 2), c);
         i -= 2;
@@ -1315,7 +1393,7 @@ DTOA_INLINE int PrintDecimalDigitsDouble(char* buf, uint64_t output)
     if (output2 >= 10)
     {
         DTOA_ASSERT(i == 2);
-        Utoa100(buf, static_cast<uint32_t>(output2));
+        Utoa100(buf, output2);
     }
     else
     {
@@ -1409,32 +1487,36 @@ DTOA_INLINE DoubleToDecimalResult DoubleToDecimal(double value)
 #if DTOA_OPTIMIZE_SIZE
         auto const pow5 = ComputePow5Inv(q);
         DTOA_ASSERT((pow5.hi >> (kPow5InvDoubleBitLength - 64 + (q == 0 ? 1 : 0))) == 0);
+        MulShiftAll(mv, mp, mm, &pow5, j, &vr, &vp, &vm);
 #else
-        auto const pow5 = kPow5InvDouble[q];
+        MulShiftAll(mv, mp, mm, kPow5InvDouble + q, j, &vr, &vp, &vm);
 #endif
-        vr = MulShiftAll(mv, mp, mm, pow5, j, &vp, &vm);
 
 //      if (q <= 21) // Why 21?
         if (q <= 23) // 23 = floor(log_5(2^(53+2)))
         {
-            int const mv_pow5 = Pow5Factor(mv);
-            vrIsTrailingZeros = mv_pow5 >= q;
-
+            // This should use q <= 22, but I think 21 is also safe. Smaller values
+            // may still be safe, but it's more difficult to reason about them.
             // Only one of mp, mv, and mm can be a multiple of 5, if any.
-            if (mv_pow5 == 0)
+#if DTOA_32_BIT_PLATFORM
+            if (mv - 5 * Div5(mv) == 0)
+#else
+            if (mv % 5 == 0)
+#endif
             {
-                if (acceptBounds)
-                {
-                    // Same as min(e2 + (~mm & 1), Pow5Factor(mm)) >= q
-                    // <=> e2 + (~mm & 1) >= q && Pow5Factor(mm) >= q
-                    // <=> true && Pow5Factor(mm) >= q, since e2 >= q.
-                    vmIsTrailingZeros = Pow5Factor(mm) >= q;
-                }
-                else
-                {
-                    // Same as min(e2 + 1, Pow5Factor(mp)) >= q.
-                    vp -= Pow5Factor(mp) >= q;
-                }
+                vrIsTrailingZeros = MultipleOfPow5(mv, q);
+            }
+            else if (acceptBounds)
+            {
+                // Same as min(e2 + (~mm & 1), Pow5Factor(mm)) >= q
+                // <=> e2 + (~mm & 1) >= q && Pow5Factor(mm) >= q
+                // <=> true && Pow5Factor(mm) >= q, since e2 >= q.
+                vmIsTrailingZeros = MultipleOfPow5(mm, q);
+            }
+            else
+            {
+                // Same as min(e2 + 1, Pow5Factor(mp)) >= q.
+                vp -= MultipleOfPow5(mp, q);
             }
         }
     }
@@ -1452,24 +1534,26 @@ DTOA_INLINE DoubleToDecimalResult DoubleToDecimal(double value)
 #if DTOA_OPTIMIZE_SIZE
         auto const pow5 = ComputePow5(i);
         DTOA_ASSERT((pow5.hi >> (kPow5DoubleBitLength - 64)) == 0);
+        MulShiftAll(mv, mp, mm, &pow5, j, &vr, &vp, &vm);
 #else
-        auto const pow5 = kPow5Double[i];
+        MulShiftAll(mv, mp, mm, kPow5Double + i, j, &vr, &vp, &vm);
 #endif
-
-        vr = MulShiftAll(mv, mp, mm, pow5, j, &vp, &vm);
 
         if (q <= 1)
         {
-            vrIsTrailingZeros = static_cast<int>(~mv & 1) >= q;
-            //vrIsTrailingZeros = q == 0 || (~mv & 1) != 0;
+            // {vr,vp,vm} is trailing zeros if {mv,mp,mm} has at least q trailing 0 bits.
+            // mv = 4 * m2, so it always has at least two trailing 0 bits.
+            vrIsTrailingZeros = true;
+
             if (acceptBounds)
             {
-                vmIsTrailingZeros = static_cast<int>(~mm & 1) >= q;
-                //vmIsTrailingZeros = q == 0 || (~mm & 1) != 0;
+                // mm = mv - 1 - mmShift, so it has 1 trailing 0 bit iff mmShift == 1.
+                vmIsTrailingZeros = (mmShift == 1);
             }
             else
             {
-                vp -= 1;
+                // mp = mv + 2, so it always has at least one trailing 0 bit.
+                --vp;
             }
         }
 //      else if (q <= 64)
@@ -1482,8 +1566,7 @@ DTOA_INLINE DoubleToDecimalResult DoubleToDecimal(double value)
             // <=> ntz(mv) >= q-1
             // <=> mv & ((1 << (q-1)) - 1) == 0
             // We also need to make sure that the left shift does not overflow.
-            //vrIsTrailingZeros = (mv & ((1ull << (q - 1)) - 1)) == 0;
-            vrIsTrailingZeros = (mv << (64 - (q - 1))) == 0;
+            vrIsTrailingZeros = MultipleOfPow2(mv, q - 1);
         }
     }
 
@@ -1495,42 +1578,87 @@ DTOA_INLINE DoubleToDecimalResult DoubleToDecimal(double value)
     // On average, we remove ~2 digits.
 
     uint64_t output;
-    uint64_t lastRemovedDigit = 0;
 
     if (vmIsTrailingZeros || vrIsTrailingZeros)
     {
         // General case, which happens rarely (<1%).
 
-        while (vp / 10 > vm / 10)
+        uint32_t lastRemovedDigit = 0;
+
+#if DTOA_32_BIT_PLATFORM
+        for (;;)
         {
+            uint64_t const vmDiv10 = Div10(vm);
+            uint64_t const vpDiv10 = Div10(vp);
+            if (vmDiv10 >= vpDiv10)
+                break;
+            vm = vmDiv10;
+            vp = vpDiv10;
+            ++e10;
+
+            uint32_t const vmMod10 = static_cast<uint32_t>(vm - 10 * vmDiv10);
+            vmIsTrailingZeros &= vmMod10 == 0;
+            vrIsTrailingZeros &= lastRemovedDigit == 0;
+
+            uint64_t const vrDiv10 = Div10(vr);
+            uint32_t const vrMod10 = static_cast<uint32_t>(vr - 10 * vrDiv10);
+            lastRemovedDigit = vrMod10;
+            vr = vrDiv10;
+        }
+
+        if (vmIsTrailingZeros)
+        {
+            for (;;)
+            {
+                uint64_t const vmDiv10 = Div10(vm);
+                uint32_t const vmMod10 = static_cast<uint32_t>(vm - 10 * vmDiv10);
+                if (vmMod10 != 0)
+                    break;
+                vm = vmDiv10;
+                vp = Div10(vp);
+                ++e10;
+
+                vrIsTrailingZeros &= lastRemovedDigit == 0;
+                uint64_t const vrDiv10 = Div10(vr);
+                uint32_t const vrMod10 = static_cast<uint32_t>(vr - 10 * vrDiv10);
+                lastRemovedDigit = vrMod10;
+                vr = vrDiv10;
+            }
+        }
+#else
+        while (vm / 10 < vp / 10)
+        {
+            vm /= 10;
+            vp /= 10;
+            ++e10;
+
             vmIsTrailingZeros &= vm % 10 == 0;
             vrIsTrailingZeros &= lastRemovedDigit == 0;
 
-            lastRemovedDigit = vr % 10;
+            lastRemovedDigit = static_cast<uint32_t>(vr % 10);
             vr /= 10;
-            vp /= 10;
-            vm /= 10;
-            ++e10;
         }
 
         if (vmIsTrailingZeros)
         {
             while (vm % 10 == 0)
             {
+                vm /= 10;
+                vp /= 10;
+                ++e10;
+
                 vrIsTrailingZeros &= lastRemovedDigit == 0;
 
-                lastRemovedDigit = vr % 10;
+                lastRemovedDigit = static_cast<uint32_t>(vr % 10);
                 vr /= 10;
-                vp /= 10;
-                vm /= 10;
-                ++e10;
             }
         }
+#endif
 
 #if 1//test (XXX: should round-to-nearest-even really be used for binary->decimal???)
-        if (vrIsTrailingZeros && lastRemovedDigit == 5 && vr % 2 == 0)
+        if (vrIsTrailingZeros && lastRemovedDigit == 5 && static_cast<uint32_t>(vr % 2) == 0)
         {
-            // Round down not up if the number ends in X50000.
+            // Round down not up if the number ends in ...500...00.
             lastRemovedDigit = 4;
         }
 #endif
@@ -1542,17 +1670,62 @@ DTOA_INLINE DoubleToDecimalResult DoubleToDecimal(double value)
     {
         // Specialized for the common case (>99%).
 
-        while (vp / 10 > vm / 10)
+        bool roundUp = false;
+
+#if DTOA_32_BIT_PLATFORM
+        //uint64_t const vmDiv100 = Div100(vm);
+        //uint64_t const vpDiv100 = Div100(vp);
+        //if (vmDiv100 < vpDiv100)
+        //{
+        //    vm = vmDiv100;
+        //    vp = vpDiv100;
+        //    e10 += 2;
+        //
+        //    uint64_t const vrDiv100 = Div100(vr);
+        //    uint32_t const vmDiv100 = static_cast<uint32_t>(vr - 100 * vrDiv100);
+        //    roundUp = vrDiv100 >= 50;
+        //    vr = vrDiv100;
+        //}
+
+        for (;;)
         {
-            lastRemovedDigit = vr % 10;
-            vr /= 10;
-            vp /= 10;
-            vm /= 10;
+            uint64_t const vmDiv10 = Div10(vm);
+            uint64_t const vpDiv10 = Div10(vp);
+            if (vmDiv10 >= vpDiv10)
+                break;
+            vm = vmDiv10;
+            vp = vpDiv10;
             ++e10;
+
+            uint64_t const vrDiv10 = Div10(vr);
+            uint32_t const vrMod10 = static_cast<uint32_t>(vr - 10 * vrDiv10);
+            roundUp = vrMod10 >= 5;
+            vr = vrDiv10;
         }
+#else
+        //if (vm / 100 < vp / 100)
+        //{
+        //    vm /= 100;
+        //    vp /= 100;
+        //    e10 += 2;
+        //
+        //    roundUp = static_cast<uint32_t>(vr % 100) >= 50;
+        //    vr /= 100;
+        //}
+
+        while (vm / 10 < vp / 10)
+        {
+            vm /= 10;
+            vp /= 10;
+            ++e10;
+
+            roundUp = static_cast<uint32_t>(vr % 10) >= 5;
+            vr /= 10;
+        }
+#endif
 
         // We need to take vr+1 if vr is outside bounds or we need to round up.
-        output = vr + (vr == vm || lastRemovedDigit >= 5);
+        output = vr + (vr == vm || roundUp);
     }
 
     //
@@ -1723,6 +1896,20 @@ DTOA_INLINE int Pow5Factor(uint32_t value)
     }
 }
 
+DTOA_INLINE bool MultipleOfPow5(uint32_t value, int p)
+{
+    return Pow5Factor(value) >= p;
+}
+
+DTOA_INLINE bool MultipleOfPow2(uint32_t value, int p)
+{
+    DTOA_ASSERT(p >= 0);
+    DTOA_ASSERT(p <= 31);
+
+//  return (value & ((uint32_t{1} << p) - 1)) == 0;
+    return (value << (32 - p)) == 0;
+}
+
 DTOA_INLINE int DecimalLengthFloat(uint32_t v)
 {
     DTOA_ASSERT(v < 1000000000u);
@@ -1870,23 +2057,22 @@ DTOA_INLINE FloatToDecimalResult FloatToDecimal(float value)
             lastRemovedDigit = MulPow5InvDivPow2(mv, q - 1, -e2 + q - 1 + l) % 10;
         }
 
-        if (q <= 9)
+//      if (q <= 9)
+        if (q <= 11) // 11 = floor(log_5(2^(24+2)))
         {
+            // The largest power of 5 that fits in 24 bits is 5^10, but q <= 9 seems to be safe as well.
             // Only one of mp, mv, and mm can be a multiple of 5, if any.
             if (mv % 5 == 0)
             {
-                vrIsTrailingZeros = Pow5Factor(mv) >= q;
+                vrIsTrailingZeros = MultipleOfPow5(mv, q);
+            }
+            else if (acceptBounds)
+            {
+                vmIsTrailingZeros = MultipleOfPow5(mm, q);
             }
             else
             {
-                if (acceptBounds)
-                {
-                    vmIsTrailingZeros = Pow5Factor(mm) >= q;
-                }
-                else
-                {
-                    vp -= Pow5Factor(mp) >= q;
-                }
+                vp -= MultipleOfPow5(mp, q);
             }
         }
     }
@@ -1896,7 +2082,7 @@ DTOA_INLINE FloatToDecimalResult FloatToDecimal(float value)
         DTOA_ASSERT(q >= 0);
         int const i = -e2 - q;
         int const k = Pow5BitLength(i) - kPow5FloatBitLength;
-        int j = q - k;
+        int const j = q - k;
 
         e10 = q + e2;
 
@@ -1912,22 +2098,25 @@ DTOA_INLINE FloatToDecimalResult FloatToDecimal(float value)
 
         if (q <= 1)
         {
-            vrIsTrailingZeros = static_cast<int>(~mv & 1) >= q;
+            // {vr,vp,vm} is trailing zeros if {mv,mp,mm} has at least q trailing 0 bits.
+            // mv = 4 * m2, so it always has at least two trailing 0 bits.
+            vrIsTrailingZeros = true;
+
             if (acceptBounds)
             {
-                vmIsTrailingZeros = static_cast<int>(~mm & 1) >= q;
+                // mm = mv - 1 - mmShift, so it has 1 trailing 0 bit iff mmShift == 1.
+                vmIsTrailingZeros = (mmShift == 1);
             }
             else
             {
+                // mp = mv + 2, so it always has at least one trailing 0 bit.
                 --vp;
             }
         }
 //      else if (q < 31)
         else if (q <= Float::SignificandSize + 2)
         {
-            // TODO(ulfjack): Use a tighter bound here.
-            //vrIsTrailingZeros = (mv & ((1u << (q - 1)) - 1)) == 0;
-            vrIsTrailingZeros = (mv << (32 - (q - 1))) == 0;
+            vrIsTrailingZeros = MultipleOfPow2(mv, q - 1);
         }
     }
 
@@ -1942,29 +2131,29 @@ DTOA_INLINE FloatToDecimalResult FloatToDecimal(float value)
     {
         // General case, which happens rarely.
 
-        while (vp / 10 > vm / 10)
+        while (vm / 10 < vp / 10)
         {
+            vm /= 10;
+            vp /= 10;
+            ++e10;
+
             vmIsTrailingZeros &= vm % 10 == 0;
             vrIsTrailingZeros &= lastRemovedDigit == 0;
-
             lastRemovedDigit = vr % 10;
             vr /= 10;
-            vp /= 10;
-            vm /= 10;
-            ++e10;
         }
 
         if (vmIsTrailingZeros)
         {
             while (vm % 10 == 0)
             {
-                vrIsTrailingZeros &= lastRemovedDigit == 0;
+                vm /= 10;
+                vp /= 10;
+                ++e10;
 
+                vrIsTrailingZeros &= lastRemovedDigit == 0;
                 lastRemovedDigit = vr % 10;
                 vr /= 10;
-                vp /= 10;
-                vm /= 10;
-                ++e10;
             }
         }
 
@@ -1983,13 +2172,14 @@ DTOA_INLINE FloatToDecimalResult FloatToDecimal(float value)
     {
         // Common case.
 
-        while (vp / 10 > vm / 10)
+        while (vm / 10 < vp / 10)
         {
+            vm /= 10;
+            vp /= 10;
+            ++e10;
+
             lastRemovedDigit = vr % 10;
             vr /= 10;
-            vp /= 10;
-            vm /= 10;
-            ++e10;
         }
 
         // We need to take vr+1 if vr is outside bounds or we need to round up.
@@ -2147,13 +2337,13 @@ DTOA_INLINE char* FormatExponential(char* buffer, int length, int exponent)
 constexpr int kPositiveDtoaMaxLength = 24;
 
 template <typename Fp>
-inline char* PositiveDtoa(char* buf, Fp value, bool force_trailing_dot_zero = false)
+inline char* PositiveDtoa(char* buffer, Fp value, bool force_trailing_dot_zero = false)
 {
     DTOA_ASSERT(value > 0);
 
     int num_digits = 0;
     int exponent = 0;
-    baseconv::dtoa_impl::IEEEToDecimal(buf, num_digits, exponent, value);
+    baseconv::dtoa_impl::IEEEToDecimal(buffer, num_digits, exponent, value);
 
     DTOA_ASSERT(num_digits <= std::numeric_limits<Fp>::max_digits10);
 
@@ -2161,10 +2351,10 @@ inline char* PositiveDtoa(char* buf, Fp value, bool force_trailing_dot_zero = fa
 
 #if 0
 #if 1
-    buf[num_digits] = 'e';
-    char* const end = baseconv::dtoa_impl::ExponentToDecimal(buf + (num_digits + 1), decimal_point - 1);
+    buffer[num_digits] = 'e';
+    char* const end = baseconv::dtoa_impl::ExponentToDecimal(buffer + (num_digits + 1), decimal_point - 1);
 #else
-    char* const end = baseconv::dtoa_impl::FormatExponential(buf, num_digits, decimal_point - 1);
+    char* const end = baseconv::dtoa_impl::FormatExponential(buffer, num_digits, decimal_point - 1);
 #endif
 #else
     // Changing these constants requires changing kPositiveDtoaMaxLength too.
@@ -2181,12 +2371,43 @@ inline char* PositiveDtoa(char* buf, Fp value, bool force_trailing_dot_zero = fa
     bool const use_fixed = kMinExp < decimal_point && decimal_point <= kMaxExp;
 
     char* const end = use_fixed
-        ? baseconv::dtoa_impl::FormatFixed(buf, num_digits, decimal_point, force_trailing_dot_zero)
-        : baseconv::dtoa_impl::FormatExponential(buf, num_digits, decimal_point - 1);
+        ? baseconv::dtoa_impl::FormatFixed(buffer, num_digits, decimal_point, force_trailing_dot_zero)
+        : baseconv::dtoa_impl::FormatExponential(buffer, num_digits, decimal_point - 1);
 #endif
 
-    DTOA_ASSERT(end - buf <= kPositiveDtoaMaxLength);
+    DTOA_ASSERT(end - buffer <= kPositiveDtoaMaxLength);
     return end;
+}
+
+constexpr int kFiniteDtoaMaxLength = 1/*sign*/ + 24;
+
+template <typename Fp>
+inline char* FiniteDtoa(char* buffer, Fp value, bool force_trailing_dot_zero = false)
+{
+    using IEEEFloat = dtoa_impl::IEEE<Fp>;
+
+    IEEEFloat const v(value);
+    DTOA_ASSERT(v.IsFinite());
+
+    if (v.SignBit())
+    {
+        value = v.AbsValue();
+        *buffer++ = '-';
+    }
+
+    // PositiveDtoa can't handle +-0.
+    if (v.IsZero())
+    {
+        *buffer++ = '0';
+        if (force_trailing_dot_zero)
+        {
+            *buffer++ = '.';
+            *buffer++ = '0';
+        }
+        return buffer;
+    }
+
+    return baseconv::PositiveDtoa(buffer, value, force_trailing_dot_zero);
 }
 
 //==================================================================================================
@@ -2204,7 +2425,7 @@ DTOA_INLINE char* StrCopy(char* dest, char const (&src)[N])
 
 } // namespace dtoa_impl
 
-constexpr int kDtoaMaxLength = 1/* minus-sign */ + kPositiveDtoaMaxLength;
+constexpr int kDtoaMaxLength = kFiniteDtoaMaxLength;
 
 template <typename Fp>
 inline char* Dtoa(char* buffer, Fp value, bool force_trailing_dot_zero = false)
@@ -2227,24 +2448,7 @@ inline char* Dtoa(char* buffer, Fp value, bool force_trailing_dot_zero = false)
         return baseconv::dtoa_impl::StrCopy(buffer, kInfString);
     }
 
-    if (v.SignBit())
-    {
-        value = v.AbsValue();
-        *buffer++ = '-';
-    }
-
-    if (v.IsZero())
-    {
-        *buffer++ = '0';
-        if (force_trailing_dot_zero)
-        {
-            *buffer++ = '.';
-            *buffer++ = '0';
-        }
-        return buffer;
-    }
-
-    return baseconv::PositiveDtoa(buffer, value, force_trailing_dot_zero);
+    return baseconv::FiniteDtoa(buffer, value, force_trailing_dot_zero);
 }
 
 } // namespace baseconv
