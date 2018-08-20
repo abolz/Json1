@@ -614,6 +614,12 @@ EscapeStringResult EscapeString(char const* next, char const* last, Fn yield)
                     yield('\\');
                 }
                 break;
+            //case '\x7F': // DEL
+            //    if (escape_del)
+            //    {
+            //        yield('\\');
+            //    }
+            //    break;
             }
             yield(ch);
             ++next;
@@ -657,10 +663,24 @@ EscapeStringResult EscapeString(char const* next, char const* last, Fn yield)
                 yield('9');
                 break;
             default:
-                // The UTF-8 sequence is valid. No need to re-encode.
-                for (intptr_t i = 0; i < next - f; ++i)
+                //if (ascii_only_output)
+                //{
+                //    unicode::EncodeUTF16(U, [&](uint16_t W) {
+                //        yield('\\');
+                //        yield('u');
+                //        yield(kHexDigits[(W >> 12)      ]);
+                //        yield(kHexDigits[(W >>  8) & 0xF]);
+                //        yield(kHexDigits[(W >>  4) & 0xF]);
+                //        yield(kHexDigits[(W      ) & 0xF]);
+                //    });
+                //}
+                //else
                 {
-                    yield(f[i]);
+                    // The UTF-8 sequence is valid. No need to re-encode.
+                    for (intptr_t i = 0; i < next - f; ++i)
+                    {
+                        yield(f[i]);
+                    }
                 }
                 break;
             }
