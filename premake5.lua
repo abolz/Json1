@@ -42,7 +42,7 @@ workspace "Json"
     configuration { "release" }
         defines { "NDEBUG" }
         symbols "On" -- for profiling...
-        optimize "Full"
+        optimize "On"
             -- On ==> -O2
             -- Full ==> -O3
 

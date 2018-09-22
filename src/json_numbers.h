@@ -30,7 +30,7 @@ namespace numbers {
 // Convert the double-precision number `value` to a decimal floating-point
 // number.
 // The buffer must be large enough! (size >= 32 is sufficient.)
-char* NumberToString(char* buffer, double value, bool force_trailing_dot_zero = true);
+char* NumberToString(char* buffer, int buffer_length, double value, bool force_trailing_dot_zero = true);
 
 // Convert the string `[first, last)` to a double-precision value.
 // The string must be valid according to the JSON grammar and match the number

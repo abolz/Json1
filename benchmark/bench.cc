@@ -169,11 +169,11 @@ TestImplementation test_implementations[] = {
 };
 
 const char* benchmark_files[] = {
-    // "test_data/truenull.json",
-    // "test_data/whitespace.json",
-    // "test_data/floats.json",
-    // "test_data/signed_ints.json",
-    // "test_data/unsigned_ints.json",
+    //"test_data/truenull.json",
+    //"test_data/whitespace.json",
+    //"test_data/floats.json",
+    //"test_data/signed_ints.json",
+    //"test_data/unsigned_ints.json",
     "test_data/allthethings.json",
     "test_data/apache_builds.json",
     "test_data/canada.json",
@@ -181,7 +181,7 @@ const char* benchmark_files[] = {
     "test_data/github_events.json",
     "test_data/instruments.json",
     "test_data/mesh.json",
-    //"test_data/sample.json", // XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX stack overflow
+    "test_data/sample.json", // XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX stack overflow
     //"test_data/svg_menu.json",
     "test_data/twitter.json",
     "test_data/update-center.json",
@@ -192,10 +192,9 @@ size_t array_length(T(&)[L]) {
     return L;
 }
 
-using Clock = std::chrono::high_resolution_clock;
-//using Clock = std::chrono::steady_clock;
+using Clock = std::chrono::steady_clock;
 
-const auto SECONDS_PER_TEST = std::chrono::seconds(8);
+const auto SECONDS_PER_TEST = std::chrono::seconds(5);
 
 #if 0
 struct Timing
@@ -289,7 +288,7 @@ void benchmark(const char* filename) {
 
         auto const mean = std::chrono::duration<double>(end - start).count() / static_cast<double>(parses);
 
-        const double MB = static_cast<double>(length) / 1000000.0;
+        const double MB = static_cast<double>(length) / 1024.0 / 1024.0;
         const double MBPerSec = MB / mean;
 
         if (first) {

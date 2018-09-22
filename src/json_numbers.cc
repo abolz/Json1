@@ -20,14 +20,13 @@
 
 #include "json_numbers.h"
 
-#include "dtoa.h"
-#include "strtod.h"
-
 #include <cassert>
 #include <climits>
 #include <cmath>
 #include <cstring>
 #include <limits>
+
+#include "__charconv.h"
 
 #ifndef JSON_ASSERT
 #define JSON_ASSERT(X) assert(X)
@@ -37,9 +36,12 @@
 // NumberToString
 //==================================================================================================
 
-char* json::numbers::NumberToString(char* buffer, double value, bool force_trailing_dot_zero)
+char* json::numbers::NumberToString(char* buffer, int buffer_length, double value, bool force_trailing_dot_zero)
 {
-    using Double = baseconv::dtoa_impl::IEEE<double>;
+    using Double = charconv_internal::Double;
+
+    JSON_ASSERT(buffer_length >= 32);
+    static_cast<void>(buffer_length);
 
     // Integers in the range [-2^53, +2^53] are exactly repesentable as 'double'.
     // Print these numbers without a trailing ".0".
@@ -96,7 +98,7 @@ char* json::numbers::NumberToString(char* buffer, double value, bool force_trail
             // Reuse PrintDecimalDigits.
             // This routine assumes that 'i' has at most 17 decimal digits.
             // We only get here if 'i' has at most 16 decimal digits.
-            return buffer + baseconv::dtoa_impl::PrintDecimalDigitsDouble(buffer, static_cast<uint64_t>(i));
+            return buffer + charconv_internal::PrintDecimalDigitsDouble(buffer, static_cast<uint64_t>(i));
         }
     }
 
@@ -106,7 +108,7 @@ char* json::numbers::NumberToString(char* buffer, double value, bool force_trail
         *buffer++ = '-';
     }
 
-    return baseconv::PositiveDtoa(buffer, value, force_trailing_dot_zero);
+    return charconv_internal::PositiveDoubleToString(buffer, value, force_trailing_dot_zero);
 }
 
 //==================================================================================================
@@ -117,7 +119,7 @@ char* json::numbers::NumberToString(char* buffer, double value, bool force_trail
 static double InternalStrtod(char const* next, char const* last)
 {
     using namespace json::charclass;
-    using baseconv::kMaxSignificantDigits;
+    using charconv_internal::kMaxSignificantDigits;
 
     // Inputs larger than kMaxInt (currently) can not be handled.
     // To avoid overflow in integer arithmetic.
@@ -159,6 +161,9 @@ static double InternalStrtod(char const* next, char const* last)
                 break;
         }
     }
+    //else if (*next == '.')
+    //{
+    //}
     else
     {
         JSON_ASSERT(false);
@@ -212,13 +217,14 @@ static double InternalStrtod(char const* next, char const* last)
             JSON_ASSERT(next != last);
         }
 
-        int const exp_val = baseconv::strtod_impl::ReadInt<int>(next, (last - next <= 8) ? last : (next + 8));
+        int const max_exp_len = static_cast<int>(last - next);
+        int const exp_val = charconv_internal::ReadInt<int>(next, max_exp_len < 8 ? max_exp_len : 8);
 
         exponent += exp_is_neg ? -exp_val : exp_val;
     }
 
 L_convert:
-    return baseconv::DecimalToDouble(digits, num_digits, exponent, !zero_tail);
+    return charconv_internal::DigitsToDouble(digits, num_digits, exponent, !zero_tail);
 }
 
 double json::numbers::StringToNumber(char const* first, char const* last, NumberClass nc)
@@ -247,6 +253,10 @@ double json::numbers::StringToNumber(char const* first, char const* last, Number
     {
         ++first;
     }
+    //else if (*first == '+')
+    //{
+    //    ++first;
+    //}
 
     // Use a faster method for integers which will fit into a uint64_t.
     // Let static_cast do the conversion.
@@ -255,7 +265,7 @@ double json::numbers::StringToNumber(char const* first, char const* last, Number
         int const num_digits = static_cast<int>(last - first);
         int const max_digits = num_digits <= 19 ? num_digits : 19;
 
-        uint64_t u = baseconv::strtod_impl::ReadInt<uint64_t>(first, first + max_digits);
+        uint64_t u = charconv_internal::ReadInt<uint64_t>(first, max_digits);
 
         if (num_digits == 20)
         {
@@ -285,7 +295,7 @@ bool json::numbers::StringToNumber(double& result, char const* first, char const
         return true;
     }
 
-    auto const res = json::ScanNumber(first, last, options);
+    auto const res = json::ScanNumber(first, last, options, [](char) {});
 
     if (res.next == last && res.number_class != NumberClass::invalid)
     {

@@ -1417,11 +1417,22 @@ ParseStatus parse(Value& value, std::string const& str, Options const& options =
 // stringify
 //==================================================================================================
 
+struct StringifyOptions
+{
+    // If true, parses "NaN" and "Infinity" (without the quotes) as numbers.
+    // Default is false.
+    bool allow_nan_inf = false;
+
+    // If >= 0, pretty-print the JSON.
+    // Default is < 0, that is the JSON is rendered as the shortest string possible.
+    int indent_width = -1;
+};
+
 // Write a stringified version of the given value to str.
 // Returns true if successful.
 // Returns false only if the JSON value contains invalid UTF-8 strings and
 // options.allow_invalid_unicode is false.
-bool stringify(std::string& str, Value const& value, Options const& options = {});
+bool stringify(std::string& str, Value const& value, StringifyOptions const& options = {});
 
 //==================================================================================================
 // traverse

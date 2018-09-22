@@ -862,7 +862,7 @@ TEST_CASE("JSON_checker")
             CHECK(res.ec == json::ParseStatus::success);
 
             std::string s;
-            json::Options options;
+            json::StringifyOptions options;
             //options.indent_width = INT8_MIN;
             //options.indent_width = INT8_MAX;
             options.indent_width = 4;
@@ -1322,7 +1322,7 @@ TEST_CASE("Stringify")
     json::Value val;
     json::parse(val, input.data(), input.data() + input.size());
 
-    json::Options options;
+    json::StringifyOptions options;
     options.indent_width = 4;
 
     std::string str;
@@ -1349,7 +1349,7 @@ here */
 
     json::Options options;
     options.skip_comments = true;
-    options.allow_trailing_comma = true;
+    options.allow_trailing_commas = true;
 
     json::Value val;
     auto const res = json::parse(val, inp.data(), inp.data() + inp.size(), options);
@@ -1852,6 +1852,9 @@ TEST_CASE("Invalid UTF-8")
 
     for (auto const& test : tests)
     {
+        //std::vector<unsigned int> inp(test.input.begin(), test.input.end());
+        //CAPTURE(inp);
+
         json::Value j;
         auto const ec = json::parse(j, "\"" + test.input + "\"");
         CHECK(ec != json::ParseStatus::success);
@@ -2617,12 +2620,11 @@ TEST_CASE("Unquoted keys")
     _f6666: 6.0,
     ggggggg: 7.0,
     hhhhhhhh: 8.0,
-    "iiiiiiiii": 9.0,
+    "iiiiiiiii": 9.0
 })";
 
     json::Value j;
     json::Options options;
-    options.allow_trailing_comma = true;
     options.allow_unquoted_keys = true;
     auto const res = json::parse(j, inp, options);
 
@@ -2636,4 +2638,84 @@ TEST_CASE("Unquoted keys")
     CHECK(j["ggggggg"] == 7.0);
     CHECK(j["hhhhhhhh"] == 8.0);
     CHECK(j["iiiiiiiii"] == 9.0);
+}
+
+TEST_CASE("Relaxed")
+{
+    std::string const input = R"({
+    // An empty array
+    "empty_array": []
+    /*/*
+an empty object /*/
+    "empty_object" : {}
+/* commented out:
+    "another_empty_object": {},/**/
+    FirstName: "John",
+    LastName: "Doe",
+    Age: 43
+    Address: {
+/** Note: no commas: /*//**/
+        Street: "Downing \"Street\" 10"
+        City: "London"
+        Country: "Great Britain",
+    }
+    "Phone numbers": [
+        "+44 1234567",
+        "+44 2345678"
+    ]
+})";
+
+    json::Options opts;
+    opts.skip_comments = true;
+    opts.allow_nan_inf = true;
+    opts.allow_trailing_commas = true;
+    opts.allow_unquoted_keys = true;
+    opts.ignore_missing_commas = true;
+
+    json::Value val;
+    auto const res = json::parse(val, input.data(), input.data() + input.size(), opts);
+    if (res.ec != json::ParseStatus::success)
+    {
+        auto const li = json::util::GetLineInfo(input.data(), res.ptr);
+        printf("Line %zu, column %zu:\n", li.line, li.column);
+        printf("|%.*s|\n", static_cast<int>(res.end - res.ptr), res.ptr);
+    }
+
+    REQUIRE(res.ec == json::ParseStatus::success);
+
+    REQUIRE(val.is_object());
+    REQUIRE(val.size() == 7);
+    REQUIRE(val.has_member("empty_array"));
+    REQUIRE(val["empty_array"].is_array());
+    REQUIRE(val["empty_array"].size() == 0);
+    REQUIRE(val.has_member("empty_object"));
+    REQUIRE(val["empty_object"].is_object());
+    REQUIRE(val["empty_object"].size() == 0);
+    REQUIRE(val.has_member("FirstName"));
+    REQUIRE(val["FirstName"].is_string());
+    REQUIRE(val["FirstName"] == "John");
+    REQUIRE(val.has_member("LastName"));
+    REQUIRE(val["LastName"].is_string());
+    REQUIRE(val["LastName"] == "Doe");
+    REQUIRE(val.has_member("Age"));
+    REQUIRE(val["Age"].is_number());
+    REQUIRE(val["Age"] == 43);
+    REQUIRE(val.has_member("Address"));
+    REQUIRE(val["Address"].is_object());
+    REQUIRE(val["Address"].has_member("Street"));
+    REQUIRE(val["Address"]["Street"].is_string());
+    REQUIRE(val["Address"]["Street"] == "Downing \"Street\" 10");
+    REQUIRE(val["Address"].has_member("City"));
+    REQUIRE(val["Address"]["City"].is_string());
+    REQUIRE(val["Address"]["City"] == "London");
+    REQUIRE(val["Address"].has_member("Country"));
+    REQUIRE(val["Address"]["Country"].is_string());
+    REQUIRE(val["Address"]["Country"] == "Great Britain");
+    REQUIRE(val.has_member("Phone numbers"));
+    REQUIRE(val["Phone numbers"].is_array());
+    REQUIRE(val["Phone numbers"].size() == 2);
+    REQUIRE(val["Phone numbers"][0].is_string());
+    REQUIRE(val["Phone numbers"][0] == "+44 1234567");
+    REQUIRE(val["Phone numbers"][1].is_string());
+    REQUIRE(val["Phone numbers"][1] == "+44 2345678");
 }

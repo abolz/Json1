@@ -854,7 +854,7 @@ String Value::to_string() const
     case Type::number:
         {
             char buf[32];
-            char* end = numbers::NumberToString(buf, get_number(), /*force_trailing_dot_zero*/ false);
+            char* end = numbers::NumberToString(buf, 32, get_number(), /*force_trailing_dot_zero*/ false);
             return String(buf, end);
         }
     case Type::string:
@@ -1096,9 +1096,9 @@ ParseStatus json::parse(Value& value, std::string const& str, Options const& opt
 // stringify
 //==================================================================================================
 
-static bool StringifyValue(std::string& str, Value const& value, Options const& options, int curr_indent);
+static bool StringifyValue(std::string& str, Value const& value, StringifyOptions const& options, int curr_indent);
 
-static bool StringifyNull(std::string& str, Options const& /*options*/)
+static bool StringifyNull(std::string& str, StringifyOptions const& /*options*/)
 {
     //if (!options.ignore_null_values)
         str += "null";
@@ -1111,7 +1111,7 @@ static bool StringifyBoolean(std::string& str, bool value)
     return true;
 }
 
-static bool StringifyNumber(std::string& str, double value, Options const& options)
+static bool StringifyNumber(std::string& str, double value, StringifyOptions const& options)
 {
     if (!options.allow_nan_inf && !std::isfinite(value))
     {
@@ -1123,13 +1123,13 @@ static bool StringifyNumber(std::string& str, double value, Options const& optio
     }
 
     char buf[32];
-    char* end = numbers::NumberToString(buf, value, /*force_trailing_dot_zero*/ true);
+    char* end = numbers::NumberToString(buf, 32, value, /*force_trailing_dot_zero*/ true);
     str.append(buf, end);
 
     return true;
 }
 
-static bool StringifyString(std::string& str, String const& value, Options const& /*options*/)
+static bool StringifyString(std::string& str, String const& value, StringifyOptions const& /*options*/)
 {
     char const* const first = value.data();
     char const* const last  = value.data() + value.size();
@@ -1157,7 +1157,7 @@ static bool StringifyString(std::string& str, String const& value, Options const
     return success;
 }
 
-static bool StringifyArray(std::string& str, Array const& value, Options const& options, int curr_indent)
+static bool StringifyArray(std::string& str, Array const& value, StringifyOptions const& options, int curr_indent)
 {
     str += '[';
 
@@ -1237,7 +1237,7 @@ static bool StringifyArray(std::string& str, Array const& value, Options const& 
     return true;
 }
 
-static bool StringifyObject(std::string& str, Object const& value, Options const& options, int curr_indent)
+static bool StringifyObject(std::string& str, Object const& value, StringifyOptions const& options, int curr_indent)
 {
     str += '{';
 
@@ -1324,7 +1324,7 @@ static bool StringifyObject(std::string& str, Object const& value, Options const
     return true;
 }
 
-static bool StringifyValue(std::string& str, Value const& value, Options const& options, int curr_indent)
+static bool StringifyValue(std::string& str, Value const& value, StringifyOptions const& options, int curr_indent)
 {
     switch (value.type())
     {
@@ -1349,7 +1349,7 @@ static bool StringifyValue(std::string& str, Value const& value, Options const& 
     }
 }
 
-bool json::stringify(std::string& str, Value const& value, Options const& options)
+bool json::stringify(std::string& str, Value const& value, StringifyOptions const& options)
 {
     return StringifyValue(str, value, options, 0);
 }
