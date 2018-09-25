@@ -137,7 +137,7 @@ project "test"
     files {
         "test/catch.hpp",
         "test/catch_main.cc",
-        "test/test.cc",
+        "test/test*.cc",
     }
     links {
         "json",

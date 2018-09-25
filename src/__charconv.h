@@ -67,7 +67,7 @@ inline Dest ReinterpretBits(Source source)
 struct Double
 {
     static_assert(std::numeric_limits<double>::is_iec559
-		          && std::numeric_limits<double>::digits == 53
+                  && std::numeric_limits<double>::digits == 53
                   && std::numeric_limits<double>::max_exponent == 1024,
         "IEEE-754 double-precision implementation required");
 
@@ -124,7 +124,7 @@ struct Double
         return ReinterpretBits<double>(bits & ~SignMask);
     }
 
-	double NextValue() const {
+    double NextValue() const {
         assert(!SignBit());
         return ReinterpretBits<double>(IsInf() ? bits : bits + 1);
     }

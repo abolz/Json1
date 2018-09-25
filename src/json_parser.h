@@ -40,6 +40,7 @@
 //#define JSON_NEVER_INLINE inline
 //#endif
 
+#define JSON_USE_SSE42 1
 #ifndef JSON_USE_SSE42
 #if defined(__SSE_4_2__) || (/* for MSVC: */ defined(__AVX__) || defined(__AVX2__))
 #define JSON_USE_SSE42 1
@@ -51,6 +52,9 @@
 #endif
 
 namespace json {
+
+// UTF-8 code unit
+//using char8_t = char;
 
 //==================================================================================================
 // CharClass
@@ -68,7 +72,7 @@ enum : uint8_t {
     CC_NeedsCleaning    = 0x80, // needs cleaning (strings)
 };
 
-inline unsigned CharClass(char ch)
+inline uint32_t CharClass(char ch)
 {
     enum : uint8_t {
         S = CC_StringSpecial,
@@ -106,13 +110,13 @@ inline unsigned CharClass(char ch)
         C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,
     };
 
-    return kMap[static_cast<unsigned char>(ch)];
+    return kMap[static_cast<uint8_t>(ch)];
 }
 
-inline bool IsWhitespace      (char ch) { return (CharClass(ch) & CC_Whitespace    ) != 0; }
-inline bool IsDigit           (char ch) { return (CharClass(ch) & CC_Digit         ) != 0; }
-inline bool IsIdentifierBody  (char ch) { return (CharClass(ch) & CC_IdentifierBody) != 0; }
-inline bool IsPunctuation     (char ch) { return (CharClass(ch) & CC_Punctuation   ) != 0; }
+inline bool IsWhitespace     (char ch) { return (CharClass(ch) & CC_Whitespace    ) != 0; }
+inline bool IsDigit          (char ch) { return (CharClass(ch) & CC_Digit         ) != 0; }
+inline bool IsIdentifierBody (char ch) { return (CharClass(ch) & CC_IdentifierBody) != 0; }
+inline bool IsPunctuation    (char ch) { return (CharClass(ch) & CC_Punctuation   ) != 0; }
 
 inline bool IsSeparator(char ch)
 {
@@ -121,23 +125,11 @@ inline bool IsSeparator(char ch)
 
 } // namespace charclass
 
-template <typename It>
-struct SkipCharsResult {
-    It next;
-    bool success;
-
-    explicit operator bool() const { return success; }
-};
-
 //==================================================================================================
 // Options
 //==================================================================================================
 
-struct Options
-{
-    // XXX:
-    // Merge into two options: "strict" and "relaxed"...
-
+struct Options {
     // If true, skip UTF-8 byte order mark - if any.
     // Default is true.
     bool skip_bom = true;
@@ -178,7 +170,7 @@ struct Options
 // ScanNumber
 //==================================================================================================
 
-enum class NumberClass : unsigned char {
+enum class NumberClass : uint8_t {
     invalid,
     nan,
     pos_infinity,
@@ -187,17 +179,32 @@ enum class NumberClass : unsigned char {
     floating_point,
 };
 
-template <typename It>
 struct ScanNumberResult {
-    It next;
+    char const* next;
     NumberClass number_class;
 };
 
+//inline bool StartsWith(char const* next, char const* last, char const* prefix)
+//{
+//}
+//
+//inline bool StartsWithCaseInsensitive(char const* next, char const* last, char const* lower_case_prefix)
+//{
+//}
+//
+//inline ScanNumberResult ScanInfinity(char const* next, char const* last)
+//{
+//}
+//
+//inline ScanNumberResult ScanNaN(char const* next, char const* last)
+//{
+//}
+
 // PRE: next points at '0', ..., '9', or '-'
-template <typename InpIt, typename Fn>
-ScanNumberResult<InpIt> ScanNumber(InpIt next, InpIt last, Options const& options, Fn yield)
+inline ScanNumberResult ScanNumber(char const* next, char const* last, Options const& options)
 {
-    using namespace charclass;
+    using ::json::charclass::IsDigit;
+    using ::json::charclass::IsSeparator;
 
     bool is_neg = false;
     bool is_float = false;
@@ -211,14 +218,12 @@ ScanNumberResult<InpIt> ScanNumber(InpIt next, InpIt last, Options const& option
     {
         is_neg = true;
 
-        yield(*next);
         ++next;
         if (next == last)
             goto L_invalid;
     }
-    //else if (allow_leading_plus && *next == '+')
+    //else if (options.allow_leading_plus && *next == '+')
     //{
-    //    yield(*next);
     //    ++next;
     //    if (next == last)
     //        goto L_invalid;
@@ -228,7 +233,6 @@ ScanNumberResult<InpIt> ScanNumber(InpIt next, InpIt last, Options const& option
 
     if (*next == '0')
     {
-        yield(*next);
         ++next;
         if (next == last)
             goto L_success;
@@ -239,7 +243,6 @@ ScanNumberResult<InpIt> ScanNumber(InpIt next, InpIt last, Options const& option
     {
         for (;;)
         {
-            yield(*next);
             ++next;
             if (next == last)
                 goto L_success;
@@ -247,7 +250,7 @@ ScanNumberResult<InpIt> ScanNumber(InpIt next, InpIt last, Options const& option
                 break;
         }
     }
-    //else if (allow_leading_dot && *next == '.')
+    //else if (options.allow_leading_dot && *next == '.')
     //{
     //    // Will be scanned again below.
     //}
@@ -255,6 +258,10 @@ ScanNumberResult<InpIt> ScanNumber(InpIt next, InpIt last, Options const& option
     {
         return {next + 8, is_neg ? NumberClass::neg_infinity : NumberClass::pos_infinity};
     }
+    //else if (options.allow_nan_inf && last - next >= 3 && std::memcmp(next, "Inf", 3) == 0)
+    //{
+    //    return {next + 8, is_neg ? NumberClass::neg_infinity : NumberClass::pos_infinity};
+    //}
     else if (options.allow_nan_inf && last - next >= 3 && std::memcmp(next, "NaN", 3) == 0)
     {
         return {next + 3, NumberClass::nan};
@@ -270,14 +277,12 @@ ScanNumberResult<InpIt> ScanNumber(InpIt next, InpIt last, Options const& option
     {
         is_float = true;
 
-        yield(*next);
         ++next;
         if (next == last || !IsDigit(*next))
             goto L_invalid;
 
         for (;;)
         {
-            yield(*next);
             ++next;
             if (next == last)
                 goto L_success;
@@ -292,14 +297,12 @@ ScanNumberResult<InpIt> ScanNumber(InpIt next, InpIt last, Options const& option
     {
         is_float = true;
 
-        yield(*next);
         ++next;
         if (next == last)
             goto L_invalid;
 
         if (*next == '+' || *next == '-')
         {
-            yield(*next);
             ++next;
             if (next == last)
                 goto L_invalid;
@@ -310,7 +313,6 @@ ScanNumberResult<InpIt> ScanNumber(InpIt next, InpIt last, Options const& option
 
         for (;;)
         {
-            yield(*next);
             ++next;
             if (next == last || !IsDigit(*next))
                 break;
@@ -337,30 +339,16 @@ L_invalid:
 // ScanString
 //==================================================================================================
 
-enum class StringClass : unsigned char {
-    //invalid,
+enum class StringClass : uint8_t {
     plain_ascii,
     needs_cleaning,
 };
-
-//template <typename It>
-//struct ScanStringResult {
-//    It next;
-//    StringClass string_class;
-//};
-//
-//// PRE: next points at '"'
-//template <typename InpIt>
-//ScanStringResult<InpIt> ScanString(InpIt next, InpIt /*last*/)
-//{
-//    return {next, StringClass::invalid};
-//}
 
 //==================================================================================================
 // Lexer
 //==================================================================================================
 
-enum class TokenKind : unsigned char {
+enum class TokenKind : uint8_t {
     unknown,
     eof,
     l_brace,
@@ -380,7 +368,7 @@ struct Token
 {
     char const* ptr = nullptr;
     char const* end = nullptr;
-    TokenKind   kind = TokenKind::unknown;
+    TokenKind kind = TokenKind::unknown;
     union {
         StringClass string_class;
         NumberClass number_class;
@@ -428,12 +416,12 @@ inline Token Lexer::Lex(Options const& options)
 L_again:
     ptr = SkipWhitespace(ptr, end);
 
-    auto p = ptr;
+    char const* p = ptr;
 
     if (p == end)
         return MakeToken(p, TokenKind::eof);
 
-    auto kind = TokenKind::unknown;
+    TokenKind kind = TokenKind::unknown;
 
     char const ch = *p;
     switch (ch)
@@ -456,8 +444,11 @@ L_again:
     case ':':
         kind = TokenKind::colon;
         break;
-    case '"':
     //case '\'':
+    //    if (!options.allow_single_quoted_strings)
+    //        break;
+    //    [[fallthrough]];
+    case '"':
         return LexString(p, ch);
     case '-':
     case '0':
@@ -528,7 +519,7 @@ L_again:
     case '/':
         if (options.skip_comments)
         {
-            auto tok = LexComment(p);
+            auto const tok = LexComment(p);
             if (tok.kind == TokenKind::comment)
                 goto L_again;
         }
@@ -543,7 +534,7 @@ L_again:
 
 inline Token Lexer::LexString(char const* p, char quote_char)
 {
-    using namespace charclass;
+    using namespace ::json::charclass;
 
     JSON_ASSERT(p != end);
     JSON_ASSERT(*p == '"' || *p == '\'');
@@ -552,11 +543,11 @@ inline Token Lexer::LexString(char const* p, char quote_char)
     ptr = ++p; // skip " or '
 
 #if JSON_USE_SSE42
-    __m128i const kSpecialChars = _mm_set_epi8(0, 0, 0, 0, 0, 0, '\xFF', '\x80', '\x1F', '\x00', '\\', '\\', '\'', '\'', '"', '"');
+    auto const kSpecialChars = _mm_set_epi8(0, 0, 0, 0, 0, 0, '\xFF', '\x80', '\x1F', '\x00', '\\', '\\', '\'', '\'', '"', '"');
     int special_chars_length = 10;
 #endif
 
-    unsigned mask = 0;
+    uint32_t mask = 0;
     for (;;)
     {
 #if JSON_USE_SSE42
@@ -566,8 +557,9 @@ inline Token Lexer::LexString(char const* p, char quote_char)
         for ( ; end - p >= 16; p += 16)
         {
             auto const bytes = _mm_loadu_si128(reinterpret_cast<__m128i const*>(p));
-            auto const index = _mm_cmpestri(kSpecialChars, special_chars_length, bytes, 16, _SIDD_UBYTE_OPS | _SIDD_CMP_RANGES | _SIDD_LEAST_SIGNIFICANT);
-            if (index != 16) {
+            int const index = _mm_cmpestri(kSpecialChars, special_chars_length, bytes, 16, _SIDD_UBYTE_OPS | _SIDD_CMP_RANGES | _SIDD_LEAST_SIGNIFICANT);
+            if (index != 16)
+            {
                 p += index;
                 break;
             }
@@ -583,7 +575,7 @@ inline Token Lexer::LexString(char const* p, char quote_char)
         // or initial runs of UTF-8 sequences.
         for ( ; p != end; ++p)
         {
-            auto const m = CharClass(*p);
+            uint32_t const m = CharClass(*p);
             mask |= m;
             if ((m & CC_StringSpecial) != 0)
                 break;
@@ -620,26 +612,26 @@ inline Token Lexer::LexString(char const* p, char quote_char)
 
 inline Token Lexer::LexNumber(char const* p, Options const& options)
 {
-    auto const res = ScanNumber(p, end, options, [](char) {});
+    auto const res = ScanNumber(p, end, options);
 
     return MakeNumberToken(res.next, res.number_class);
 }
 
 inline Token Lexer::LexIdentifier(char const* p, Options const& options)
 {
-    using namespace charclass;
+    using namespace ::json::charclass;
 
 #if 0 && JSON_USE_SSE42
     if (options.allow_unquoted_keys)
     {
-        // XXX: Add '$' here?!?!
-        __m128i const kSpecialChars = _mm_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 'z', 'a', '_', '_', 'Z', 'A', '9', '0');
+        auto const kSpecialChars = _mm_set_epi8(0, 0, 0, 0, 0, 0, '$', '$', 'z', 'a', '_', '_', 'Z', 'A', '9', '0');
 
         for ( ; end - p >= 16; p += 16)
         {
             auto const bytes = _mm_loadu_si128(reinterpret_cast<__m128i const*>(p));
-            auto const index = _mm_cmpestri(kSpecialChars, 8, bytes, 16, _SIDD_UBYTE_OPS | _SIDD_CMP_RANGES | _SIDD_LEAST_SIGNIFICANT | _SIDD_NEGATIVE_POLARITY);
-            if (index != 16) {
+            int const index = _mm_cmpestri(kSpecialChars, 10, bytes, 16, _SIDD_UBYTE_OPS | _SIDD_CMP_RANGES | _SIDD_LEAST_SIGNIFICANT | _SIDD_NEGATIVE_POLARITY);
+            if (index != 16)
+            {
                 p += index;
                 return MakeToken(p, TokenKind::identifier);
             }
@@ -749,7 +741,7 @@ inline Token Lexer::MakeNumberToken(char const* p, NumberClass number_class)
 
 inline char const* Lexer::SkipWhitespace(char const* f, char const* l)
 {
-    using namespace charclass;
+    using ::json::charclass::IsWhitespace;
 
     for ( ; f != l && IsWhitespace(*f); ++f)
     {
@@ -873,8 +865,8 @@ ParseStatus Parser<ParseCallbacks>::ParseIdentifier()
     JSON_ASSERT(token.kind == TokenKind::identifier);
     JSON_ASSERT(token.end - token.ptr > 0 && "internal error");
 
-    auto const f = token.ptr;
-    auto const l = token.end;
+    char const* const f = token.ptr;
+    char const* const l = token.end;
     auto const len = l - f;
 
     ParseStatus ec;
@@ -894,6 +886,10 @@ ParseStatus Parser<ParseCallbacks>::ParseIdentifier()
     {
         ec = cb.HandleNumber(f, l, NumberClass::pos_infinity, options);
     }
+    //else if (options.allow_nan_inf && len == 3 && std::memcmp(f, "Inf", 3) == 0)
+    //{
+    //    ec = cb.HandleNumber(f, l, NumberClass::pos_infinity, options);
+    //}
     else if (options.allow_nan_inf && len == 3 && std::memcmp(f, "NaN", 3) == 0)
     {
         ec = cb.HandleNumber(f, l, NumberClass::nan, options);
@@ -933,7 +929,7 @@ ParseStatus Parser<ParseCallbacks>::ParsePrimitive()
 template <typename ParseCallbacks>
 ParseStatus Parser<ParseCallbacks>::ParseValue()
 {
-    enum class Structure : unsigned char {
+    enum class Structure : uint8_t {
         object,
         array,
     };
@@ -1150,9 +1146,9 @@ ParseResult ParseSAX(ParseCallbacks& cb, char const* next, char const* last, Opt
 
     if (options.skip_bom && last - next >= 3)
     {
-        if (static_cast<unsigned char>(next[0]) == 0xEF &&
-            static_cast<unsigned char>(next[1]) == 0xBB &&
-            static_cast<unsigned char>(next[2]) == 0xBF)
+        if (static_cast<uint8_t>(next[0]) == 0xEF &&
+            static_cast<uint8_t>(next[1]) == 0xBB &&
+            static_cast<uint8_t>(next[2]) == 0xBF)
         {
             next += 3;
         }
@@ -1163,7 +1159,7 @@ ParseResult ParseSAX(ParseCallbacks& cb, char const* next, char const* last, Opt
     parser.lexer = Lexer(next, last);
     parser.token = parser.lexer.Lex(options); // Get the first token
 
-    auto ec = parser.ParseValue();
+    ParseStatus ec = parser.ParseValue();
 
     if (ec == ParseStatus::success)
     {
@@ -1217,7 +1213,7 @@ inline LineInfo GetLineInfo(char const* start, char const* pos)
         ++next;
 #if 0
         // Skip UTF-8 trail bytes.
-        for ( ; next != pos && (0x80 == (static_cast<unsigned char>(*next) & 0xC0)); ++next)
+        for ( ; next != pos && (0x80 == (static_cast<uint8_t>(*next) & 0xC0)); ++next)
         {
         }
 #endif

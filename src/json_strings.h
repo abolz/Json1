@@ -54,7 +54,7 @@ inline uint32_t HexDigitValue(char ch)
         N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N,
     };
 
-    return static_cast<uint32_t>(kMap[static_cast<unsigned char>(ch)]);
+    return static_cast<uint32_t>(kMap[static_cast<uint8_t>(ch)]);
 }
 
 } // namespace charclass
@@ -125,6 +125,8 @@ inline bool IsUTF8OverlongSequence(char32_t U, int slen)
 struct DecodeUTF8SequenceResult {
     char const* next;
     bool success;
+    // XXX: Instead of success, return the number of replacement
+    //      characters this sequence should be replaced with?
 };
 
 inline DecodeUTF8SequenceResult DecodeUTF8Sequence(char const* next, char const* last, char32_t& U)
@@ -138,14 +140,13 @@ inline DecodeUTF8SequenceResult DecodeUTF8Sequence(char const* next, char const*
     if (slen == 0)
     {
         // Invalid lead byte.
-#if 0
-        // Skip ahead to the start of the next UTF-8 sequence.
+        // Skip to the start of the next UTF-8 sequence here?!?!
         next = FindNextUTF8Sequence(next, last);
-#endif
         return {next, false};
     }
 
-    for (int i = 1; i < slen; ++i) // Consume 1,2, or 3 trail bytes.
+    // Consume 1,2, or 3 trail bytes.
+    for (int i = 1; i < slen; ++i)
     {
         if (next == last || !IsUTF8Trail(*next))
         {
@@ -161,13 +162,12 @@ inline DecodeUTF8SequenceResult DecodeUTF8Sequence(char const* next, char const*
         ++next;
     }
 
-    // Test for invalid codepoints or overlong sequences.
-    // XXX: This check is actually only required for is the lead byte is
-    //      E0, ED, F0, or F4. (?!?!)
+    // Encoding is valid according to UTF-8.
+    // Test for invalid codepoints ("non-characters") or overlong sequences.
     if (!IsValidCodepoint(W) || IsUTF8OverlongSequence(W, slen))
     {
-        // XXX: Skip to the start of the next UTF-8 sequence here?!?!
-        // next = FindNextUTF8Sequence(next, last);
+        // XXX: This check is actually only required if the lead byte is
+        //      E0, ED, F0, or F4. (?!?!)
         return {next, false};
     }
 
@@ -175,15 +175,16 @@ inline DecodeUTF8SequenceResult DecodeUTF8Sequence(char const* next, char const*
     return {next, true};
 }
 
+#if 0
+// XXX:
+// Edit the state transition table to differentiate between invalid
+// UTF-8 sequences and invalid codepoints.
+
 inline DecodeUTF8SequenceResult ValidateUTF8Sequence(char const* next, char const* last)
 {
     JSON_ASSERT(next != last);
-    JSON_ASSERT(static_cast<unsigned char>(*next) >= 0x80);
+    JSON_ASSERT(static_cast<uint8_t>(*next) >= 0x80);
 
-#if 0
-    char32_t U = 0;
-    return DecodeUTF8Sequence(next, last, U);
-#else
     // Copyright (c) 2008-2010 Bjoern Hoehrmann <bjoern@hoehrmann.de>
     // See http://bjoern.hoehrmann.de/utf-8/decoder/dfa/ for details.
 
@@ -211,7 +212,7 @@ inline DecodeUTF8SequenceResult ValidateUTF8Sequence(char const* next, char cons
     uint32_t state = UTF8_ACCEPT;
     for (;;)
     {
-        state = utf8d[256 + 16 * state + utf8d[static_cast<unsigned char>(*next)]];
+        state = utf8d[256 + 16 * state + utf8d[static_cast<uint8_t>(*next)]];
         ++next;
         if (next == last || state == UTF8_ACCEPT || state == UTF8_REJECT)
             break;
@@ -221,8 +222,8 @@ inline DecodeUTF8SequenceResult ValidateUTF8Sequence(char const* next, char cons
 
 #undef UTF8_REJECT
 #undef UTF8_ACCEPT
-#endif
 }
+#endif // 0
 
 template <typename Put8>
 void EncodeUTF8(char32_t U, Put8 put)
@@ -280,7 +281,7 @@ struct ReadUCNResult {
 // Stores the result in W on success.
 inline ReadUCNResult ReadHex16(char const* next, char const* last, char32_t& W)
 {
-    using namespace json::charclass;
+    using namespace ::json::charclass;
 
     if (last - next < 4)
         return {last, false};
@@ -293,15 +294,20 @@ inline ReadUCNResult ReadHex16(char const* next, char const* last, char32_t& W)
     uint32_t const value = (h0 << 12) | (h1 << 8) | (h2 << 4) | h3;
     next += 4;
 
-    W = static_cast<char32_t>(value);
-    return {next, value <= 0xFFFF};
+    if (value <= 0xFFFF)
+    {
+        W = static_cast<char32_t>(value);
+        return {next, true};
+    }
+
+    return {next, false};
 }
 
 // Reads a hexadecimal number of the form "\uHHHH".
 // Stores the result in W on success.
 inline ReadUCNResult ReadUCN(char const* next, char const* last, char32_t& W)
 {
-    using namespace json::charclass;
+    using namespace ::json::charclass;
 
     if (last - next < 6)
         return {last, false};
@@ -316,8 +322,13 @@ inline ReadUCNResult ReadUCN(char const* next, char const* last, char32_t& W)
     uint32_t const value = (h0 << 12) | (h1 << 8) | (h2 << 4) | h3;
     next += 6;
 
-    W = static_cast<char32_t>(value);
-    return {next, std::memcmp(u, "\\u", 2) == 0 && value <= 0xFFFF};
+    if (std::memcmp(u, "\\u", 2) == 0 && value <= 0xFFFF)
+    {
+        W = static_cast<char32_t>(value);
+        return {next, true};
+    }
+
+    return {next, false};
 }
 
 struct DecodeUCNSequenceResult {
@@ -377,23 +388,18 @@ inline DecodeUCNSequenceResult DecodeTrimmedUCNSequence(char const* next, char c
 namespace impl {
 namespace strings {
 
-template <typename It>
-struct SkipCharsResult {
-    It next;
-    bool success;
-};
-
-inline SkipCharsResult<char const*> SkipNonSpecialLatin1_unescape(char const* next, char const* last)
+inline char const* SkipNonSpecialLatin1_unescape(char const* next, char const* last)
 {
 #if JSON_USE_SSE42
-    __m128i const kSpecialChars = _mm_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '\xFF', '\x80', '\x1F', '\x00', '\\', '\\');
+    auto const kSpecialChars = _mm_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '\xFF', '\x80', '\x1F', '\x00', '\\', '\\');
 
     for ( ; last - next >= 16; next += 16)
     {
         auto const bytes = _mm_loadu_si128(reinterpret_cast<__m128i const*>(next));
-        auto const index = _mm_cmpestri(kSpecialChars, 6, bytes, 16, _SIDD_UBYTE_OPS | _SIDD_CMP_RANGES | _SIDD_LEAST_SIGNIFICANT);
-        if (index != 16) {
-            return {next + index, true};
+        int const index = _mm_cmpestri(kSpecialChars, 6, bytes, 16, _SIDD_UBYTE_OPS | _SIDD_CMP_RANGES | _SIDD_LEAST_SIGNIFICANT);
+        if (index != 16)
+        {
+            return next + index;
         }
     }
 #endif
@@ -403,31 +409,31 @@ inline SkipCharsResult<char const*> SkipNonSpecialLatin1_unescape(char const* ne
             break;
     }
 
-    return {next, true};
+    return next;
 }
 
-inline SkipCharsResult<char const*> SkipLongUTF8Sequences_unescape(char const* next, char const* last)
+inline char const* SkipNonSpecialLatin1_escape(char const* next, char const* last)
 {
-    using namespace json::impl::unicode;
+#if JSON_USE_SSE42
+    auto const kSpecialChars = _mm_set_epi8(0, 0, 0, 0, 0, 0, '/','/', '\xFF','\x80', '\x1F','\x00', '\\','\\', '"','"');
 
-    JSON_ASSERT(next != last);
-    JSON_ASSERT(static_cast<uint8_t>(*next) >= 0x80);
-
-    for (;;)
+    for ( ; last - next >= 16; next += 16)
     {
-        auto const seq = ValidateUTF8Sequence(next, last);
-        JSON_ASSERT(next != seq.next); // XXX: Does not work for InputIterator's
-
-        if (!seq.success)
-            return {next, false};
-
-        next = seq.next;
-
-        if (next == last || static_cast<uint8_t>(*next) < 0x80)
+        auto const bytes = _mm_loadu_si128(reinterpret_cast<__m128i const*>(next));
+        int const index = _mm_cmpestri(kSpecialChars, 10, bytes, 16, _SIDD_UBYTE_OPS | _SIDD_CMP_RANGES | _SIDD_LEAST_SIGNIFICANT);
+        if (index != 16)
+        {
+            return next + index;
+        }
+    }
+#endif
+    for ( ; next != last; ++next)
+    {
+        if (*next == '"' || *next == '\\' || static_cast<uint8_t>(*next) >= 0x80 || static_cast<uint8_t>(*next) <= 0x1F || *next == '/')
             break;
     }
 
-    return {next, true};
+    return next;
 }
 
 } // namespace strings
@@ -470,25 +476,30 @@ struct UnescapeStringResult {
 };
 
 template <typename Fn>
-UnescapeStringResult UnescapeString(char const* curr, char const* last, Fn yield)
+UnescapeStringResult UnescapeString(char const* curr, char const* last, Fn yield, bool allow_invalid_unicode = false)
 {
     namespace unicode = ::json::impl::unicode;
-    using namespace charclass;
+    using namespace ::json::charclass;
 
     auto yield_n = [&](char const* p, intptr_t n)
     {
-        for (intptr_t i = 0; i < n; ++i) {
-            yield(p[i]);
+        //if constexpr (is_callable<Fn, char const*, intptr_t>::value)
+        //{
+        //}
+        //else
+        {
+            for (intptr_t i = 0; i < n; ++i) {
+                yield(p[i]);
+            }
         }
         return p + n;
     };
 
     for (;;)
     {
-        {
-            auto const res = ::json::impl::strings::SkipNonSpecialLatin1_unescape(curr, last);
-            curr = yield_n(curr, res.next - curr);
-        }
+        char const* const next = ::json::impl::strings::SkipNonSpecialLatin1_unescape(curr, last);
+        yield_n(curr, next - curr);
+        curr = next;
 
         if (curr == last)
         {
@@ -497,17 +508,35 @@ UnescapeStringResult UnescapeString(char const* curr, char const* last, Fn yield
 
         if (static_cast<uint8_t>(*curr) >= 0x80)
         {
-            auto const res = ::json::impl::strings::SkipLongUTF8Sequences_unescape(curr, last);
-            curr = yield_n(curr, res.next - curr);
+            // XXX:
+            // Factor "allow_invalid_unicode" out of the loop and use ValidateUTF8Sequence if false?!?!
 
-            if (!res.success)
+            do
             {
-                return {curr, Status::invalid_utf8_sequence};
+                char32_t U = 0; // unused
+                auto const res = unicode::DecodeUTF8Sequence(curr, last, U);
+                JSON_ASSERT(curr != res.next);
+
+                if (!res.success)
+                {
+                    if (!allow_invalid_unicode)
+                        return {curr, Status::invalid_utf8_sequence};
+
+                    // Replace invalid UTF-8 sequences with a single Unicode replacement character.
+                    yield_n("\xEF\xBF\xBD", 3);
+                }
+                else
+                {
+                    yield_n(curr, res.next - curr);
+                }
+
+                curr = res.next;
             }
+            while (curr != last && static_cast<uint8_t>(*curr) >= 0x80);
         }
         else if (*curr == '\\')
         {
-            auto const f = curr; // The start of the possible UCN sequence
+            char const* const f = curr; // The start of the possible UCN sequence
 
             ++curr; // skip '\'
             if (curr == last)
@@ -564,12 +593,37 @@ UnescapeStringResult UnescapeString(char const* curr, char const* last, Fn yield
 
                     if (!seq.success)
                     {
-                        return {f, Status::invalid_utf8_sequence};
-                    }
+                        if (!allow_invalid_unicode)
+                            return {f, Status::invalid_utf8_sequence};
 
-                    unicode::EncodeUTF8(U, [&](uint8_t code_unit) { yield(static_cast<char>(code_unit)); });
+                        // Replace invalid UTF-8 sequences with a single Unicode replacement character.
+                        yield_n("\xEF\xBF\xBD", 3);
+                    }
+                    else
+                    {
+                        unicode::EncodeUTF8(U, [&](uint8_t code_unit) { yield(static_cast<char>(code_unit)); });
+                    }
                 }
                 break;
+            //case 'x': // Hex-escape
+            //    // TODO: implement!
+            //    break;
+            //case '\000':
+            //    yield('\000');
+            //    ++curr;
+            //    break;
+            //case '\n':
+            //    yield('\n');
+            //    ++curr;
+            //    break;
+            //case '\r':
+            //    yield('\r');
+            //    ++curr;
+            //    //if (curr != last && *curr == '\n') {
+            //    //    yield('\n');
+            //    //    ++curr;
+            //    //}
+            //    break;
             default:
                 return {curr, Status::invalid_escaped_character}; // invalid escaped character
             }
@@ -589,51 +643,134 @@ struct EscapeStringResult {
     Status status;
 };
 
+struct YieldChar {
+    void operator()(char) {}
+};
+
 template <typename Fn>
-EscapeStringResult EscapeString(char const* next, char const* last, Fn yield)
+EscapeStringResult EscapeString(char const* curr, char const* last, Fn yield, bool allow_invalid_unicode = false)
 {
     namespace unicode = json::impl::unicode;
 
     static constexpr char const kHexDigits[] = "0123456789ABCDEF";
 
-#if JSON_USE_SSE42
-    __m128i const kSpecialChars = _mm_set_epi8(0, 0, 0, 0, 0, 0, '/','/', '\xFF','\x80', '\x1F','\x00', '\\','\\', '"','"');
-#endif
-
-    auto const first = next;
-    for (;;)
+    auto yield_n = [&](char const* p, intptr_t n)
     {
-#if JSON_USE_SSE42
-        // Fast path for non-special Latin1
-        if (last - next >= 16)
+        //if constexpr (is_callable<Fn, char const*, intptr_t>::value)
+        //{
+        //}
+        //else
         {
-            auto const p = next;
-            for ( ; last - next >= 16; next += 16)
-            {
-                auto const bytes = _mm_loadu_si128(reinterpret_cast<__m128i const*>(next));
-                auto const index = _mm_cmpestri(kSpecialChars, 10, bytes, 16, _SIDD_UBYTE_OPS | _SIDD_CMP_RANGES | _SIDD_LEAST_SIGNIFICANT);
-                if (index != 16) {
-                    next += index;
-                    break;
-                }
-            }
-            for (intptr_t i = 0; i < next - p; ++i)
-            {
+            for (intptr_t i = 0; i < n; ++i) {
                 yield(p[i]);
             }
         }
+        return p + n;
+    };
+
+    char const* const first = curr;
+    for (;;)
+    {
+        char const* const next = ::json::impl::strings::SkipNonSpecialLatin1_escape(curr, last);
+        yield_n(curr, next - curr);
+        curr = next;
+
+        if (curr == last)
+        {
+            break;
+        }
+
+        if (static_cast<uint8_t>(*curr) >= 0x80)
+        {
+#if 0 // TEST
+            auto const seq = unicode::ValidateUTF8Sequence(curr, last);
+            JSON_ASSERT(curr != seq.next);
+
+            if (!seq.success)
+            {
+                return {curr, Status::invalid_utf8_sequence};
+            }
+
+            yield_n(curr, seq.next - curr);
+#else
+            char32_t U = 0;
+            auto const seq = unicode::DecodeUTF8Sequence(curr, last, U);
+            JSON_ASSERT(curr != seq.next);
+
+            if (!seq.success)
+            {
+                if (!allow_invalid_unicode)
+                    return {curr, Status::invalid_utf8_sequence};
+
+                yield_n("\\uFFFD", 6);
+            }
+            else
+            {
+                //
+                // Always escape U+2028 (LINE SEPARATOR) and U+2029 (PARAGRAPH
+                // SEPARATOR). No string in JavaScript can contain a literal
+                // U+2028 or a U+2029.
+                //
+                // (See http://timelessrepo.com/json-isnt-a-javascript-subset)
+                //
+                switch (U)
+                {
+                case 0x2028:
+                    yield_n("\\u2028", 6);
+                    break;
+                case 0x2029:
+                    yield_n("\\u2029", 6);
+                    break;
+                default:
+                    //if (ascii_only_output)
+                    //{
+                    //    unicode::EncodeUTF16(U, [&](uint16_t W) {
+                    //        yield('\\');
+                    //        yield('u');
+                    //        yield(kHexDigits[(W >> 12)      ]);
+                    //        yield(kHexDigits[(W >>  8) & 0xF]);
+                    //        yield(kHexDigits[(W >>  4) & 0xF]);
+                    //        yield(kHexDigits[(W      ) & 0xF]);
+                    //    });
+                    //}
+                    //else
+                    {
+                        // The UTF-8 sequence is valid. No need to re-encode.
+                        yield_n(curr, seq.next - curr);
+                    }
+                    break;
+                }
+            }
 #endif
 
-        if (next == last)
-            break;
+            curr = seq.next;
+        }
+        else if (static_cast<uint8_t>(*curr) >= 0x20)
+        {
+            auto do_escape = [&](char ch) {
+                switch (ch) {
+                case '"':
+                case '\\':
+                    return true;
+                case '/':
+                    return curr != first && curr[-1] == '<';
+                //case '\x7F':
+                //    return escape_del;
+                }
+                return false;
+            };
 
-        char const ch = *next;
-        auto const uc = static_cast<uint8_t>(ch);
-
-        if (uc < 0x20) // (ASCII) control character
+            if (do_escape(*curr))
+            {
+                yield('\\');
+            }
+            yield(*curr);
+            ++curr;
+        }
+        else // (ASCII) control character
         {
             yield('\\');
-            switch (ch)
+            switch (*curr)
             {
             case '\b':
                 yield('b');
@@ -654,100 +791,15 @@ EscapeStringResult EscapeString(char const* next, char const* last, Fn yield)
                 yield('u');
                 yield('0');
                 yield('0');
-                yield(kHexDigits[uc >> 4]);
-                yield(kHexDigits[uc & 0xF]);
+                yield(kHexDigits[static_cast<uint8_t>(*curr) >> 4]);
+                yield(kHexDigits[static_cast<uint8_t>(*curr) & 0xF]);
                 break;
             }
-            ++next;
-        }
-        else if (uc < 0x80) // ASCII printable or DEL
-        {
-            switch (ch)
-            {
-            case '"':   // U+0022
-            case '\\':  // U+005C
-                yield('\\');
-                break;
-            case '/':   // U+002F
-                if (next != first && next[-1] == '<')
-                {
-                    yield('\\');
-                }
-                break;
-            //case '\x7F': // DEL
-            //    if (escape_del)
-            //    {
-            //        yield('\\');
-            //    }
-            //    break;
-            }
-            yield(ch);
-            ++next;
-        }
-        else // (possibly) the start of a UTF-8 sequence.
-        {
-            char32_t U;
-            auto const seq = unicode::DecodeUTF8Sequence(next, last, U);
-            JSON_ASSERT(next != seq.next);
-
-            if (!seq.success)
-            {
-                return {next, Status::invalid_utf8_sequence};
-            }
-
-            //
-            // Always escape U+2028 (LINE SEPARATOR) and U+2029 (PARAGRAPH
-            // SEPARATOR). No string in JavaScript can contain a literal
-            // U+2028 or a U+2029.
-            //
-            // (See http://timelessrepo.com/json-isnt-a-javascript-subset)
-            //
-            switch (U)
-            {
-            case 0x2028:
-                yield('\\');
-                yield('u');
-                yield('2');
-                yield('0');
-                yield('2');
-                yield('8');
-                break;
-            case 0x2029:
-                yield('\\');
-                yield('u');
-                yield('2');
-                yield('0');
-                yield('2');
-                yield('9');
-                break;
-            default:
-                //if (ascii_only_output)
-                //{
-                //    unicode::EncodeUTF16(U, [&](uint16_t W) {
-                //        yield('\\');
-                //        yield('u');
-                //        yield(kHexDigits[(W >> 12)      ]);
-                //        yield(kHexDigits[(W >>  8) & 0xF]);
-                //        yield(kHexDigits[(W >>  4) & 0xF]);
-                //        yield(kHexDigits[(W      ) & 0xF]);
-                //    });
-                //}
-                //else
-                {
-                    // The UTF-8 sequence is valid. No need to re-encode.
-                    for (intptr_t i = 0; i < seq.next - next; ++i)
-                    {
-                        yield(next[i]);
-                    }
-                }
-                break;
-            }
-
-            next = seq.next;
+            ++curr;
         }
     }
 
-    return {next, Status::success};
+    return {curr, Status::success};
 }
 
 } // namespace strings

@@ -295,7 +295,7 @@ bool json::numbers::StringToNumber(double& result, char const* first, char const
         return true;
     }
 
-    auto const res = json::ScanNumber(first, last, options, [](char) {});
+    auto const res = json::ScanNumber(first, last, options);
 
     if (res.next == last && res.number_class != NumberClass::invalid)
     {
