@@ -881,15 +881,21 @@ struct ParseValueCallbacks
     std::vector<Value> stack;
     std::vector<String> keys;
 
-    ParseStatus HandleNull(Options const& /*options*/)
+    ParseStatus HandleNull(char const* /*first*/, char const* /*last*/, Options const& /*options*/)
     {
         stack.emplace_back(nullptr);
         return {};
     }
 
-    ParseStatus HandleBoolean(bool value, Options const& /*options*/)
+    ParseStatus HandleTrue(char const* /*first*/, char const* /*last*/, Options const& /*options*/)
     {
-        stack.emplace_back(value);
+        stack.emplace_back(true);
+        return {};
+    }
+
+    ParseStatus HandleFalse(char const* /*first*/, char const* /*last*/, Options const& /*options*/)
+    {
+        stack.emplace_back(false);
         return {};
     }
 

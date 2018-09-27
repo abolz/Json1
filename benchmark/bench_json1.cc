@@ -16,18 +16,21 @@ struct SaxHandler
 
     SaxHandler(jsonstats& s) : stats(s) {}
 
-    ParseStatus HandleNull(Options const& /*options*/)
+    ParseStatus HandleNull(char const* /*first*/, char const* /*last*/, Options const& /*options*/)
     {
         ++stats.null_count;
         return {};
     }
 
-    ParseStatus HandleBoolean(bool value, Options const& /*options*/)
+    ParseStatus HandleTrue(char const* /*first*/, char const* /*last*/, Options const& /*options*/)
     {
-        if (value)
-            ++stats.true_count;
-        else
-            ++stats.false_count;
+        ++stats.true_count;
+        return {};
+    }
+
+    ParseStatus HandleFalse(char const* /*first*/, char const* /*last*/, Options const& /*options*/)
+    {
+        ++stats.false_count;
         return {};
     }
 

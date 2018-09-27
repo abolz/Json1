@@ -370,6 +370,7 @@ struct Token
     char const* end = nullptr;
     TokenKind kind = TokenKind::unknown;
     union {
+//      uint8_t _init_class_ = 0;
         StringClass string_class;
         NumberClass number_class;
     };
@@ -785,17 +786,18 @@ struct Failed
 
 //struct ParseCallbacks
 //{
-//    ParseStatus HandleNull(Options const& options);
-//    ParseStatus HandleBoolean(bool value, Options const& options);
+//    ParseStatus HandleNull(char const* first, char const* last, Options const& options);
+//    ParseStatus HandleTrue(char const* first, char const* last, Options const& options);
+//    ParseStatus HandleFalse(char const* first, char const* last, Options const& options);
 //    ParseStatus HandleNumber(char const* first, char const* last, NumberClass nc, Options const& options);
 //    ParseStatus HandleString(char const* first, char const* last, StringClass sc, Options const& options);
+//    ParseStatus HandleKey(char const* first, char const* last, StringClass sc, Options const& options);
 //    ParseStatus HandleBeginArray(Options const& options);
 //    ParseStatus HandleEndArray(size_t count, Options const& options);
 //    ParseStatus HandleEndElement(size_t& count, Options const& options);
 //    ParseStatus HandleBeginObject(Options const& options);
 //    ParseStatus HandleEndObject(size_t count, Options const& options);
 //    ParseStatus HandleEndMember(size_t& count, Options const& options);
-//    ParseStatus HandleKey(char const* first, char const* last, StringClass sc, Options const& options);
 //};
 
 // XXX:
@@ -872,15 +874,15 @@ ParseStatus Parser<ParseCallbacks>::ParseIdentifier()
     ParseStatus ec;
     if (len == 4 && std::memcmp(f, "null", 4) == 0)
     {
-        ec = cb.HandleNull(options);
+        ec = cb.HandleNull(f, l, options);
     }
     else if (len == 4 && std::memcmp(f, "true", 4) == 0)
     {
-        ec = cb.HandleBoolean(true, options);
+        ec = cb.HandleTrue(f, l, options);
     }
     else if (len == 5 && std::memcmp(f, "false", 5) == 0)
     {
-        ec = cb.HandleBoolean(false, options);
+        ec = cb.HandleFalse(f, l, options);
     }
     else if (options.allow_nan_inf && len == 8 && std::memcmp(f, "Infinity", 8) == 0)
     {
@@ -1244,17 +1246,18 @@ inline LineInfo GetLineInfo(char const* start, char const* pos)
 #if 0
 struct ParseCallbacks
 {
-    virtual json::ParseStatus HandleNull(json::Options const& options) = 0;
-    virtual json::ParseStatus HandleBoolean(bool value, json::Options const& options) = 0;
+    virtual json::ParseStatus HandleNull(char const* first, char const* last, json::Options const& options) = 0;
+    virtual json::ParseStatus HandleTrue(char const* first, char const* last, json::Options const& options) = 0;
+    virtual json::ParseStatus HandleFalse(char const* first, char const* last, json::Options const& options) = 0;
     virtual json::ParseStatus HandleNumber(char const* first, char const* last, json::NumberClass nc, json::Options const& options) = 0;
     virtual json::ParseStatus HandleString(char const* first, char const* last, json::StringClass sc, json::Options const& options) = 0;
+    virtual json::ParseStatus HandleKey(char const* first, char const* last, json::StringClass sc, json::Options const& options) = 0;
     virtual json::ParseStatus HandleBeginArray(json::Options const& options) = 0;
     virtual json::ParseStatus HandleEndArray(size_t count, json::Options const& options) = 0;
     virtual json::ParseStatus HandleEndElement(size_t& count, json::Options const& options) = 0;
     virtual json::ParseStatus HandleBeginObject(json::Options const& options) = 0;
     virtual json::ParseStatus HandleEndObject(size_t count, json::Options const& options) = 0;
     virtual json::ParseStatus HandleEndMember(size_t& count, json::Options const& options) = 0;
-    virtual json::ParseStatus HandleKey(char const* first, char const* last, json::StringClass sc, json::Options const& options) = 0;
 };
 
 json::ParseResult ParseJSON(ParseCallbacks& cb, char const* next, char const* last, json::Options const& options = {})
