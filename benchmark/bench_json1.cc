@@ -44,19 +44,7 @@ struct SaxHandler
     ParseStatus HandleString(char const* first, char const* last, StringClass sc, Options const& /*options*/)
     {
         ++stats.string_count;
-        intptr_t len = 0;
-        if (sc == StringClass::needs_cleaning)
-        {
-            auto const res = json::strings::UnescapeString(first, last, [&](char) { ++len; });
-            if (res.status != json::strings::Status::success)
-                return ParseStatus::invalid_string;
-        }
-        else
-        {
-            len = last - first;
-        }
-        stats.total_string_length += static_cast<size_t>(len);
-        return {};
+        return AddStringLength(stats.total_string_length, first, last, sc);
     }
 
     ParseStatus HandleBeginArray(Options const& /*options*/)
@@ -96,19 +84,25 @@ struct SaxHandler
     ParseStatus HandleKey(char const* first, char const* last, StringClass sc, Options const& /*options*/)
     {
         ++stats.key_count;
-        size_t len = 0;
+        return AddStringLength(stats.total_key_length, first, last, sc);
+    }
+
+private:
+    static ParseStatus AddStringLength(size_t& dest, char const* first, char const* last, StringClass sc)
+    {
+        intptr_t len = 0;
         if (sc == StringClass::needs_cleaning)
         {
             auto const res = json::strings::UnescapeString(first, last, [&](char) { ++len; });
-
             if (res.status != json::strings::Status::success)
                 return ParseStatus::invalid_string;
         }
         else
         {
-            len = static_cast<size_t>(last - first);
+            len = last - first;
         }
-        stats.total_key_length += len;
+
+        dest += static_cast<size_t>(len);
         return {};
     }
 };

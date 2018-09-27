@@ -40,7 +40,7 @@
 //#define JSON_NEVER_INLINE inline
 //#endif
 
-#define JSON_USE_SSE42 1
+//#define JSON_USE_SSE42 1
 #ifndef JSON_USE_SSE42
 #if defined(__SSE_4_2__) || (/* for MSVC: */ defined(__AVX__) || defined(__AVX2__))
 #define JSON_USE_SSE42 1
@@ -124,6 +124,52 @@ inline bool IsSeparator(char ch)
 }
 
 } // namespace charclass
+
+//==================================================================================================
+// Util
+//==================================================================================================
+
+namespace impl {
+
+inline bool StrEqual(char const* str, char const* expected, intptr_t n)
+{
+    JSON_ASSERT(str != nullptr);
+    JSON_ASSERT(expected != nullptr);
+    JSON_ASSERT(n >= 0);
+    JSON_ASSERT(std::strlen(expected) == static_cast<size_t>(n));
+
+#if 1
+    return std::memcmp(str, expected, static_cast<size_t>(n)) == 0;
+#else
+    for (intptr_t i = 0; i < n; ++i) {
+        if (str[i] != expected[i])
+            return false;
+    }
+    return true;
+#endif
+}
+
+//inline char ToLowerASCII(char ch)
+//{
+//#if 0
+//    return static_cast<char>(static_cast<uint8_t>(ch) | 0x20);
+//#else
+//    if ('A' <= ch && ch <= 'Z')
+//        return static_cast<char>(ch - 'A' + 'a');
+//    return ch;
+//#endif
+//}
+//
+//inline bool StrStartsWithCaseInsensitive(char const* str, char const* lower_case_prefix, intptr_t n)
+//{
+//    for (intptr_t i = 0; i < n; ++i) {
+//        if (ToLowerASCII(str[i]) != lower_case_prefix[i])
+//            return false;
+//    }
+//    return true;
+//}
+
+} // namespace impl
 
 //==================================================================================================
 // Options
@@ -254,15 +300,15 @@ inline ScanNumberResult ScanNumber(char const* next, char const* last, Options c
     //{
     //    // Will be scanned again below.
     //}
-    else if (options.allow_nan_inf && last - next >= 8 && std::memcmp(next, "Infinity", 8) == 0)
+    else if (options.allow_nan_inf && last - next >= 8 && ::json::impl::StrEqual(next, "Infinity", 8))
     {
         return {next + 8, is_neg ? NumberClass::neg_infinity : NumberClass::pos_infinity};
     }
-    //else if (options.allow_nan_inf && last - next >= 3 && std::memcmp(next, "Inf", 3) == 0)
+    //else if (options.allow_nan_inf && last - next >= 3 && ::json::impl::StrEqual(next, "Inf", 3))
     //{
-    //    return {next + 8, is_neg ? NumberClass::neg_infinity : NumberClass::pos_infinity};
+    //    return {next + 3, is_neg ? NumberClass::neg_infinity : NumberClass::pos_infinity};
     //}
-    else if (options.allow_nan_inf && last - next >= 3 && std::memcmp(next, "NaN", 3) == 0)
+    else if (options.allow_nan_inf && last - next >= 3 && ::json::impl::StrEqual(next, "NaN", 3))
     {
         return {next + 3, NumberClass::nan};
     }
@@ -872,27 +918,27 @@ ParseStatus Parser<ParseCallbacks>::ParseIdentifier()
     auto const len = l - f;
 
     ParseStatus ec;
-    if (len == 4 && std::memcmp(f, "null", 4) == 0)
+    if (len == 4 && ::json::impl::StrEqual(f, "null", 4))
     {
         ec = cb.HandleNull(f, l, options);
     }
-    else if (len == 4 && std::memcmp(f, "true", 4) == 0)
+    else if (len == 4 && ::json::impl::StrEqual(f, "true", 4))
     {
         ec = cb.HandleTrue(f, l, options);
     }
-    else if (len == 5 && std::memcmp(f, "false", 5) == 0)
+    else if (len == 5 && ::json::impl::StrEqual(f, "false", 5))
     {
         ec = cb.HandleFalse(f, l, options);
     }
-    else if (options.allow_nan_inf && len == 8 && std::memcmp(f, "Infinity", 8) == 0)
+    else if (options.allow_nan_inf && len == 8 && ::json::impl::StrEqual(f, "Infinity", 8))
     {
         ec = cb.HandleNumber(f, l, NumberClass::pos_infinity, options);
     }
-    //else if (options.allow_nan_inf && len == 3 && std::memcmp(f, "Inf", 3) == 0)
+    //else if (options.allow_nan_inf && len == 3 && ::json::impl::StrEqual(f, "Inf", 3))
     //{
     //    ec = cb.HandleNumber(f, l, NumberClass::pos_infinity, options);
     //}
-    else if (options.allow_nan_inf && len == 3 && std::memcmp(f, "NaN", 3) == 0)
+    else if (options.allow_nan_inf && len == 3 && ::json::impl::StrEqual(f, "NaN", 3))
     {
         ec = cb.HandleNumber(f, l, NumberClass::nan, options);
     }

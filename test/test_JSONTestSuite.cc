@@ -144,6 +144,7 @@ static const JSONTestSuiteTest kJSONTestSuite_y[] = {
     // From the implementation-defined tests:
 #if 1
     {std::string("[-NaN]", 6), "i_n_number_-NaN"},
+    //{std::string("[Inf]", 5), "i_n_number_Inf"},
     {std::string("[Infinity]", 10), "i_n_number_infinity"},
     {std::string("[-Infinity]", 11), "i_n_number_minus_infinity"},
     {std::string("[NaN]", 5), "i_n_number_NaN"},
@@ -434,7 +435,7 @@ static const JSONTestSuiteTest kJSONTestSuite_i[] = {
 
     //{std::string("[+Inf]", 6), "i_n_number_+Inf"},
     {std::string("[-NaN]", 6), "i_n_number_-NaN"},
-    //{std::string("[Inf]", 5), "i_n_number_Inf"},
+    {std::string("[Inf]", 5), "i_n_number_Inf"},
     {std::string("[Infinity]", 10), "i_n_number_infinity"},
     {std::string("[-Infinity]", 11), "i_n_number_minus_infinity"},
     {std::string("[NaN]", 5), "i_n_number_NaN"},
