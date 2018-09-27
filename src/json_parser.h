@@ -569,6 +569,8 @@ L_again:
             auto const tok = LexComment(p);
             if (tok.kind == TokenKind::comment)
                 goto L_again;
+
+            return MakeToken(p, tok.kind);
         }
         break;
     default:
