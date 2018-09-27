@@ -768,7 +768,7 @@ inline Token Lexer::MakeStringToken(char const* p, StringClass string_class)
     tok.string_class = string_class;
 
     JSON_ASSERT(p != end);
-    JSON_ASSERT(*p == '"');
+    JSON_ASSERT(*p == '"' || *p == '\'');
     ptr = ++p; // skip " or '
 
     return tok;
