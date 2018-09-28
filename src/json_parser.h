@@ -197,6 +197,9 @@ struct Options {
     // Default is false.
     bool allow_unquoted_keys = false;
 
+    // XXX:
+    // Remove this! Not used in the (SAX) parser.
+    //
     // If true, parse numbers as raw strings.
     // Default is false.
     bool parse_numbers_as_strings = false;
