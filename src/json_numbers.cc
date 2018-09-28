@@ -299,7 +299,7 @@ bool json::numbers::StringToNumber(double& result, char const* first, char const
 
     if (res.next == last && res.number_class != NumberClass::invalid)
     {
-        result = json::numbers::StringToNumber(first, res.next, res.number_class);
+        result = json::numbers::StringToNumber(first, last, res.number_class);
         return true;
     }
 
