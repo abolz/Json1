@@ -899,11 +899,11 @@ struct ParseValueCallbacks
         return {};
     }
 
-    ParseStatus HandleNumber(char const* first, char const* last, NumberClass nc, Options const& options)
+    ParseStatus HandleNumber(char const* first, char const* last, NumberClass nc, Options const& /*options*/)
     {
-        if (options.parse_numbers_as_strings)
-            stack.emplace_back(json::string_tag, first, last);
-        else
+        //if (options.parse_numbers_as_strings)
+        //    stack.emplace_back(json::string_tag, first, last);
+        //else
             stack.emplace_back(numbers::StringToNumber(first, last, nc));
 
         return {};

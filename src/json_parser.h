@@ -53,34 +53,31 @@
 
 namespace json {
 
-// UTF-8 code unit
-//using char8_t = char;
-
 //==================================================================================================
 // CharClass
 //==================================================================================================
 
 namespace charclass {
 
-enum : uint8_t {
-    CC_None             = 0,    // nothing special
-    CC_StringSpecial    = 0x01, // quote or bs : '"', '\\'
-    CC_Digit            = 0x02, // digit       : '0'...'9'
-    CC_IdentifierBody   = 0x04, // ident-body  : IsDigit, IsLetter, '_', '$'
-    CC_Whitespace       = 0x08, // whitespace  : '\t', '\n', '\r', ' '
-    CC_Punctuation      = 0x40, // punctuation : '[', ']', '{', '}', ',', ':'
-    CC_NeedsCleaning    = 0x80, // needs cleaning (strings)
+enum /*class*/ ECharClass : uint8_t {
+    CC_none            = 0,    // nothing special
+    CC_string_special  = 0x01, // quote or bs : '"', '\\'
+    CC_digit           = 0x02, // digit       : '0'...'9'
+    CC_identifier_body = 0x04, // ident-body  : IsDigit, IsLetter, '_', '$'
+    CC_whitespace      = 0x08, // whitespace  : '\t', '\n', '\r', ' '
+    CC_punctuation     = 0x40, // punctuation : '[', ']', '{', '}', ',', ':'
+    CC_needs_cleaning  = 0x80, // needs cleaning (strings)
 };
 
 inline uint32_t CharClass(char ch)
 {
     enum : uint8_t {
-        S = CC_StringSpecial,
-        D = CC_Digit,
-        I = CC_IdentifierBody,
-        W = CC_Whitespace,
-        P = CC_Punctuation,
-        C = CC_NeedsCleaning,
+        S = CC_string_special,
+        D = CC_digit,
+        I = CC_identifier_body,
+        W = CC_whitespace,
+        P = CC_punctuation,
+        C = CC_needs_cleaning,
     };
 
     static constexpr uint8_t const kMap[] = {
@@ -113,14 +110,14 @@ inline uint32_t CharClass(char ch)
     return kMap[static_cast<uint8_t>(ch)];
 }
 
-inline bool IsWhitespace     (char ch) { return (CharClass(ch) & CC_Whitespace    ) != 0; }
-inline bool IsDigit          (char ch) { return (CharClass(ch) & CC_Digit         ) != 0; }
-inline bool IsIdentifierBody (char ch) { return (CharClass(ch) & CC_IdentifierBody) != 0; }
-inline bool IsPunctuation    (char ch) { return (CharClass(ch) & CC_Punctuation   ) != 0; }
+inline bool IsWhitespace     (char ch) { return (CharClass(ch) & CC_whitespace     ) != 0; }
+inline bool IsDigit          (char ch) { return (CharClass(ch) & CC_digit          ) != 0; }
+inline bool IsIdentifierBody (char ch) { return (CharClass(ch) & CC_identifier_body) != 0; }
+inline bool IsPunctuation    (char ch) { return (CharClass(ch) & CC_punctuation    ) != 0; }
 
 inline bool IsSeparator(char ch)
 {
-    return (CharClass(ch) & (CC_Whitespace | CC_Punctuation)) != 0;
+    return (CharClass(ch) & (CC_whitespace | CC_punctuation)) != 0;
 }
 
 } // namespace charclass
@@ -136,7 +133,6 @@ inline bool StrEqual(char const* str, char const* expected, intptr_t n)
     JSON_ASSERT(str != nullptr);
     JSON_ASSERT(expected != nullptr);
     JSON_ASSERT(n >= 0);
-    JSON_ASSERT(std::strlen(expected) == static_cast<size_t>(n));
 
 #if 1
     return std::memcmp(str, expected, static_cast<size_t>(n)) == 0;
@@ -148,26 +144,6 @@ inline bool StrEqual(char const* str, char const* expected, intptr_t n)
     return true;
 #endif
 }
-
-//inline char ToLowerASCII(char ch)
-//{
-//#if 0
-//    return static_cast<char>(static_cast<uint8_t>(ch) | 0x20);
-//#else
-//    if ('A' <= ch && ch <= 'Z')
-//        return static_cast<char>(ch - 'A' + 'a');
-//    return ch;
-//#endif
-//}
-//
-//inline bool StrStartsWithCaseInsensitive(char const* str, char const* lower_case_prefix, intptr_t n)
-//{
-//    for (intptr_t i = 0; i < n; ++i) {
-//        if (ToLowerASCII(str[i]) != lower_case_prefix[i])
-//            return false;
-//    }
-//    return true;
-//}
 
 } // namespace impl
 
@@ -196,13 +172,6 @@ struct Options {
     // If true, allow unquoted keys in objects.
     // Default is false.
     bool allow_unquoted_keys = false;
-
-    // XXX:
-    // Remove this! Not used in the (SAX) parser.
-    //
-    // If true, parse numbers as raw strings.
-    // Default is false.
-    bool parse_numbers_as_strings = false;
 
     // If true, allow characters after value.
     // Might be used to parse strings like "[1,2,3]{"hello":"world"}" into
@@ -233,22 +202,6 @@ struct ScanNumberResult {
     NumberClass number_class;
 };
 
-//inline bool StartsWith(char const* next, char const* last, char const* prefix)
-//{
-//}
-//
-//inline bool StartsWithCaseInsensitive(char const* next, char const* last, char const* lower_case_prefix)
-//{
-//}
-//
-//inline ScanNumberResult ScanInfinity(char const* next, char const* last)
-//{
-//}
-//
-//inline ScanNumberResult ScanNaN(char const* next, char const* last)
-//{
-//}
-
 // PRE: next points at '0', ..., '9', or '-'
 inline ScanNumberResult ScanNumber(char const* next, char const* last, Options const& options)
 {
@@ -271,12 +224,6 @@ inline ScanNumberResult ScanNumber(char const* next, char const* last, Options c
         if (next == last)
             goto L_invalid;
     }
-    //else if (options.allow_leading_plus && *next == '+')
-    //{
-    //    ++next;
-    //    if (next == last)
-    //        goto L_invalid;
-    //}
 
 // int
 
@@ -299,18 +246,10 @@ inline ScanNumberResult ScanNumber(char const* next, char const* last, Options c
                 break;
         }
     }
-    //else if (options.allow_leading_dot && *next == '.')
-    //{
-    //    // Will be scanned again below.
-    //}
     else if (options.allow_nan_inf && last - next >= 8 && ::json::impl::StrEqual(next, "Infinity", 8))
     {
         return {next + 8, is_neg ? NumberClass::neg_infinity : NumberClass::pos_infinity};
     }
-    //else if (options.allow_nan_inf && last - next >= 3 && ::json::impl::StrEqual(next, "Inf", 3))
-    //{
-    //    return {next + 3, is_neg ? NumberClass::neg_infinity : NumberClass::pos_infinity};
-    //}
     else if (options.allow_nan_inf && last - next >= 3 && ::json::impl::StrEqual(next, "NaN", 3))
     {
         return {next + 3, NumberClass::nan};
@@ -419,17 +358,15 @@ struct Token
     char const* end = nullptr;
     TokenKind kind = TokenKind::unknown;
     union {
-//      uint8_t _init_class_ = 0;
-        StringClass string_class;
-        NumberClass number_class;
+        StringClass string_class; // Valid iff kind == TokenKind::string
+        NumberClass number_class; // Valid iff kind == TokenKind::number
     };
 };
 
 class Lexer
 {
 private:
-//  char const* src = nullptr;
-    char const* ptr = nullptr; // position in [src, end)
+    char const* ptr = nullptr;
     char const* end = nullptr;
 
 public:
@@ -629,7 +566,7 @@ inline Token Lexer::LexString(char const* p, char quote_char)
         {
             uint32_t const m = CharClass(*p);
             mask |= m;
-            if ((m & CC_StringSpecial) != 0)
+            if ((m & CC_string_special) != 0)
                 break;
         }
 
@@ -655,11 +592,11 @@ inline Token Lexer::LexString(char const* p, char quote_char)
 
 #if JSON_USE_SSE42
         // Once the NeedsCleaning flag is set, we only need to look at '\' and '"' (or '\'').
-        special_chars_length = ((mask & CC_NeedsCleaning) != 0) ? 6 : special_chars_length;
+        special_chars_length = ((mask & CC_needs_cleaning) != 0) ? 6 : special_chars_length;
 #endif
     }
 
-    return MakeStringToken(p, (mask & CC_NeedsCleaning) != 0 ? StringClass::needs_cleaning : StringClass::plain_ascii);
+    return MakeStringToken(p, (mask & CC_needs_cleaning) != 0 ? StringClass::needs_cleaning : StringClass::plain_ascii);
 }
 
 inline Token Lexer::LexNumber(char const* p, Options const& options)
@@ -693,7 +630,6 @@ inline Token Lexer::LexIdentifier(char const* p, Options const& options)
     static_cast<void>(options); // unused
 #endif
 
-    // XXX: Add '$' here?!?!
     for ( ; p != end && IsIdentifierBody(*p); ++p)
     {
     }
@@ -851,9 +787,6 @@ struct Failed
 //    ParseStatus HandleEndMember(size_t& count, Options const& options);
 //};
 
-// XXX:
-// Move to json::impl?!?!
-
 template <typename ParseCallbacks>
 struct Parser
 {
@@ -939,10 +872,6 @@ ParseStatus Parser<ParseCallbacks>::ParseIdentifier()
     {
         ec = cb.HandleNumber(f, l, NumberClass::pos_infinity, options);
     }
-    //else if (options.allow_nan_inf && len == 3 && ::json::impl::StrEqual(f, "Inf", 3))
-    //{
-    //    ec = cb.HandleNumber(f, l, NumberClass::pos_infinity, options);
-    //}
     else if (options.allow_nan_inf && len == 3 && ::json::impl::StrEqual(f, "NaN", 3))
     {
         ec = cb.HandleNumber(f, l, NumberClass::nan, options);
