@@ -504,13 +504,12 @@ L_again:
     case 'z':
         return LexIdentifier(p, options);
     case '/':
-        if (options.skip_comments)
         {
             auto const tok = LexComment(p);
-            if (tok.kind == TokenKind::comment)
+            if (options.skip_comments && tok.kind == TokenKind::comment)
                 goto L_again;
 
-            return MakeToken(p, tok.kind);
+            return tok;
         }
         break;
     default:
