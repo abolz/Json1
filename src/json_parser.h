@@ -40,6 +40,14 @@
 //#define JSON_NEVER_INLINE inline
 //#endif
 
+#if _MSC_VER && _HAS_CXX17
+#define JSON_FALLTHROUGH [[fallthrough]]
+#elif defined(__GNUC__)
+#define JSON_FALLTHROUGH __attribute__ ((fallthrough))
+#else
+#define JSON_FALLTHROUGH static_cast<void>(0)
+#endif
+
 //#define JSON_USE_SSE42 1
 #ifndef JSON_USE_SSE42
 #if defined(__SSE_4_2__) || (/* for MSVC: */ defined(__AVX__) || defined(__AVX2__))
@@ -52,6 +60,39 @@
 #endif
 
 namespace json {
+
+//==================================================================================================
+// Input
+//==================================================================================================
+
+//class BufferedInputStream {
+//public:
+//    // Returns true, iff the stream is at EOF.
+//    bool Eof();
+//
+//    // Returns the current character from the input stream.
+//    // PRE: !Eof()
+//    char Peek();
+//
+//    // Discards the current character from the input stream and advances the read position.
+//    // Additionally invalidates the current buffer.
+//    // PRE: !Eof()
+//    void Discard();
+//
+//    // Copies the current character from the input stream into the buffer and advances the read
+//    // position.
+//    // PRE: !Eof()
+//    void Consume();
+//
+//    // Clears the current buffer.
+//    void ClearBuffer();
+//
+//    // Returns an iterator pointing to the start of the current buffer.
+//    char const* BufferBegin() const;
+//
+//    // Returns an iterator pointing past the end of the current buffer.
+//    char const* BufferEnd() const;
+//};
 
 //==================================================================================================
 // CharClass
@@ -172,6 +213,10 @@ struct Options {
     // If true, allow unquoted keys in objects.
     // Default is false.
     bool allow_unquoted_keys = false;
+
+    // If true, allow single quoted strings like 'hello'.
+    // Default is false.
+    bool allow_single_quoted_strings = false;
 
     // If true, allow characters after value.
     // Might be used to parse strings like "[1,2,3]{"hello":"world"}" into
@@ -431,10 +476,10 @@ L_again:
     case ':':
         kind = TokenKind::colon;
         break;
-    //case '\'':
-    //    if (!options.allow_single_quoted_strings)
-    //        break;
-    //    [[fallthrough]];
+    case '\'':
+        if (!options.allow_single_quoted_strings)
+            break;
+        JSON_FALLTHROUGH;
     case '"':
         return LexString(p, ch);
     case '-':
@@ -449,6 +494,7 @@ L_again:
     case '8':
     case '9':
         return LexNumber(p, options);
+//  case '$':
     case 'A':
     case 'B':
     case 'C':
@@ -612,7 +658,7 @@ inline Token Lexer::LexIdentifier(char const* p, Options const& options)
 #if 0 && JSON_USE_SSE42
     if (options.allow_unquoted_keys)
     {
-        auto const kSpecialChars = _mm_set_epi8(0, 0, 0, 0, 0, 0, '$', '$', 'z', 'a', '_', '_', 'Z', 'A', '9', '0');
+        auto const kSpecialChars = _mm_set_epi8(0, 0, 0, 0, 0, 0, '$', '$', '9', '0', '_', '_', 'Z', 'A', 'a', 'z');
 
         for ( ; end - p >= 16; p += 16)
         {
@@ -798,6 +844,8 @@ struct Parser
 
     Parser(ParseCallbacks& cb_, Options const& options_);
 
+    void SetInput(char const* next, char const* last);
+
     ParseStatus ParseString();
     ParseStatus ParseNumber();
     ParseStatus ParseIdentifier();
@@ -811,6 +859,13 @@ Parser<ParseCallbacks>::Parser(ParseCallbacks& cb_, Options const& options_)
     : cb(cb_)
     , options(options_)
 {
+}
+
+template <typename ParseCallbacks>
+void Parser<ParseCallbacks>::SetInput(char const* next, char const* last)
+{
+    lexer = Lexer(next, last);
+    token = lexer.Lex(options); // Get the first token
 }
 
 template <typename ParseCallbacks>
@@ -875,6 +930,10 @@ ParseStatus Parser<ParseCallbacks>::ParseIdentifier()
     {
         ec = cb.HandleNumber(f, l, NumberClass::nan, options);
     }
+    //else if (options.allow_undefined && len == 9 && ::json::impl::StrEqual(f, "undefined", 9) == 0)
+    //{
+    //    ec = cb.HandleUndefined(f, l, options);
+    //}
     else
     {
         return ParseStatus::unrecognized_identifier;
@@ -1137,9 +1196,7 @@ ParseResult ParseSAX(ParseCallbacks& cb, char const* next, char const* last, Opt
 
     Parser<ParseCallbacks> parser(cb, options);
 
-    parser.lexer = Lexer(next, last);
-    parser.token = parser.lexer.Lex(options); // Get the first token
-
+    parser.SetInput(next, last);
     ParseStatus ec = parser.ParseValue();
 
     if (ec == ParseStatus::success)
@@ -1165,6 +1222,56 @@ ParseResult ParseSAX(ParseCallbacks& cb, char const* next, char const* last, Opt
 
     return {ec, parser.token.ptr, parser.token.end};
 }
+
+//==================================================================================================
+// Reader (Pull parser)
+//==================================================================================================
+
+//struct Reader
+//{
+//    static constexpr uint32_t kMaxDepth = 500;
+//
+//    enum class Structure : uint8_t {
+//        object,
+//        array,
+//    };
+//
+//    struct StackElement {
+//        size_t count; // number of elements or members in the current array resp. object
+//        Structure structure;
+//    };
+//
+//    Options      options;
+//    Lexer        lexer;
+//    Token        token; // The next token.
+//    uint32_t     stack_size = 0;
+//    StackElement stack[kMaxDepth];
+//
+//    explicit Reader(Options const& options_);
+//
+//    void SetSource(char const* next, char const* last);
+//
+//    bool Eof() const;
+//
+//    bool BeginObject();
+//    bool EndObject();
+//    bool HasNextMember() const;
+//    bool ReadKey(std::string& key);
+//    bool ReadRawKey(std::string_view& key);
+//
+//    bool BeginArray();
+//    bool EndArray();
+//    bool HasNextElement() const;
+//
+//    bool ReadNull();
+//    bool ReadBoolean(bool& value);
+//    bool ReadNumber(double& value);
+//    bool ReadNumberAsString(std::string_view& value);
+//    bool ReadString(std::string& value);
+//    bool ReadRawString(std::string_view& value);
+//
+//    bool SkipValue();
+//};
 
 //==================================================================================================
 // Utility
