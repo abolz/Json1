@@ -94,7 +94,7 @@ namespace charclass {
 
 enum /*class*/ ECharClass : uint8_t {
     CC_none            = 0,    // nothing special
-    CC_string_special  = 0x01, // quote or bs : '"', '\\'
+    CC_string_special  = 0x01, // quote or bs : '"', '\'', '\\'
     CC_digit           = 0x02, // digit       : '0'...'9'
     CC_identifier_body = 0x04, // ident-body  : IsDigit, IsLetter, '_', '$'
     CC_whitespace      = 0x08, // whitespace  : '\t', '\n', '\r', ' '
@@ -119,7 +119,7 @@ inline uint32_t CharClass(char ch)
     //  DLE     DC1     DC2     DC3     DC4     NAK     SYN     ETB     CAN     EM      SUB     ESC     FS      GS      RS      US
         C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,
     //  space   !       "       #       $       %       &       '       (       )       *       +       ,       -       .       /
-        W,      0,      S,      0,      I,      0,      0,      0,      0,      0,      0,      0,      P,      0,      0,      0,
+        W,      0,      S,      0,      I,      0,      0,      S,      0,      0,      0,      0,      P,      0,      0,      0,
     //  0       1       2       3       4       5       6       7       8       9       :       ;       <       =       >       ?
         D|I,    D|I,    D|I,    D|I,    D|I,    D|I,    D|I,    D|I,    D|I,    D|I,    P,      0,      0,      0,      0,      0,
     //  @       A       B       C       D       E       F       G       H       I       J       K       L       M       N       O
