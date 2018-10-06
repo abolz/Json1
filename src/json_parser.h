@@ -40,14 +40,6 @@
 //#define JSON_NEVER_INLINE inline
 //#endif
 
-#if _MSC_VER && _HAS_CXX17
-#define JSON_FALLTHROUGH [[fallthrough]]
-#elif defined(__GNUC__)
-#define JSON_FALLTHROUGH __attribute__ ((fallthrough))
-#else
-#define JSON_FALLTHROUGH static_cast<void>(0)
-#endif
-
 //#define JSON_USE_SSE42 1
 #ifndef JSON_USE_SSE42
 #if defined(__SSE_4_2__) || (/* for MSVC: */ defined(__AVX__) || defined(__AVX2__))
@@ -479,7 +471,7 @@ L_again:
     case '\'':
         if (!options.allow_single_quoted_strings)
             break;
-        JSON_FALLTHROUGH;
+        /* fall through */
     case '"':
         return LexString(p, ch);
     case '-':
