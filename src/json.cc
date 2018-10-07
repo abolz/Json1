@@ -1137,21 +1137,12 @@ static bool StringifyNumber(std::string& str, double value, StringifyOptions con
 
 static bool StringifyString(std::string& str, String const& value, StringifyOptions const& /*options*/)
 {
-    char const* const first = value.data();
-    char const* const last  = value.data() + value.size();
-
     bool success = true;
 
     str += '"';
 
-#if 0
-    // XXX: '/'!!!
-    auto const next = json::strings::SkipNonSpecialASCII(first, last);
-    str.append(first, next);
-#else
-    auto const next = first;
-#endif
-
+    char const* const next = value.data();
+    char const* const last = value.data() + value.size();
     if (next != last)
     {
         auto const res = strings::EscapeString(next, last, [&](char ch) { str += ch; });
