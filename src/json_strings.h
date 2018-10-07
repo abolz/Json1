@@ -643,10 +643,6 @@ struct EscapeStringResult {
     Status status;
 };
 
-struct YieldChar {
-    void operator()(char) {}
-};
-
 template <typename Fn>
 EscapeStringResult EscapeString(char const* curr, char const* last, Fn yield, bool allow_invalid_unicode = false)
 {

@@ -54,39 +54,6 @@
 namespace json {
 
 //==================================================================================================
-// Input
-//==================================================================================================
-
-//class BufferedInputStream {
-//public:
-//    // Returns true, iff the stream is at EOF.
-//    bool Eof();
-//
-//    // Returns the current character from the input stream.
-//    // PRE: !Eof()
-//    char Peek();
-//
-//    // Discards the current character from the input stream and advances the read position.
-//    // Additionally invalidates the current buffer.
-//    // PRE: !Eof()
-//    void Discard();
-//
-//    // Copies the current character from the input stream into the buffer and advances the read
-//    // position.
-//    // PRE: !Eof()
-//    void Consume();
-//
-//    // Clears the current buffer.
-//    void ClearBuffer();
-//
-//    // Returns an iterator pointing to the start of the current buffer.
-//    char const* BufferBegin() const;
-//
-//    // Returns an iterator pointing past the end of the current buffer.
-//    char const* BufferEnd() const;
-//};
-
-//==================================================================================================
 // CharClass
 //==================================================================================================
 
@@ -474,6 +441,8 @@ L_again:
         /* fall through */
     case '"':
         return LexString(p, ch);
+//  case '.':
+//  case '+':
     case '-':
     case '0':
     case '1':
@@ -1214,56 +1183,6 @@ ParseResult ParseSAX(ParseCallbacks& cb, char const* next, char const* last, Opt
 
     return {ec, parser.token.ptr, parser.token.end};
 }
-
-//==================================================================================================
-// Reader (Pull parser)
-//==================================================================================================
-
-//struct Reader
-//{
-//    static constexpr uint32_t kMaxDepth = 500;
-//
-//    enum class Structure : uint8_t {
-//        object,
-//        array,
-//    };
-//
-//    struct StackElement {
-//        size_t count; // number of elements or members in the current array resp. object
-//        Structure structure;
-//    };
-//
-//    Options      options;
-//    Lexer        lexer;
-//    Token        token; // The next token.
-//    uint32_t     stack_size = 0;
-//    StackElement stack[kMaxDepth];
-//
-//    explicit Reader(Options const& options_);
-//
-//    void SetSource(char const* next, char const* last);
-//
-//    bool Eof() const;
-//
-//    bool BeginObject();
-//    bool EndObject();
-//    bool HasNextMember() const;
-//    bool ReadKey(std::string& key);
-//    bool ReadRawKey(std::string_view& key);
-//
-//    bool BeginArray();
-//    bool EndArray();
-//    bool HasNextElement() const;
-//
-//    bool ReadNull();
-//    bool ReadBoolean(bool& value);
-//    bool ReadNumber(double& value);
-//    bool ReadNumberAsString(std::string_view& value);
-//    bool ReadString(std::string& value);
-//    bool ReadRawString(std::string_view& value);
-//
-//    bool SkipValue();
-//};
 
 //==================================================================================================
 // Utility
