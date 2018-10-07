@@ -1,24 +1,25 @@
 #include "bench_rapidjson.h"
 
-#include <vector>
+#include "jsonstats.h"
+#include "traverse.h"
 
 #define RAPIDJSON_SSE2 1
 #define RAPIDJSON_SSE42 1
-#include "../ext/rapidjson/reader.h"
 
-#include "traverse.h"
+#include "../ext/rapidjson/document.h"
+#include "../ext/rapidjson/reader.h"
+#include "../ext/rapidjson/memorystream.h"
+#include "../ext/rapidjson/writer.h"
+
+#include <vector>
 
 namespace {
 
-class SaxHandler : public rapidjson::BaseReaderHandler<rapidjson::UTF8<>, SaxHandler>
+struct GenStatsHandler : public rapidjson::BaseReaderHandler<>
 {
-public:
     jsonstats& stats;
 
-public:
-    typedef typename rapidjson::UTF8<>::Ch Ch;
-
-    SaxHandler(jsonstats& s) : stats(s) {}
+    GenStatsHandler(jsonstats& s) : stats(s) {}
 
     bool Null()
     {
@@ -70,7 +71,7 @@ public:
         return true;
     }
 
-    bool String(Ch const* /*ptr*/, rapidjson::SizeType length, bool /*copy*/)
+    bool String(char const* /*ptr*/, rapidjson::SizeType length, bool /*copy*/)
     {
         ++stats.string_count;
         stats.total_string_length += length;
@@ -83,7 +84,7 @@ public:
         return true;
     }
 
-    bool Key(Ch const* /*ptr*/, rapidjson::SizeType length, bool /*copy*/)
+    bool Key(char const* /*ptr*/, rapidjson::SizeType length, bool /*copy*/)
     {
         ++stats.key_count;
         stats.total_key_length += length;
@@ -109,14 +110,10 @@ public:
     }
 };
 
-class DomHandler : public rapidjson::BaseReaderHandler<rapidjson::UTF8<>, DomHandler>
+struct ParseValueHandler : public rapidjson::BaseReaderHandler<>
 {
-public:
     std::vector<json::Value> stack;
     std::vector<json::String> keys;
-
-public:
-    typedef typename rapidjson::UTF8<>::Ch Ch;
 
     bool Null()
     {
@@ -160,7 +157,7 @@ public:
         return true;
     }
 
-    bool String(Ch const* ptr, rapidjson::SizeType length, bool /*copy*/)
+    bool String(char const* ptr, rapidjson::SizeType length, bool /*copy*/)
     {
         stack.emplace_back(json::string_tag, ptr, ptr + length);
         return true;
@@ -172,7 +169,7 @@ public:
         return true;
     }
 
-    bool Key(Ch const* ptr, rapidjson::SizeType length, bool /*copy*/)
+    bool Key(char const* ptr, rapidjson::SizeType length, bool /*copy*/)
     {
         keys.emplace_back(ptr, ptr + length);
         return true;
@@ -239,11 +236,14 @@ private:
 
 } // namespace
 
-constexpr int kParseFlags = rapidjson::kParseFullPrecisionFlag | rapidjson::kParseStopWhenDoneFlag | rapidjson::kParseValidateEncodingFlag;
+static constexpr int kParseFlags
+    = rapidjson::kParseFullPrecisionFlag
+    | rapidjson::kParseStopWhenDoneFlag
+    | rapidjson::kParseValidateEncodingFlag;
 
 bool rapidjson_sax_stats(jsonstats& stats, char const* first, char const* last)
 {
-    SaxHandler handler(stats);
+    GenStatsHandler handler(stats);
 
     rapidjson::MemoryStream is(first, static_cast<size_t>(last - first));
 
@@ -255,16 +255,32 @@ bool rapidjson_sax_stats(jsonstats& stats, char const* first, char const* last)
 
 bool rapidjson_dom_stats(jsonstats& stats, char const* first, char const* last)
 {
-    DomHandler handler;
+#if 1
+    rapidjson::MemoryStream is(first, static_cast<size_t>(last - first));
 
+    rapidjson::Document doc;
+    doc.ParseStream<kParseFlags>(is);
+
+    if (doc.HasParseError()) {
+        return false;
+    }
+
+    GenStatsHandler handler(stats);
+    doc.Accept(handler);
+
+    return true;
+#else
     rapidjson::MemoryStream is(first, static_cast<size_t>(last - first));
 
     rapidjson::Reader reader;
+    ParseValueHandler handler;
     auto const res = reader.Parse<kParseFlags>(is, handler);
 
-    if (res.IsError())
+    if (res.IsError()) {
         return false;
+    }
 
     traverse(stats, handler.stack.back());
     return true;
+#endif
 }

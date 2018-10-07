@@ -96,24 +96,6 @@ namespace json1_dom_test {
     }
 }
 
-//namespace json1_template_sax_test {
-//    void test(jsonstats& stats, const TestFile& file) {
-//        if (!json1_template_sax_stats(stats, reinterpret_cast<char const*>(file.data), reinterpret_cast<char const*>(file.data) + file.length)) {
-//            fprintf(stderr, "json1 sax parse error\n");
-//            abort();
-//        }
-//    }
-//}
-//
-//namespace json1_template_dom_test {
-//    void test(jsonstats& stats, const TestFile& file) {
-//        if (!json1_template_dom_stats(stats, reinterpret_cast<char const*>(file.data), reinterpret_cast<char const*>(file.data) + file.length)) {
-//            fprintf(stderr, "json1 dom parse error\n");
-//            abort();
-//        }
-//    }
-//}
-
 namespace rapidjson_sax_test {
     void test(jsonstats& stats, const TestFile& file) {
         if (!rapidjson_sax_stats(stats, reinterpret_cast<char const*>(file.data), reinterpret_cast<char const*>(file.data) + file.length)) {
@@ -157,7 +139,7 @@ struct TestImplementation {
     TestFunction func;
 };
 TestImplementation test_implementations[] = {
-#if 1
+#if 0
     { "rapidjson sax", &rapidjson_sax_test::test },
     { "json1 sax", &json1_sax_test::test },
     //{ "nlohmann sax", &nlohmann_sax_test::test },
