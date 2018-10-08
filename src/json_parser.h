@@ -1191,8 +1191,8 @@ ParseResult ParseSAX(ParseCallbacks& cb, char const* next, char const* last, Opt
 namespace util {
 
 struct LineInfo {
-    size_t line = 1;
-    size_t column = 1;
+    size_t line;
+    size_t column;
 };
 
 inline LineInfo GetLineInfo(char const* start, char const* pos)
@@ -1240,7 +1240,7 @@ inline LineInfo GetLineInfo(char const* start, char const* pos)
 //
 //==================================================================================================
 
-#if 0
+#if JSON_PARSER_COMPILE_TEST
 struct ParseCallbacks
 {
     virtual json::ParseStatus HandleNull(char const* first, char const* last, json::Options const& options) = 0;
