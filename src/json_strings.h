@@ -678,68 +678,63 @@ EscapeStringResult EscapeString(char const* curr, char const* last, Fn yield, bo
 
         if (static_cast<uint8_t>(*curr) >= 0x80)
         {
-#if 0 // TEST
-            auto const seq = unicode::ValidateUTF8Sequence(curr, last);
-            JSON_ASSERT(curr != seq.next);
+            // XXX:
+            // Factor "allow_invalid_unicode" out of the loop and use ValidateUTF8Sequence if false?!?!
 
-            if (!seq.success)
+            do
             {
-                return {curr, Status::invalid_utf8_sequence};
-            }
+                char32_t U = 0;
+                auto const res = unicode::DecodeUTF8Sequence(curr, last, U);
+                JSON_ASSERT(curr != res.next);
 
-            yield_n(curr, seq.next - curr);
-#else
-            char32_t U = 0;
-            auto const seq = unicode::DecodeUTF8Sequence(curr, last, U);
-            JSON_ASSERT(curr != seq.next);
-
-            if (!seq.success)
-            {
-                if (!allow_invalid_unicode)
-                    return {curr, Status::invalid_utf8_sequence};
-
-                yield_n("\\uFFFD", 6);
-            }
-            else
-            {
-                //
-                // Always escape U+2028 (LINE SEPARATOR) and U+2029 (PARAGRAPH
-                // SEPARATOR). No string in JavaScript can contain a literal
-                // U+2028 or a U+2029.
-                //
-                // (See http://timelessrepo.com/json-isnt-a-javascript-subset)
-                //
-                switch (U)
+                if (!res.success)
                 {
-                case 0x2028:
-                    yield_n("\\u2028", 6);
-                    break;
-                case 0x2029:
-                    yield_n("\\u2029", 6);
-                    break;
-                default:
-                    //if (ascii_only_output)
-                    //{
-                    //    unicode::EncodeUTF16(U, [&](uint16_t W) {
-                    //        yield('\\');
-                    //        yield('u');
-                    //        yield(kHexDigits[(W >> 12)      ]);
-                    //        yield(kHexDigits[(W >>  8) & 0xF]);
-                    //        yield(kHexDigits[(W >>  4) & 0xF]);
-                    //        yield(kHexDigits[(W      ) & 0xF]);
-                    //    });
-                    //}
-                    //else
-                    {
-                        // The UTF-8 sequence is valid. No need to re-encode.
-                        yield_n(curr, seq.next - curr);
-                    }
-                    break;
-                }
-            }
-#endif
+                    if (!allow_invalid_unicode)
+                        return {curr, Status::invalid_utf8_sequence};
 
-            curr = seq.next;
+                    yield_n("\\uFFFD", 6);
+                }
+                else
+                {
+                    //
+                    // Always escape U+2028 (LINE SEPARATOR) and U+2029 (PARAGRAPH
+                    // SEPARATOR). No string in JavaScript can contain a literal
+                    // U+2028 or a U+2029.
+                    //
+                    // (See http://timelessrepo.com/json-isnt-a-javascript-subset)
+                    //
+                    switch (U)
+                    {
+                    case 0x2028:
+                        yield_n("\\u2028", 6);
+                        break;
+                    case 0x2029:
+                        yield_n("\\u2029", 6);
+                        break;
+                    default:
+                        //if (ascii_only_output)
+                        //{
+                        //    unicode::EncodeUTF16(U, [&](uint16_t W) {
+                        //        yield('\\');
+                        //        yield('u');
+                        //        yield(kHexDigits[(W >> 12)      ]);
+                        //        yield(kHexDigits[(W >>  8) & 0xF]);
+                        //        yield(kHexDigits[(W >>  4) & 0xF]);
+                        //        yield(kHexDigits[(W      ) & 0xF]);
+                        //    });
+                        //}
+                        //else
+                        {
+                            // The UTF-8 sequence is valid. No need to re-encode.
+                            yield_n(curr, res.next - curr);
+                        }
+                        break;
+                    }
+                }
+
+                curr = res.next;
+            }
+            while (curr != last && static_cast<uint8_t>(*curr) >= 0x80);
         }
         else if (static_cast<uint8_t>(*curr) >= 0x20)
         {
