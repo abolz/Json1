@@ -151,7 +151,8 @@ inline bool StrEqual(char const* str, char const* expected, intptr_t n)
 // Options
 //==================================================================================================
 
-struct Options {
+struct Options
+{
     // If true, skip UTF-8 byte order mark - if any.
     // Default is true.
     bool skip_bom = true;
@@ -194,14 +195,15 @@ struct Options {
 
 enum class NumberClass : uint8_t {
     invalid,
+    integer,
+    floating_point,
     nan,
     pos_infinity,
     neg_infinity,
-    integer,
-    floating_point,
 };
 
-struct ScanNumberResult {
+struct ScanNumberResult
+{
     char const* next;
     NumberClass number_class;
 };
@@ -361,7 +363,8 @@ struct Token
     char const* ptr = nullptr;
     char const* end = nullptr;
     TokenKind kind = TokenKind::unknown;
-    union {
+    union
+    {
         StringClass string_class; // Valid iff kind == TokenKind::string
         NumberClass number_class; // Valid iff kind == TokenKind::number
     };
@@ -375,7 +378,8 @@ private:
 
 public:
     Lexer();
-    explicit Lexer(char const* first, char const* last);
+
+    void SetInput(char const* first, char const* last);
 
     Token Lex(Options const& options);
 
@@ -396,10 +400,10 @@ inline Lexer::Lexer()
 {
 }
 
-inline Lexer::Lexer(char const* first, char const* last)
-    : ptr(first)
-    , end(last)
+inline void Lexer::SetInput(char const* first, char const* last)
 {
+    ptr = first;
+    end = last;
 }
 
 inline Token Lexer::Lex(Options const& options)
@@ -602,6 +606,9 @@ inline Token Lexer::LexString(char const* p, char quote_char)
 #endif
     }
 
+    JSON_ASSERT(p != end);
+    JSON_ASSERT(*p == '"' || *p == '\'');
+
     return MakeStringToken(p, (mask & CC_needs_cleaning) != 0 ? StringClass::needs_cleaning : StringClass::plain_ascii);
 }
 
@@ -697,6 +704,8 @@ inline Token Lexer::MakeToken(char const* p, TokenKind kind)
     tok.ptr = ptr;
     tok.end = p;
     tok.kind = kind;
+//  tok.string_class = 0;
+//  tok.number_class = 0;
 
     ptr = p;
 
@@ -711,6 +720,7 @@ inline Token Lexer::MakeStringToken(char const* p, StringClass string_class)
     tok.end = p;
     tok.kind = TokenKind::string;
     tok.string_class = string_class;
+//  tok.number_class = 0;
 
     JSON_ASSERT(p != end);
     JSON_ASSERT(*p == '"' || *p == '\'');
@@ -726,6 +736,7 @@ inline Token Lexer::MakeNumberToken(char const* p, NumberClass number_class)
     tok.ptr = ptr;
     tok.end = p;
     tok.kind = TokenKind::number;
+//  tok.string_class = 0;
     tok.number_class = number_class;
 
     ptr = p;
@@ -763,6 +774,7 @@ enum class ParseStatus {
     max_depth_reached,
     unexpected_eof,
     unexpected_token,
+    unknown,
     unrecognized_identifier,
 };
 
@@ -825,7 +837,7 @@ Parser<ParseCallbacks>::Parser(ParseCallbacks& cb_, Options const& options_)
 template <typename ParseCallbacks>
 void Parser<ParseCallbacks>::SetInput(char const* next, char const* last)
 {
-    lexer = Lexer(next, last);
+    lexer.SetInput(next, last);
     token = lexer.Lex(options); // Get the first token
 }
 
@@ -1129,14 +1141,17 @@ L_end_structured:
         goto L_end_element;
 }
 
-struct ParseResult {
-    ParseStatus ec;
+struct ParseResult
+{
+    ParseStatus ec = ParseStatus::unknown;
+
     // On return, PTR denotes the position after the parsed value, or if an
     // error occurred, denotes the position of the invalid token.
-    char const* ptr;
+    char const* ptr = nullptr;
+
     // If an error occurred, END denotes the position after the invalid token.
     // This field is unused on success.
-    char const* end;
+    char const* end = nullptr;
 };
 
 template <typename ParseCallbacks>
@@ -1181,7 +1196,13 @@ ParseResult ParseSAX(ParseCallbacks& cb, char const* next, char const* last, Opt
     // Return token.kind on error?!?!
     //
 
-    return {ec, parser.token.ptr, parser.token.end};
+    ParseResult res;
+
+    res.ec = ec;
+    res.ptr = parser.token.ptr;
+    res.end = parser.token.end;
+
+    return res;
 }
 
 //==================================================================================================
@@ -1190,29 +1211,29 @@ ParseResult ParseSAX(ParseCallbacks& cb, char const* next, char const* last, Opt
 
 namespace util {
 
-struct LineInfo {
-    size_t line;
-    size_t column;
-};
-
-inline LineInfo GetLineInfo(char const* start, char const* pos)
+struct LineInfo
 {
-    //JSON_ASSERT(start != nullptr);
-    //JSON_ASSERT(pos != nullptr);
-    //JSON_ASSERT(start <= pos);
-
     size_t line = 1;
     size_t column = 1;
+};
 
-    for (char const* next = start; next != pos; )
+inline LineInfo GetLineInfo(char const* first, char const* ptr)
+{
+    //JSON_ASSERT(first != nullptr);
+    //JSON_ASSERT(ptr != nullptr);
+    //JSON_ASSERT(first <= ptr);
+
+    LineInfo li;
+
+    for (char const* next = first; next != ptr; )
     {
-        ++column;
+        ++li.column;
 
         char const ch = *next;
         ++next;
 #if 0
         // Skip UTF-8 trail bytes.
-        for ( ; next != pos && (0x80 == (static_cast<uint8_t>(*next) & 0xC0)); ++next)
+        for ( ; next != ptr && (0x80 == (static_cast<uint8_t>(*next) & 0xC0)); ++next)
         {
         }
 #endif
@@ -1220,16 +1241,16 @@ inline LineInfo GetLineInfo(char const* start, char const* pos)
         if (ch == '\n' || ch == '\r')
         {
             // If this is '\r\n', skip the other half.
-            if (ch == '\r' && next != pos && *next == '\n') {
+            if (ch == '\r' && next != ptr && *next == '\n') {
                 ++next;
             }
 
-            ++line;
-            column = 1;
+            ++li.line;
+            li.column = 1;
         }
     }
 
-    return {line, column};
+    return li;
 }
 
 } // namespace util
