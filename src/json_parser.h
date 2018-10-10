@@ -40,7 +40,7 @@
 //#define JSON_NEVER_INLINE inline
 //#endif
 
-//#define JSON_USE_SSE42 1
+#define JSON_USE_SSE42 1
 #ifndef JSON_USE_SSE42
 #if defined(__SSE_4_2__) || (/* for MSVC: */ defined(__AVX__) || defined(__AVX2__))
 #define JSON_USE_SSE42 1
@@ -86,7 +86,7 @@ inline uint32_t CharClass(char ch)
     //  DLE     DC1     DC2     DC3     DC4     NAK     SYN     ETB     CAN     EM      SUB     ESC     FS      GS      RS      US
         C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,
     //  space   !       "       #       $       %       &       '       (       )       *       +       ,       -       .       /
-        W,      0,      S,      0,      I,      0,      0,      S,      0,      0,      0,      0,      P,      0,      0,      0,
+        W,      0,      S,      0,      I,      0,      0,      0,      0,      0,      0,      0,      P,      0,      0,      0,
     //  0       1       2       3       4       5       6       7       8       9       :       ;       <       =       >       ?
         D|I,    D|I,    D|I,    D|I,    D|I,    D|I,    D|I,    D|I,    D|I,    D|I,    P,      0,      0,      0,      0,      0,
     //  @       A       B       C       D       E       F       G       H       I       J       K       L       M       N       O
@@ -173,10 +173,6 @@ struct Options
     // If true, allow unquoted keys in objects.
     // Default is false.
     bool allow_unquoted_keys = false;
-
-    // If true, allow single quoted strings like 'hello'.
-    // Default is false.
-    bool allow_single_quoted_strings = false;
 
     // If true, allow characters after value.
     // Might be used to parse strings like "[1,2,3]{"hello":"world"}" into
@@ -384,7 +380,7 @@ public:
     Token Lex(Options const& options);
 
 private:
-    Token LexString     (char const* p, char quote_char);
+    Token LexString     (char const* p);
     Token LexNumber     (char const* p, Options const& options);
     Token LexIdentifier (char const* p, Options const& options);
     Token LexComment    (char const* p);
@@ -439,12 +435,8 @@ L_again:
     case ':':
         kind = TokenKind::colon;
         break;
-    case '\'':
-        if (!options.allow_single_quoted_strings)
-            break;
-        /* fall through */
     case '"':
-        return LexString(p, ch);
+        return LexString(p);
 //  case '.':
 //  case '+':
     case '-':
@@ -531,19 +523,18 @@ L_again:
     return MakeToken(p, kind);
 }
 
-inline Token Lexer::LexString(char const* p, char quote_char)
+inline Token Lexer::LexString(char const* p)
 {
     using namespace ::json::charclass;
 
     JSON_ASSERT(p != end);
-    JSON_ASSERT(*p == '"' || *p == '\'');
-    JSON_ASSERT(*p == quote_char);
+    JSON_ASSERT(*p == '"');
 
-    ptr = ++p; // skip " or '
+    ptr = ++p; // skip "
 
 #if JSON_USE_SSE42
-    auto const kSpecialChars = _mm_set_epi8(0, 0, 0, 0, 0, 0, '\xFF', '\x80', '\x1F', '\x00', '\\', '\\', '\'', '\'', '"', '"');
-    int special_chars_length = 10;
+    auto const kSpecialChars = _mm_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, '\xFF', '\x80', '\x1F', '\x00', '\\', '\\', '"', '"');
+    int special_chars_length = 8;
 #endif
 
     uint32_t mask = 0;
@@ -566,7 +557,7 @@ inline Token Lexer::LexString(char const* p, char quote_char)
 
         if (p == end)
             return MakeToken(p, TokenKind::incomplete);
-        if (*p == quote_char)
+        if (*p == '"')
             break;
 #endif
 
@@ -582,13 +573,8 @@ inline Token Lexer::LexString(char const* p, char quote_char)
 
         if (p == end)
             return MakeToken(p, TokenKind::incomplete);
-
-        if (*p == quote_char)
-        {
-            // Don't skip the quote character.
-            // Will be skipped in MakeStringToken.
+        if (*p == '"')
             break;
-        }
 
         if (*p == '\\')
         {
@@ -601,13 +587,13 @@ inline Token Lexer::LexString(char const* p, char quote_char)
         ++p;
 
 #if JSON_USE_SSE42
-        // Once the NeedsCleaning flag is set, we only need to look at '\' and '"' (or '\'').
-        special_chars_length = ((mask & CC_needs_cleaning) != 0) ? 6 : special_chars_length;
+        // Once the NeedsCleaning flag is set, we only need to look at '\' and '"'.
+        special_chars_length = ((mask & CC_needs_cleaning) != 0) ? 4 : special_chars_length;
 #endif
     }
 
     JSON_ASSERT(p != end);
-    JSON_ASSERT(*p == '"' || *p == '\'');
+    JSON_ASSERT(*p == '"');
 
     return MakeStringToken(p, (mask & CC_needs_cleaning) != 0 ? StringClass::needs_cleaning : StringClass::plain_ascii);
 }
