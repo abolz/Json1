@@ -208,13 +208,12 @@ struct ScanNumberResult
 inline ScanNumberResult ScanNumber(char const* next, char const* last, Options const& options)
 {
     using ::json::charclass::IsDigit;
-    using ::json::charclass::IsSeparator;
+
+    if (next == last)
+        return {next, NumberClass::invalid};
 
     bool is_neg = false;
     bool is_float = false;
-
-    if (next == last)
-        goto L_invalid;
 
 // [-]
 
@@ -224,7 +223,7 @@ inline ScanNumberResult ScanNumber(char const* next, char const* last, Options c
 
         ++next;
         if (next == last)
-            goto L_invalid;
+            return {next, NumberClass::invalid};
     }
 
 // int
@@ -233,9 +232,9 @@ inline ScanNumberResult ScanNumber(char const* next, char const* last, Options c
     {
         ++next;
         if (next == last)
-            goto L_success;
+            return {next, NumberClass::integer};
         if (IsDigit(*next))
-            goto L_invalid;
+            return {next, NumberClass::invalid};
     }
     else if (IsDigit(*next)) // non '0'
     {
@@ -243,7 +242,7 @@ inline ScanNumberResult ScanNumber(char const* next, char const* last, Options c
         {
             ++next;
             if (next == last)
-                goto L_success;
+                return {next, NumberClass::integer};
             if (!IsDigit(*next))
                 break;
         }
@@ -258,7 +257,7 @@ inline ScanNumberResult ScanNumber(char const* next, char const* last, Options c
     }
     else
     {
-        goto L_invalid;
+        return {next, NumberClass::invalid};
     }
 
 // frac
@@ -269,13 +268,13 @@ inline ScanNumberResult ScanNumber(char const* next, char const* last, Options c
 
         ++next;
         if (next == last || !IsDigit(*next))
-            goto L_invalid;
+            return {next, NumberClass::invalid};
 
         for (;;)
         {
             ++next;
             if (next == last)
-                goto L_success;
+                return {next, NumberClass::floating_point};
             if (!IsDigit(*next))
                 break;
         }
@@ -289,17 +288,17 @@ inline ScanNumberResult ScanNumber(char const* next, char const* last, Options c
 
         ++next;
         if (next == last)
-            goto L_invalid;
+            return {next, NumberClass::invalid};
 
         if (*next == '+' || *next == '-')
         {
             ++next;
             if (next == last)
-                goto L_invalid;
+                return {next, NumberClass::invalid};
         }
 
         if (!IsDigit(*next))
-            goto L_invalid;
+            return {next, NumberClass::invalid};
 
         for (;;)
         {
@@ -309,20 +308,7 @@ inline ScanNumberResult ScanNumber(char const* next, char const* last, Options c
         }
     }
 
-L_success:
-    if (next == last || IsSeparator(*next))
-    {
-        return {next, is_float ? NumberClass::floating_point : NumberClass::integer};
-    }
-
-L_invalid:
-    // Skip everything which looks like a number. For slightly nicer error messages.
-    // Everything which is not whitespace or punctuation will be skipped.
-    for ( ; next != last && !IsSeparator(*next); ++next)
-    {
-    }
-
-    return {next, NumberClass::invalid};
+    return {next, is_float ? NumberClass::floating_point : NumberClass::integer};
 }
 
 //==================================================================================================
@@ -600,9 +586,28 @@ inline Token Lexer::LexString(char const* p)
 
 inline Token Lexer::LexNumber(char const* p, Options const& options)
 {
+    using ::json::charclass::IsSeparator;
+
     auto const res = ScanNumber(p, end, options);
 
-    return MakeNumberToken(res.next, res.number_class);
+    p = res.next;
+    auto nc = res.number_class;
+
+    if (nc == NumberClass::invalid || (p != end && !IsSeparator(*p)))
+    {
+        // Invalid number,
+        // or valid number with trailing garbage, which is also an invalid number.
+        nc = NumberClass::invalid;
+
+        // Skip everything which looks like a number.
+        // For slightly nicer error messages.
+        // Everything which is not whitespace or punctuation will be skipped.
+        for ( ; p != end && !IsSeparator(*p); ++p)
+        {
+        }
+    }
+
+    return MakeNumberToken(p, nc);
 }
 
 inline Token Lexer::LexIdentifier(char const* p, Options const& options)
