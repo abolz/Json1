@@ -1872,17 +1872,17 @@ TEST_CASE("Relaxed")
 an empty object /*/
     "empty_object" : {}
 /* commented out:
-    'another_empty_object': {},/**/
-    FirstName: 'John',
+    "another_empty_object": {},/**/
+    FirstName: "John",
     LastName: "Doe",
     Age: 43
     Address: {
 /** Note: no commas: /*//**/
-        Street: 'Downing "Street" 10'
+        Street: "Downing \"Street\" 10"
         City: "London"
         Country: "Great Britain",
     }
-    'Phone numbers': [
+    "Phone numbers": [
         "+44 1234567",
         "+44 2345678"
     ]
@@ -1891,7 +1891,6 @@ an empty object /*/
     json::Options opts;
     opts.skip_comments = true;
     opts.allow_nan_inf = true;
-    opts.allow_single_quoted_strings = true;
     opts.allow_trailing_commas = true;
     opts.allow_unquoted_keys = true;
     opts.ignore_missing_commas = true;
