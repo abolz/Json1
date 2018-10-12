@@ -40,7 +40,7 @@
 //#define JSON_NEVER_INLINE inline
 //#endif
 
-#define JSON_USE_SSE42 1
+//#define JSON_USE_SSE42 1
 #ifndef JSON_USE_SSE42
 #if defined(__SSE_4_2__) || (/* for MSVC: */ defined(__AVX__) || defined(__AVX2__))
 #define JSON_USE_SSE42 1
