@@ -574,7 +574,8 @@ inline Token Lexer::LexString(char const* p)
 
 #if JSON_USE_SSE42
         // Once the NeedsCleaning flag is set, we only need to look at '\' and '"'.
-        special_chars_length = ((mask & CC_needs_cleaning) != 0) ? 4 : special_chars_length;
+        JSON_ASSERT((mask & CC_needs_cleaning) != 0);
+        special_chars_length = 4;
 #endif
     }
 
