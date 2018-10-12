@@ -388,7 +388,7 @@ inline DecodeUCNSequenceResult DecodeTrimmedUCNSequence(char const* next, char c
 namespace impl {
 namespace strings {
 
-inline char const* SkipNonSpecialLatin1_unescape(char const* next, char const* last)
+inline char const* SkipNonSpecialASCII_unescape(char const* next, char const* last)
 {
 #if JSON_USE_SSE42
     auto const kSpecialChars = _mm_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '\xFF', '\x80', '\x1F', '\x00', '\\', '\\');
@@ -412,7 +412,7 @@ inline char const* SkipNonSpecialLatin1_unescape(char const* next, char const* l
     return next;
 }
 
-inline char const* SkipNonSpecialLatin1_escape(char const* next, char const* last)
+inline char const* SkipNonSpecialASCII_escape(char const* next, char const* last)
 {
 #if JSON_USE_SSE42
     auto const kSpecialChars = _mm_set_epi8(0, 0, 0, 0, 0, 0, '/','/', '\xFF','\x80', '\x1F','\x00', '\\','\\', '"','"');
@@ -497,7 +497,7 @@ UnescapeStringResult UnescapeString(char const* curr, char const* last, Fn yield
 
     for (;;)
     {
-        char const* const next = ::json::impl::strings::SkipNonSpecialLatin1_unescape(curr, last);
+        char const* const next = ::json::impl::strings::SkipNonSpecialASCII_unescape(curr, last);
         yield_n(curr, next - curr);
         curr = next;
 
@@ -667,7 +667,7 @@ EscapeStringResult EscapeString(char const* curr, char const* last, Fn yield, bo
     char const* const first = curr;
     for (;;)
     {
-        char const* const next = ::json::impl::strings::SkipNonSpecialLatin1_escape(curr, last);
+        char const* const next = ::json::impl::strings::SkipNonSpecialASCII_escape(curr, last);
         yield_n(curr, next - curr);
         curr = next;
 
@@ -692,7 +692,18 @@ EscapeStringResult EscapeString(char const* curr, char const* last, Fn yield, bo
                     if (!allow_invalid_unicode)
                         return {curr, Status::invalid_utf8_sequence};
 
+#if 1
                     yield_n("\\uFFFD", 6);
+#else
+                    for (intptr_t i = 0; i < res.next - curr; ++i) {
+                        yield('\\');
+                        yield('u');
+                        yield('0');
+                        yield('0');
+                        yield(kHexDigits[static_cast<uint8_t>(curr[i]) >> 4]);
+                        yield(kHexDigits[static_cast<uint8_t>(curr[i]) & 0xF]);
+                    }
+#endif
                 }
                 else
                 {
