@@ -281,7 +281,7 @@ void benchmark(const char* filename) {
         if (first) {
             printf("\n");
         } else {
-            printf(" --- x%.4f\n", reference / mean);
+            printf(" --- x%.1f\n", reference / mean);
         }
         fflush(stdout);
 

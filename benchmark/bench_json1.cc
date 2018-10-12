@@ -1,9 +1,10 @@
 #include "bench_json1.h"
 
 #include "jsonstats.h"
-#include "traverse.h"
+//#include "traverse.h"
 
-#include "../src/json.h"
+//#include "../src/json.h"
+#include "../src/json_parser.h"
 #include "../src/json_strings.h"
 #include "../src/json_numbers.h"
 
@@ -158,18 +159,19 @@ struct RapidjsonDocumentCallbacks
         if (sc == StringClass::needs_cleaning)
         {
             std::string str;
-            auto yield = [&](char ch) { str.push_back(ch); };
+            str.reserve(static_cast<size_t>(last - first));
 
+            auto yield = [&](char ch) { str.push_back(ch); };
             auto const res = json::strings::UnescapeString(first, last, yield, /*allow_invalid_unicode*/ kAllowInvalidUnicode);
             if (res.status != json::strings::Status::success) {
                 return ParseStatus::invalid_string;
             }
 
-            doc->String(str.data(), str.size(), /*copy*/ true);
+            doc->String(str.data(), static_cast<rapidjson::SizeType>(str.size()), /*copy*/ true);
         }
         else
         {
-            doc->String(first, static_cast<size_t>(last - first), /*copy*/ kCopyCleanStrings);
+            doc->String(first, static_cast<rapidjson::SizeType>(last - first), /*copy*/ kCopyCleanStrings);
         }
         return {};
     }
@@ -182,7 +184,7 @@ struct RapidjsonDocumentCallbacks
 
     ParseStatus HandleEndArray(size_t count, Options const& /*options*/)
     {
-        doc->EndArray(count);
+        doc->EndArray(static_cast<rapidjson::SizeType>(count));
         return {};
     }
 
@@ -199,7 +201,7 @@ struct RapidjsonDocumentCallbacks
 
     ParseStatus HandleEndObject(size_t count, Options const& /*options*/)
     {
-        doc->EndObject(count);
+        doc->EndObject(static_cast<rapidjson::SizeType>(count));
         return {};
     }
 
@@ -213,18 +215,19 @@ struct RapidjsonDocumentCallbacks
         if (sc == StringClass::needs_cleaning)
         {
             std::string str;
-            auto yield = [&](char ch) { str.push_back(ch); };
+            str.reserve(static_cast<size_t>(last - first));
 
+            auto yield = [&](char ch) { str.push_back(ch); };
             auto const res = json::strings::UnescapeString(first, last, yield, /*allow_invalid_unicode*/ kAllowInvalidUnicode);
             if (res.status != json::strings::Status::success) {
                 return ParseStatus::invalid_string;
             }
 
-            doc->Key(str.data(), str.size(), /*copy*/ true);
+            doc->Key(str.data(), static_cast<rapidjson::SizeType>(str.size()), /*copy*/ true);
         }
         else
         {
-            doc->Key(first, static_cast<size_t>(last - first), /*copy*/ kCopyCleanStrings);
+            doc->Key(first, static_cast<rapidjson::SizeType>(last - first), /*copy*/ kCopyCleanStrings);
         }
         return {};
     }
