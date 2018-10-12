@@ -829,6 +829,16 @@ Parser<ParseCallbacks>::Parser(ParseCallbacks& cb_, Options const& options_)
 template <typename ParseCallbacks>
 void Parser<ParseCallbacks>::SetInput(char const* next, char const* last)
 {
+    if (options.skip_bom && last - next >= 3)
+    {
+        if (static_cast<uint8_t>(next[0]) == 0xEF &&
+            static_cast<uint8_t>(next[1]) == 0xBB &&
+            static_cast<uint8_t>(next[2]) == 0xBF)
+        {
+            next += 3;
+        }
+    }
+
     lexer.SetInput(next, last);
     token = lexer.Lex(options); // Get the first token
 }
@@ -1151,16 +1161,6 @@ ParseResult ParseSAX(ParseCallbacks& cb, char const* next, char const* last, Opt
 {
     JSON_ASSERT(next != nullptr);
     JSON_ASSERT(last != nullptr);
-
-    if (options.skip_bom && last - next >= 3)
-    {
-        if (static_cast<uint8_t>(next[0]) == 0xEF &&
-            static_cast<uint8_t>(next[1]) == 0xBB &&
-            static_cast<uint8_t>(next[2]) == 0xBF)
-        {
-            next += 3;
-        }
-    }
 
     Parser<ParseCallbacks> parser(cb, options);
 
