@@ -361,7 +361,7 @@ private:
 public:
     Lexer();
 
-    void SetInput(char const* first, char const* last);
+    void SetInput(char const* first, char const* last, bool skip_bom = true);
 
     Token Lex(Options const& options);
 
@@ -382,8 +382,18 @@ inline Lexer::Lexer()
 {
 }
 
-inline void Lexer::SetInput(char const* first, char const* last)
+inline void Lexer::SetInput(char const* first, char const* last, bool skip_bom)
 {
+    if (skip_bom && last - first >= 3)
+    {
+        if (static_cast<uint8_t>(first[0]) == 0xEF &&
+            static_cast<uint8_t>(first[1]) == 0xBB &&
+            static_cast<uint8_t>(first[2]) == 0xBF)
+        {
+            first += 3;
+        }
+    }
+
     ptr = first;
     end = last;
 }
@@ -829,17 +839,7 @@ Parser<ParseCallbacks>::Parser(ParseCallbacks& cb_, Options const& options_)
 template <typename ParseCallbacks>
 void Parser<ParseCallbacks>::SetInput(char const* next, char const* last)
 {
-    if (options.skip_bom && last - next >= 3)
-    {
-        if (static_cast<uint8_t>(next[0]) == 0xEF &&
-            static_cast<uint8_t>(next[1]) == 0xBB &&
-            static_cast<uint8_t>(next[2]) == 0xBF)
-        {
-            next += 3;
-        }
-    }
-
-    lexer.SetInput(next, last);
+    lexer.SetInput(next, last, options.skip_bom);
     token = lexer.Lex(options); // Get the first token
 }
 
