@@ -18,6 +18,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+#pragma once
+
+// sizeof(tables) = 201 + 184 + 40 + 56 + (4672 + 5216 + 5384) = 16753
+
 #include <cassert>
 #include <cstdint>
 #include <cstdio>
@@ -125,7 +129,7 @@ struct Double
     }
 
     double NextValue() const {
-        assert(!SignBit());
+        CC_ASSERT(!SignBit());
         return ReinterpretBits<double>(IsInf() ? bits : bits + 1);
     }
 };
@@ -2143,15 +2147,15 @@ inline int CountLeadingZeros64(uint64_t x)
 {
     CC_ASSERT(x != 0);
 
-#if defined(_MSC_VER) && (defined(_M_ARM) || defined(_M_ARM64))
+#if defined(_MSC_VER) && (defined(_M_ARM) || defined(_M_ARM64)) && !defined(__clang__)
 
     return static_cast<int>(_CountLeadingZeros64(x));
 
-#elif defined(_MSC_VER) && defined(_M_X64)
+#elif defined(_MSC_VER) && defined(_M_X64) && !defined(__clang__)
 
     return static_cast<int>(__lzcnt64(x));
 
-#elif defined(_MSC_VER) && defined(_M_IX86)
+#elif defined(_MSC_VER) && defined(_M_IX86) && !defined(__clang__)
 
     int lz = static_cast<int>( __lzcnt(static_cast<uint32_t>(x >> 32)) );
     if (lz == 32) {
@@ -2159,7 +2163,7 @@ inline int CountLeadingZeros64(uint64_t x)
     }
     return lz;
 
-#elif defined(__GNUC__)
+#elif defined(__GNUC__) || defined(__clang__)
 
     return __builtin_clzll(x);
 

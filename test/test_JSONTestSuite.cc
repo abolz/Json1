@@ -367,6 +367,24 @@ static const JSONTestSuiteTest kJSONTestSuite_n[] = {
     {std::string("\000[\000\"\000\351\000\"\000]", 10), "i_string_utf16BE_no_BOM"},
     {std::string("[\000\"\000\351\000\"\000]\000", 10), "i_string_utf16LE_no_BOM"},
     {std::string("[\"\355\240\200\"]", 7), "i_string_UTF8_surrogate_U+D800"},
+
+    {std::string("[\"\\u\"]", 6), "n_string_invalid_unicode_escape"},
+    {std::string("[\"\\u0\"]", 7), "n_string_invalid_unicode_escape"},
+    {std::string("[\"\\u0A\"]", 8), "n_string_invalid_unicode_escape"},
+    {std::string("[\"\\u0A1\"]", 9), "n_string_invalid_unicode_escape"},
+    {std::string("[\"\\u0A1x\"]", 10), "n_string_invalid_unicode_escape"},
+    {std::string("[\"\\u0Ax1\"]", 10), "n_string_invalid_unicode_escape"},
+    {std::string("[\"\\u0xA1\"]", 10), "n_string_invalid_unicode_escape"},
+    {std::string("[\"\\ux0A1\"]", 10), "n_string_invalid_unicode_escape"},
+    {std::string("[\"\\uDBFF\\\"]", 11), "n_string_invalid_unicode_escape"},
+    {std::string("[\"\\uDBFF\\u\"]", 12), "n_string_invalid_unicode_escape"},
+    {std::string("[\"\\uDBFF\\uD\"]", 13), "n_string_invalid_unicode_escape"},
+    {std::string("[\"\\uDBFF\\uDF\"]", 14), "n_string_invalid_unicode_escape"},
+    {std::string("[\"\\uDBFF\\uDFF\"]", 15), "n_string_invalid_unicode_escape"},
+    {std::string("[\"\\uDBFF\\uDFFx\"]", 16), "n_string_invalid_unicode_escape"},
+    {std::string("[\"\\uDBFF\\uDFxF\"]", 16), "n_string_invalid_unicode_escape"},
+    {std::string("[\"\\uDBFF\\uDxFF\"]", 16), "n_string_invalid_unicode_escape"},
+    {std::string("[\"\\uDBFF\\uxDFF\"]", 16), "n_string_invalid_unicode_escape"},
 };
 
 TEST_CASE("JSONTestSuite")

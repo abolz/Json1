@@ -61,7 +61,7 @@ namespace charclass {
 
 enum /*class*/ ECharClass : uint8_t {
     CC_none            = 0,    // nothing special
-    CC_string_special  = 0x01, // quote or bs : '"', '\'', '\\'
+    CC_string_special  = 0x01, // quote or bs : '"', '\\'
     CC_digit           = 0x02, // digit       : '0'...'9'
     CC_identifier_body = 0x04, // ident-body  : IsDigit, IsLetter, '_', '$'
     CC_whitespace      = 0x08, // whitespace  : '\t', '\n', '\r', ' '
@@ -111,7 +111,11 @@ inline uint32_t CharClass(char ch)
 }
 
 inline bool IsWhitespace     (char ch) { return (CharClass(ch) & CC_whitespace     ) != 0; }
+#if 1
+inline bool IsDigit          (char ch) { return '0' <= ch && ch <= '9'; }
+#else
 inline bool IsDigit          (char ch) { return (CharClass(ch) & CC_digit          ) != 0; }
+#endif
 inline bool IsIdentifierBody (char ch) { return (CharClass(ch) & CC_identifier_body) != 0; }
 inline bool IsPunctuation    (char ch) { return (CharClass(ch) & CC_punctuation    ) != 0; }
 
@@ -537,9 +541,6 @@ inline Token Lexer::LexString(char const* p)
     for (;;)
     {
 #if JSON_USE_SSE42
-        // XXX:
-        // Consider _mm_cmpestrm and skip UTF-8 sequences while setting the NeedsCleaning flag.
-
         for ( ; end - p >= 16; p += 16)
         {
             auto const bytes = _mm_loadu_si128(reinterpret_cast<__m128i const*>(p));
@@ -572,14 +573,10 @@ inline Token Lexer::LexString(char const* p)
         if (*p == '"')
             break;
 
-        if (*p == '\\')
-        {
-            ++p;
-            if (p == end)
-                return MakeToken(p, TokenKind::incomplete);
-            // The escaped character will be skipped below.
-        }
-
+        JSON_ASSERT(*p == '\\');
+        ++p;
+        if (p == end)
+            return MakeToken(p, TokenKind::incomplete);
         ++p;
 
 #if JSON_USE_SSE42
@@ -748,6 +745,19 @@ inline Token Lexer::MakeNumberToken(char const* p, NumberClass number_class)
 
 inline char const* Lexer::SkipWhitespace(char const* f, char const* l)
 {
+#if 0 && JSON_USE_SSE42
+    auto const kSpecialChars = _mm_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '\t', '\r', '\n', ' ');
+
+    for ( ; l - f >= 16; f += 16)
+    {
+        auto const bytes = _mm_loadu_si128(reinterpret_cast<__m128i const*>(f));
+        int const index = _mm_cmpestri(kSpecialChars, 4, bytes, 16, _SIDD_UBYTE_OPS | _SIDD_CMP_EQUAL_ANY | _SIDD_LEAST_SIGNIFICANT | _SIDD_NEGATIVE_POLARITY);
+        if (index != 16) {
+            return f + index;
+        }
+    }
+#endif
+
     using ::json::charclass::IsWhitespace;
 
     for ( ; f != l && IsWhitespace(*f); ++f)
@@ -827,6 +837,8 @@ struct Parser
     ParseStatus ParsePrimitive();
 
     ParseStatus ParseValue();
+
+    bool CheckEndStructured(TokenKind close);
 };
 
 template <typename ParseCallbacks>
@@ -1026,23 +1038,8 @@ L_end_member:
             if (Failed ec = cb.HandleEndMember(stack[stack_size - 1].count, options))
                 return ec;
 
-            if (token.kind == TokenKind::r_brace)
-            {
+            if (CheckEndStructured(TokenKind::r_brace))
                 break;
-            }
-            else if (token.kind == TokenKind::comma)
-            {
-                // skip ','
-                token = lexer.Lex(options);
-
-                if (options.allow_trailing_commas && token.kind == TokenKind::r_brace)
-                    break;
-            }
-            else
-            {
-                if (!options.ignore_missing_commas)
-                    break;
-            }
         }
 
         if (token.kind != TokenKind::r_brace)
@@ -1100,23 +1097,8 @@ L_end_element:
             if (Failed ec = cb.HandleEndElement(stack[stack_size - 1].count, options))
                 return ec;
 
-            if (token.kind == TokenKind::r_square)
-            {
+            if (CheckEndStructured(TokenKind::r_square))
                 break;
-            }
-            else if (token.kind == TokenKind::comma)
-            {
-                // skip ','
-                token = lexer.Lex(options);
-
-                if (options.allow_trailing_commas && token.kind == TokenKind::r_square)
-                    break;
-            }
-            else
-            {
-                if (!options.ignore_missing_commas)
-                    break;
-            }
         }
 
         if (token.kind != TokenKind::r_square)
@@ -1141,6 +1123,24 @@ L_end_structured:
         goto L_end_member;
     else
         goto L_end_element;
+}
+
+template <typename ParseCallbacks>
+bool Parser<ParseCallbacks>::CheckEndStructured(TokenKind close)
+{
+    if (token.kind == close)
+    {
+        return true;
+    }
+    else if (token.kind == TokenKind::comma)
+    {
+        token = lexer.Lex(options); // skip ','
+        return options.allow_trailing_commas && token.kind == close;
+    }
+    else
+    {
+        return !options.ignore_missing_commas;
+    }
 }
 
 struct ParseResult

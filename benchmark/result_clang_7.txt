@@ -1,0 +1,64 @@
+---
+json1 sax           test_data/apache_builds.json                 0.31 ms (  397.64 MB/sec)
+rapidjson sax       test_data/apache_builds.json                 0.83 ms (  145.98 MB/sec) --- x2.7
+---
+json1 sax           test_data/allthethings.json                  9.65 ms (  452.38 MB/sec)
+rapidjson sax       test_data/allthethings.json                 33.20 ms (  131.53 MB/sec) --- x3.4
+---
+json1 sax           test_data/twitter.json                       2.26 ms (  272.49 MB/sec)
+rapidjson sax       test_data/twitter.json                       3.47 ms (  177.75 MB/sec) --- x1.5
+---
+json1 sax           test_data/sample.json                        1.54 ms (  425.18 MB/sec)
+rapidjson sax       test_data/sample.json                        2.16 ms (  303.74 MB/sec) --- x1.4
+---
+json1 sax           test_data/update-center.json                 1.58 ms (  509.47 MB/sec)
+rapidjson sax       test_data/update-center.json                 4.35 ms (  184.60 MB/sec) --- x2.8
+---
+json1 sax           test_data/canada.json                       17.14 ms (  125.27 MB/sec)
+rapidjson sax       test_data/canada.json                       16.13 ms (  133.09 MB/sec) --- x0.9
+---
+json1 sax           test_data/mesh.json                          7.24 ms (  207.79 MB/sec)
+rapidjson sax       test_data/mesh.json                          6.01 ms (  250.19 MB/sec) --- x0.8
+---
+json1 sax           test_data/citm_catalog.json                  3.99 ms (  424.81 MB/sec)
+rapidjson sax       test_data/citm_catalog.json                  4.22 ms (  401.34 MB/sec) --- x1.1
+---
+json1 sax           test_data/instruments.json                   0.71 ms (  296.28 MB/sec)
+rapidjson sax       test_data/instruments.json                   0.89 ms (  237.35 MB/sec) --- x1.2
+---
+json1 sax           test_data/github_events.json                 0.12 ms (  533.19 MB/sec)
+rapidjson sax       test_data/github_events.json                 0.41 ms (  150.27 MB/sec) --- x3.5
+
+
+
+No SSE:
+---
+json1 sax           test_data/apache_builds.json                 0.34 ms (  356.47 MB/sec)
+rapidjson sax       test_data/apache_builds.json                 0.72 ms (  167.69 MB/sec) --- x2.1
+---
+json1 sax           test_data/allthethings.json                 10.78 ms (  405.16 MB/sec)
+rapidjson sax       test_data/allthethings.json                 26.87 ms (  162.52 MB/sec) --- x2.5
+---
+json1 sax           test_data/twitter.json                       2.09 ms (  294.55 MB/sec)
+rapidjson sax       test_data/twitter.json                       3.50 ms (  176.43 MB/sec) --- x1.7
+---
+json1 sax           test_data/sample.json                        1.88 ms (  349.56 MB/sec)
+rapidjson sax       test_data/sample.json                        2.16 ms (  304.04 MB/sec) --- x1.1
+---
+json1 sax           test_data/update-center.json                 2.00 ms (  401.90 MB/sec)
+rapidjson sax       test_data/update-center.json                 4.35 ms (  184.57 MB/sec) --- x2.2
+---
+json1 sax           test_data/canada.json                       17.09 ms (  125.63 MB/sec)
+rapidjson sax       test_data/canada.json                       16.33 ms (  131.45 MB/sec) --- x1.0
+---
+json1 sax           test_data/mesh.json                          7.40 ms (  203.16 MB/sec)
+rapidjson sax       test_data/mesh.json                          6.03 ms (  249.57 MB/sec) --- x0.8
+---
+json1 sax           test_data/citm_catalog.json                  4.25 ms (  399.03 MB/sec)
+rapidjson sax       test_data/citm_catalog.json                  4.23 ms (  400.73 MB/sec) --- x1.0
+---
+json1 sax           test_data/instruments.json                   0.77 ms (  274.56 MB/sec)
+rapidjson sax       test_data/instruments.json                   0.89 ms (  236.32 MB/sec) --- x1.2
+---
+json1 sax           test_data/github_events.json                 0.17 ms (  375.37 MB/sec)
+rapidjson sax       test_data/github_events.json                 0.41 ms (  150.07 MB/sec) --- x2.5

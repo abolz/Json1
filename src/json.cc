@@ -1145,7 +1145,11 @@ static bool StringifyString(std::string& str, String const& value, StringifyOpti
     char const* const last = value.data() + value.size();
     if (next != last)
     {
+#if 1
         auto const res = strings::EscapeString(next, last, [&](char ch) { str += ch; });
+#else
+        auto const res = strings::EscapeString(next, last, [&](char ch) { str += ch; }, /*allow_invalid_unicode*/ false);
+#endif
         success = res.status == strings::Status::success;
     }
 

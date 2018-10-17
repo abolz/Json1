@@ -41,15 +41,17 @@ workspace "Json"
 
     configuration { "release" }
         defines { "NDEBUG" }
-        symbols "On" -- for profiling...
-        optimize "On"
+        -- symbols "On" -- for profiling...
+        -- optimize "On"
+        symbols "Off"
+        optimize "Full"
             -- On ==> -O2
             -- Full ==> -O3
 
-    configuration { "gmake" }
+    configuration { "gmake*" }
         buildoptions {
             -- "-std=c++14",
-            "-march=native",
+            "-march=skylake",
             "-Wformat",
             -- "-Wsign-compare",
             -- "-Wsign-conversion",
@@ -95,7 +97,7 @@ workspace "Json"
                 _OPTIONS["cxxflags"],
             }
     else
-        configuration { "gmake" }
+        configuration { "gmake*" }
             buildoptions {
                 "-std=c++14",
             }
@@ -118,7 +120,7 @@ project "json"
         "src/**.cc",
         "src/**.h",
     }
-    configuration { "gmake" }
+    configuration { "gmake*" }
         buildoptions {
             "-Wsign-compare",
             "-Wsign-conversion",
@@ -142,7 +144,7 @@ project "test"
     links {
         "json",
     }
-    configuration { "gmake" }
+    configuration { "gmake*" }
         buildoptions {
             "-Wsign-compare",
             "-Wsign-conversion",
@@ -162,7 +164,7 @@ project "benchmark"
     links {
         "json",
     }
-    configuration { "gmake" }
+    configuration { "gmake*" }
         buildoptions {
             "-Wsign-compare",
             "-Wsign-conversion",

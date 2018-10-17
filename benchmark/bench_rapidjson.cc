@@ -1,10 +1,7 @@
 #include "bench_rapidjson.h"
-
+#include "bench.h"
 #include "jsonstats.h"
 #include "traverse.h"
-
-#define RAPIDJSON_SSE2 1
-#define RAPIDJSON_SSE42 1
 
 #include "../ext/rapidjson/document.h"
 #include "../ext/rapidjson/reader.h"
@@ -12,6 +9,9 @@
 #include "../ext/rapidjson/writer.h"
 
 #include <vector>
+
+#define USE_MEMSTREAM 1
+#define USE_ITERATIVE_PARSER 1
 
 namespace {
 
@@ -239,13 +239,22 @@ private:
 static constexpr int kParseFlags
     = rapidjson::kParseFullPrecisionFlag
     | rapidjson::kParseStopWhenDoneFlag
-    | rapidjson::kParseValidateEncodingFlag;
+    | rapidjson::kParseValidateEncodingFlag
+#if USE_ITERATIVE_PARSER
+    | rapidjson::kParseIterativeFlag
+#endif
+    ;
 
 bool rapidjson_sax_stats(jsonstats& stats, char const* first, char const* last)
 {
-    GenStatsHandler handler(stats);
-
+#if USE_MEMSTREAM
     rapidjson::MemoryStream is(first, static_cast<size_t>(last - first));
+#else
+    rapidjson::StringStream is(first);
+    static_cast<void>(last);
+#endif
+
+    GenStatsHandler handler(stats);
 
     rapidjson::Reader reader;
     auto const res = reader.Parse<kParseFlags>(is, handler);
@@ -255,9 +264,14 @@ bool rapidjson_sax_stats(jsonstats& stats, char const* first, char const* last)
 
 bool rapidjson_dom_stats(jsonstats& stats, char const* first, char const* last)
 {
-#if 1
+#if USE_MEMSTREAM
     rapidjson::MemoryStream is(first, static_cast<size_t>(last - first));
+#else
+    rapidjson::StringStream is(first);
+    static_cast<void>(last);
+#endif
 
+#if BENCH_USE_RAPIDJSON_DOCUMENT
     rapidjson::Document doc;
     doc.ParseStream<kParseFlags>(is);
 
@@ -270,8 +284,6 @@ bool rapidjson_dom_stats(jsonstats& stats, char const* first, char const* last)
 
     return true;
 #else
-    rapidjson::MemoryStream is(first, static_cast<size_t>(last - first));
-
     rapidjson::Reader reader;
     ParseValueHandler handler;
     auto const res = reader.Parse<kParseFlags>(is, handler);

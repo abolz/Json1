@@ -20,6 +20,8 @@
 
 #pragma once
 
+#define JSON_NUMBERS_USE_GRISU2 1
+
 #include "json_parser.h" // NumberClass, Options
 
 #include <cstring>

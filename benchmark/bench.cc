@@ -21,6 +21,8 @@
 #include "bench_json1.h"
 #include "bench_rapidjson.h"
 
+#define REVERSE_ORDER 1
+
 struct TestFile {
     const char* name;
     size_t length;
@@ -138,35 +140,53 @@ struct TestImplementation {
     const char* name;
     TestFunction func;
 };
+
 TestImplementation test_implementations[] = {
-#if 0
-    { "rapidjson sax", &rapidjson_sax_test::test },
+#if 1
+#if REVERSE_ORDER
     { "json1 sax", &json1_sax_test::test },
-    //{ "nlohmann sax", &nlohmann_sax_test::test },
+    { "rapidjson sax", &rapidjson_sax_test::test },
+#else
+    { "json1 sax", &json1_sax_test::test },
+    { "rapidjson sax", &rapidjson_sax_test::test },
+#endif
+#else
+#if REVERSE_ORDER
+    { "json1 dom", &json1_dom_test::test },
+    { "rapidjson dom", &rapidjson_dom_test::test },
 #else
     { "rapidjson dom", &rapidjson_dom_test::test },
     { "json1 dom", &json1_dom_test::test },
-    //{ "nlohmann dom", &nlohmann_dom_test::test },
+#endif
 #endif
 };
 
 const char* benchmark_files[] = {
+// bench other:
     //"test_data/truenull.json",
     //"test_data/whitespace.json",
+
+// strings:
+    "test_data/apache_builds.json",
+    "test_data/allthethings.json",
+    "test_data/twitter.json",
+    "test_data/sample.json",
+    "test_data/update-center.json",
+
+// numbers:
     //"test_data/floats.json",
     //"test_data/signed_ints.json",
     //"test_data/unsigned_ints.json",
-    "test_data/allthethings.json",
-    "test_data/apache_builds.json",
     "test_data/canada.json",
-    "test_data/citm_catalog.json",
-    "test_data/github_events.json",
-    "test_data/instruments.json",
     "test_data/mesh.json",
-    "test_data/sample.json", // XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX stack overflow
+
+// strings + numbers:
+    "test_data/citm_catalog.json",
+    "test_data/instruments.json",
+    "test_data/github_events.json",
+
+// small files:
     //"test_data/svg_menu.json",
-    "test_data/twitter.json",
-    "test_data/update-center.json",
 };
 
 template<typename T, size_t L>
@@ -176,7 +196,8 @@ size_t array_length(T(&)[L]) {
 
 using Clock = std::chrono::steady_clock;
 
-const auto SECONDS_PER_TEST = std::chrono::seconds(5);
+const auto SECONDS_PER_WARMUP = std::chrono::seconds(4);
+const auto SECONDS_PER_TEST = std::chrono::seconds(4);
 
 #if 0
 struct Timing
@@ -236,6 +257,8 @@ void benchmark(const char* filename) {
     }
     fclose(fh);
 
+    contents.push_back('\0');
+
     TestFile file = { filename, length, reinterpret_cast<unsigned char*>(&contents[0]) };
 
     jsonstats expected_stats;
@@ -256,16 +279,25 @@ void benchmark(const char* filename) {
             }
         }
 
-        auto const start = Clock::now();
+        auto start = Clock::now();
         auto end = start;
+
+        bool warmup = true;
 
         int parses = 0;
         for (;;) {
             implementation.func(this_stats, file);
-            ++parses;
             end = Clock::now();
-            if (end - start > SECONDS_PER_TEST)
-                break;
+            if (warmup) {
+                if (end - start > SECONDS_PER_WARMUP) {
+                    warmup = false;
+                    start = end;
+                }
+            } else {
+                ++parses;
+                if (end - start > SECONDS_PER_TEST)
+                    break;
+            }
         }
 
         auto const mean = std::chrono::duration<double>(end - start).count() / static_cast<double>(parses);
@@ -281,7 +313,11 @@ void benchmark(const char* filename) {
         if (first) {
             printf("\n");
         } else {
+#if REVERSE_ORDER
+            printf(" --- x%.1f\n", mean / reference);
+#else
             printf(" --- x%.1f\n", reference / mean);
+#endif
         }
         fflush(stdout);
 

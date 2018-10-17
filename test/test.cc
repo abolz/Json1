@@ -755,6 +755,8 @@ TEST_CASE("Parse_string")
 {
     for (auto const& test : kTestStrings)
     {
+        CAPTURE(test.inp);
+
         json::Value val1;
         auto const res1 = json::parse(val1, test.inp.data(), test.inp.data() + test.inp.size());
         CHECK(res1.ec == json::ParseStatus::success);
@@ -1620,7 +1622,7 @@ TEST_CASE("DOubles 2")
     check_double(  1.2345e+18,   "1234500000000000000.0"  ); // Not exactly representable as double => trailing ".0"
     check_double(  1.2345e+19,   "12345000000000000000.0" ); // Not exactly representable as double => trailing ".0"
     check_double(  1.2345e+20,   "123450000000000000000.0"); // Not exactly representable as double => trailing ".0"
-#if 0
+#if JSON_NUMBERS_USE_GRISU2
     check_double(  1.2345e+21,   "1.2344999999999999e+21" ); // Grisu2 "fails"
 #else
     check_double(  1.2345e+21,   "1.2345e+21"             );

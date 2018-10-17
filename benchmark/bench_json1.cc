@@ -1,15 +1,12 @@
 #include "bench_json1.h"
-
+#include "bench.h"
 #include "jsonstats.h"
-//#include "traverse.h"
+#include "traverse.h"
 
-//#include "../src/json.h"
+#include "../src/json.h"
 #include "../src/json_parser.h"
 #include "../src/json_strings.h"
 #include "../src/json_numbers.h"
-
-#define RAPIDJSON_SSE2 1
-#define RAPIDJSON_SSE42 1
 
 #include "../ext/rapidjson/document.h"
 
@@ -117,8 +114,7 @@ private:
 
 struct RapidjsonDocumentCallbacks
 {
-    static const bool kAllowInvalidUnicode = false;
-    static const bool kCopyCleanStrings = true;
+    static constexpr bool kCopyCleanStrings = true;
 
     rapidjson::Document* doc;
 
@@ -162,7 +158,7 @@ struct RapidjsonDocumentCallbacks
             str.reserve(static_cast<size_t>(last - first));
 
             auto yield = [&](char ch) { str.push_back(ch); };
-            auto const res = json::strings::UnescapeString(first, last, yield, /*allow_invalid_unicode*/ kAllowInvalidUnicode);
+            auto const res = json::strings::UnescapeString(first, last, yield);
             if (res.status != json::strings::Status::success) {
                 return ParseStatus::invalid_string;
             }
@@ -218,7 +214,7 @@ struct RapidjsonDocumentCallbacks
             str.reserve(static_cast<size_t>(last - first));
 
             auto yield = [&](char ch) { str.push_back(ch); };
-            auto const res = json::strings::UnescapeString(first, last, yield, /*allow_invalid_unicode*/ kAllowInvalidUnicode);
+            auto const res = json::strings::UnescapeString(first, last, yield);
             if (res.status != json::strings::Status::success) {
                 return ParseStatus::invalid_string;
             }
@@ -355,7 +351,7 @@ bool json1_sax_stats(jsonstats& stats, char const* first, char const* last)
 
 bool json1_dom_stats(jsonstats& stats, char const* first, char const* last)
 {
-#if 1
+#if BENCH_USE_RAPIDJSON_DOCUMENT
     rapidjson::Document doc;
 
     auto const res = ParseRapidjsonDocument(doc, first, last);
