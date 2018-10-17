@@ -41,17 +41,17 @@ workspace "Json"
 
     configuration { "release" }
         defines { "NDEBUG" }
-        -- symbols "On" -- for profiling...
-        -- optimize "On"
-        symbols "Off"
-        optimize "Full"
+        symbols "On" -- for profiling...
+        optimize "On"
+        -- symbols "Off"
+        -- optimize "Full"
             -- On ==> -O2
             -- Full ==> -O3
 
     configuration { "gmake*" }
         buildoptions {
             -- "-std=c++14",
-            "-march=skylake",
+            "-march=native",
             "-Wformat",
             -- "-Wsign-compare",
             -- "-Wsign-conversion",
