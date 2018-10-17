@@ -80,7 +80,6 @@ struct DecodeUTF8SequenceResult {
     bool success;
 };
 
-#if 1
 constexpr uint32_t kUTF8Accept = 0;
 constexpr uint32_t kUTF8Reject = 1;
 
@@ -154,128 +153,6 @@ inline DecodeUTF8SequenceResult DecodeUTF8Sequence(char const* next, char const*
     U = W;
     return {next, true};
 }
-#else
-inline DecodeUTF8SequenceResult DecodeUTF8Sequence(char const* next, char const* last, char32_t& U)
-{
-    // Table 3-7 from:
-    // https://www.unicode.org/versions/Unicode11.0.0/ch03.pdf
-
-    JSON_ASSERT(next != last);
-
-    // Always consume the first byte.
-    // The following bytes will only be consumed while the UTF-8 sequence is still valid.
-    uint8_t const b1 = static_cast<uint8_t>(*next);
-    ++next;
-
-    if (b1 <= 0x7F) // 1 byte sequence
-    {
-        U = b1;
-        return {next, true};
-    }
-
-    if (b1 <= 0xC1)
-    {
-        return {next, false};
-    }
-
-    if (b1 <= 0xDF) // 2 byte sequence
-    {
-        if (next == last)
-            return {next, false};
-
-        uint8_t const b2 = static_cast<uint8_t>(*next);
-        if (b2 < 0x80 || b2 > 0xBF)
-            return {next, false};
-
-        ++next;
-
-        U = ((b1 & 0x1F) << 6) | (b2 & 0x3F);
-        return {next, true};
-    }
-
-    if (b1 <= 0xEF) // 3 byte sequence
-    {
-        if (next == last)
-            return {next, false};
-
-        uint8_t const b2 = static_cast<uint8_t>(*next);
-        if (b1 == 0xE0)
-        {
-            if (b2 < 0xA0 || b2 > 0xBF)
-                return {next, false};
-        }
-        else if (b1 == 0xED)
-        {
-            if (b2 < 0x80 || b2 > 0x9F)
-                return {next, false};
-        }
-        else
-        {
-            if (b2 < 0x80 || b2 > 0xBF)
-                return {next, false};
-        }
-
-        ++next;
-        if (next == last)
-            return {next, false};
-
-        uint8_t const b3 = static_cast<uint8_t>(*next);
-        if (b3 < 0x80 || b3 > 0xBF)
-            return {next, false};
-
-        ++next;
-
-        U = ((b1 & 0x0F) << 12) | ((b2 & 0x3F) << 6) | (b3 & 0x3F);
-        return {next, true};
-    }
-
-    if (b1 <= 0xF4) // 4 byte sequence
-    {
-        if (next == last)
-            return {next, false};
-
-        uint8_t const b2 = static_cast<uint8_t>(*next);
-        if (b1 == 0xF0)
-        {
-            if (b2 < 0x90 || b2 > 0xBF)
-                return {next, false};
-        }
-        else if (b1 == 0xF4)
-        {
-            if (b2 < 0x80 || b2 > 0x8F)
-                return {next, false};
-        }
-        else
-        {
-            if (b2 < 0x80 || b2 > 0xBF)
-                return {next, false};
-        }
-
-        ++next;
-        if (next == last)
-            return {next, false};
-
-        uint8_t const b3 = static_cast<uint8_t>(*next);
-        if (b3 < 0x80 || b3 > 0xBF)
-            return {next, false};
-
-        ++next;
-        if (next == last)
-            return {next, false};
-
-        uint8_t const b4 = static_cast<uint8_t>(*next);
-        if (b4 < 0x80 || b4 > 0xBF)
-            return {next, false};
-
-        ++next;
-
-        U = ((b1 & 0x07) << 18) | ((b2 & 0x3F) << 12) | ((b3 & 0x3F) << 6) | (b4 & 0x3F);
-        return {next, true};
-    }
-
-    return {next, false};
-}
-#endif
 
 inline DecodeUTF8SequenceResult ValidateUTF8Sequence(char const* next, char const* last)
 {
@@ -311,57 +188,6 @@ void EncodeUTF8(char32_t U, Put8 put)
         put( static_cast<uint8_t>( 0x80 | ((U      ) & 0x3F) ) );
     }
 }
-
-#if 0
-struct DecodeUTF16SequenceResult {
-    char16_t const* ptr;
-    bool success;
-};
-
-inline DecodeUTF16SequenceResult DecodeUTF16Sequence(char16_t const* next, char16_t const* last, char32_t& U)
-{
-    JSON_ASSERT(next != last);
-
-    // Always consume the first code-unit.
-    // The second code-unit - if any - will only be consumed if the UTF16-sequence is valid.
-    char32_t const W1 = *next;
-    ++next;
-
-    if (W1 < 0xD800 || W1 > 0xDFFF)
-    {
-        U = W1;
-        return {next, true};
-    }
-
-    if (W1 > 0xDBFF)
-    {
-        // Illegal high surrogate.
-        // Return the position following the invalid code-unit.
-        return {next, false};
-    }
-
-    if (next == last)
-    {
-        // Incomplete.
-        return {next, false};
-    }
-
-    char32_t const W2 = *next;
-
-    if (W2 < 0xDC00 || W2 > 0xDFFF)
-    {
-        // Illegal low surrogate.
-        // Return the position of the second code-unit, which might be the start of a valid UTF-16 sequence.
-        return {next, false};
-    }
-
-    // Consume the second code-unit.
-    ++next;
-
-    U = (((W1 & 0x3FF) << 10) | (W2 & 0x3FF)) + 0x10000;
-    return {next, true};
-}
-#endif
 
 enum class DecodeUCNSequenceStatus {
     success,
@@ -440,26 +266,6 @@ inline DecodeUCNSequenceResult DecodeUCNSequence(char const* next, char const* l
     U = (((W1 & 0x3FF) << 10) | (W2 & 0x3FF)) + 0x10000;
     return {next, DecodeUCNSequenceStatus::success};
 }
-
-#if 0
-template <typename Put16>
-void EncodeUTF16(char32_t U, Put16 put)
-{
-    JSON_ASSERT(IsValidCodepoint(U));
-
-    if (U < 0x10000)
-    {
-        put( static_cast<uint16_t>(U) );
-    }
-    else
-    {
-        uint32_t const Up = U - 0x10000;
-
-        put( static_cast<uint16_t>(0xD800 + ((Up >> 10) & 0x3FF)) );
-        put( static_cast<uint16_t>(0xDC00 + ((Up      ) & 0x3FF)) );
-    }
-}
-#endif
 
 } // namespace unicode
 } // namespace impl
