@@ -196,8 +196,8 @@ void EncodeUTF8(char32_t U, Put8 put)
 
 enum class DecodeUCNSequenceStatus {
     success,
-    invalid_utf16_encoding,
     incomplete_or_invalid_ucn,
+    invalid_utf16_encoding,
 };
 
 struct DecodeUCNSequenceResult {
@@ -303,12 +303,12 @@ namespace strings {
 
 enum class Status {
     success,
-    unescaped_control_character,
-    invalid_escaped_character,
-    invalid_utf8_encoding,
-    invalid_utf16_encoding,
     incomplete,
+    invalid_escaped_character,
     invalid_ucn,
+    invalid_utf16_encoding,
+    invalid_utf8_encoding,
+    unescaped_control_character,
 };
 
 struct UnescapeStringResult {
@@ -460,7 +460,7 @@ UnescapeStringResult UnescapeString(char const* curr, char const* last, Fn yield
                 }
                 break;
             default:
-                return {curr, Status::invalid_escaped_character}; // invalid escaped character
+                return {curr, Status::invalid_escaped_character};
             }
         }
         else
