@@ -1832,7 +1832,7 @@ inline int DigitValue(char ch)
 // 89255e-22. The best way to test this, is to create a division-function and to
 // compare the output of the division with the expected result. (Inlining must
 // be disabled.)
-#if !defined(STRTOD_CORRECT_DOUBLE_OPERATIONS)
+#if !defined(CC_CORRECT_DOUBLE_OPERATIONS)
 #if defined(_M_X64)              || \
     defined(_M_ARM)				 || \
     defined(_M_ARM64)			 || \
@@ -1857,16 +1857,16 @@ inline int DigitValue(char ch)
     defined(__AARCH64EL__)       || \
     defined(__aarch64__)         || \
     defined(__riscv)
-#define STRTOD_CORRECT_DOUBLE_OPERATIONS 1
+#define CC_CORRECT_DOUBLE_OPERATIONS 1
 #elif defined(_M_IX86) || defined(__i386__) || defined(__i386)
 #ifdef _WIN32
 // Windows uses a 64bit wide floating point stack.
-#define STRTOD_CORRECT_DOUBLE_OPERATIONS 1
+#define CC_CORRECT_DOUBLE_OPERATIONS 1
 #endif
 #endif
-#endif // !defined(STRTOD_CORRECT_DOUBLE_OPERATIONS)
+#endif // !defined(CC_CORRECT_DOUBLE_OPERATIONS)
 
-#if STRTOD_CORRECT_DOUBLE_OPERATIONS
+#if CC_CORRECT_DOUBLE_OPERATIONS
 
 // 2^53 = 9007199254740992.
 // Any integer with at most 15 decimal digits will hence fit into a double
@@ -1943,14 +1943,14 @@ inline bool FastPath(double& result, uint64_t digits, int num_digits, int expone
     return false;
 }
 
-#else // ^^^ STRTOD_CORRECT_DOUBLE_OPERATIONS
+#else // ^^^ CC_CORRECT_DOUBLE_OPERATIONS
 
 inline bool FastPath(double& /*result*/, uint64_t /*digits*/, int /*num_digits*/, int /*exponent*/)
 {
     return false;
 }
 
-#endif // ^^^ !STRTOD_CORRECT_DOUBLE_OPERATIONS
+#endif // ^^^ !CC_CORRECT_DOUBLE_OPERATIONS
 
 //--------------------------------------------------------------------------------------------------
 // StrtodApprox
