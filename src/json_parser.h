@@ -772,7 +772,7 @@ inline char const* Lexer::SkipWhitespace(char const* f, char const* l)
 //==================================================================================================
 
 enum class ParseStatus {
-    success = 0,
+    success,
     duplicate_key,
     expected_colon_after_key,
     expected_comma_or_closing_brace,
@@ -790,16 +790,23 @@ enum class ParseStatus {
     unrecognized_identifier,
 };
 
-struct Failed
+class Failed
 {
     ParseStatus ec;
-
+public:
     Failed(ParseStatus ec_) : ec(ec_) {}
-    operator ParseStatus() const noexcept { return ec; }
-
-    // Test for failure.
-    explicit operator bool() const noexcept { return ec != ParseStatus::success; }
+    constexpr explicit operator bool() const noexcept { return ec != ParseStatus::success; }
+    constexpr explicit operator ParseStatus() const noexcept { return ec; }
 };
+
+//class Succeeded
+//{
+//    ParseStatus ec;
+//public:
+//    Succeeded(ParseStatus ec_) : ec(ec_) {}
+//    constexpr explicit operator bool() const noexcept { return ec == ParseStatus::success; }
+//    constexpr explicit operator ParseStatus() const noexcept { return ec; }
+//};
 
 //struct ParseCallbacks
 //{
@@ -861,7 +868,7 @@ ParseStatus Parser<ParseCallbacks>::ParseString()
     JSON_ASSERT(token.kind == TokenKind::string);
 
     if (Failed ec = cb.HandleString(token.ptr, token.end, token.string_class, options))
-        return ec;
+        return ParseStatus(ec);
 
     // skip string
     token = lexer.Lex(options);
@@ -878,7 +885,7 @@ ParseStatus Parser<ParseCallbacks>::ParseNumber()
         return ParseStatus::invalid_number;
 
     if (Failed ec = cb.HandleNumber(token.ptr, token.end, token.number_class, options))
-        return ec;
+        return ParseStatus(ec);
 
     // skip number
     token = lexer.Lex(options);
@@ -927,7 +934,7 @@ ParseStatus Parser<ParseCallbacks>::ParseIdentifier()
     }
 
     if (Failed(ec))
-        return ec;
+        return ParseStatus(ec);
 
     // skip 'identifier'
     token = lexer.Lex(options);
@@ -1000,7 +1007,7 @@ L_begin_object:
     token = lexer.Lex(options);
 
     if (Failed ec = cb.HandleBeginObject(options))
-        return ec;
+        return ParseStatus(ec);
 
     if (token.kind != TokenKind::r_brace)
     {
@@ -1010,7 +1017,7 @@ L_begin_object:
                 return ParseStatus::expected_key;
 
             if (Failed ec = cb.HandleKey(token.ptr, token.end, token.string_class, options))
-                return ec;
+                return ParseStatus(ec);
 
             // skip 'key'
             token = lexer.Lex(options);
@@ -1028,7 +1035,7 @@ L_begin_object:
                 goto L_begin_array;
 
             if (Failed ec = ParsePrimitive())
-                return ec;
+                return ParseStatus(ec);
 
 L_end_member:
             JSON_ASSERT(stack_size != 0);
@@ -1036,7 +1043,7 @@ L_end_member:
             ++stack[stack_size - 1].count;
 
             if (Failed ec = cb.HandleEndMember(stack[stack_size - 1].count, options))
-                return ec;
+                return ParseStatus(ec);
 
             if (CheckEndStructured(TokenKind::r_brace))
                 break;
@@ -1047,7 +1054,7 @@ L_end_member:
     }
 
     if (Failed ec = cb.HandleEndObject(stack[stack_size - 1].count, options))
-        return ec;
+        return ParseStatus(ec);
 
     // skip '}'
     token = lexer.Lex(options);
@@ -1074,7 +1081,7 @@ L_begin_array:
     token = lexer.Lex(options);
 
     if (Failed ec = cb.HandleBeginArray(options))
-        return ec;
+        return ParseStatus(ec);
 
     if (token.kind != TokenKind::r_square)
     {
@@ -1087,7 +1094,7 @@ L_begin_array:
                 goto L_begin_array;
 
             if (Failed ec = ParsePrimitive())
-                return ec;
+                return ParseStatus(ec);
 
 L_end_element:
             JSON_ASSERT(stack_size != 0);
@@ -1095,7 +1102,7 @@ L_end_element:
             ++stack[stack_size - 1].count;
 
             if (Failed ec = cb.HandleEndElement(stack[stack_size - 1].count, options))
-                return ec;
+                return ParseStatus(ec);
 
             if (CheckEndStructured(TokenKind::r_square))
                 break;
@@ -1106,7 +1113,7 @@ L_end_element:
     }
 
     if (Failed ec = cb.HandleEndArray(stack[stack_size - 1].count, options))
-        return ec;
+        return ParseStatus(ec);
 
     // skip ']'
     token = lexer.Lex(options);
