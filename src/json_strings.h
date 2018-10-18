@@ -369,17 +369,19 @@ UnescapeStringResult UnescapeString(char const* curr, char const* last, Fn yield
         {
             auto const res = unicode::ValidateUTF8Sequence(curr, last);
 
-            if (res.ec != unicode::DecodeUTF8SequenceStatus::success)
+            switch (res.ec)
             {
+            case unicode::DecodeUTF8SequenceStatus::success:
+                yield_n(curr, res.ptr - curr);
+                break;
+
+            case unicode::DecodeUTF8SequenceStatus::invalid_utf8_encoding:
                 if (!allow_invalid_unicode)
                     return {curr, Status::invalid_utf8_encoding};
 
                 // Replace invalid UTF-8 sequences with a single Unicode replacement character.
                 yield_n("\xEF\xBF\xBD", 3);
-            }
-            else
-            {
-                yield_n(curr, res.ptr - curr);
+                break;
             }
 
             JSON_ASSERT(curr != res.ptr);
@@ -435,22 +437,23 @@ UnescapeStringResult UnescapeString(char const* curr, char const* last, Fn yield
                     auto const res = unicode::DecodeUCNSequence(f, last, U);
                     curr = res.ptr;
 
-                    if (res.ec == unicode::DecodeUCNSequenceStatus::incomplete_or_invalid_ucn)
+                    switch (res.ec)
                     {
+                    case unicode::DecodeUCNSequenceStatus::success:
+                        unicode::EncodeUTF8(U, [&](uint8_t code_unit) { yield(static_cast<char>(code_unit)); });
+                        break;
+
+                    case unicode::DecodeUCNSequenceStatus::incomplete_or_invalid_ucn:
                         // Syntax error.
                         return {curr, Status::invalid_ucn};
-                    }
-                    else if (res.ec == unicode::DecodeUCNSequenceStatus::invalid_utf16_encoding)
-                    {
+
+                    case unicode::DecodeUCNSequenceStatus::invalid_utf16_encoding:
                         if (!allow_invalid_unicode)
                             return {curr, Status::invalid_utf16_encoding};
 
                         // Replace invalid UTF-16 sequences with a single Unicode replacement character.
                         yield_n("\xEF\xBF\xBD", 3);
-                    }
-                    else
-                    {
-                        unicode::EncodeUTF8(U, [&](uint8_t code_unit) { yield(static_cast<char>(code_unit)); });
+                        break;
                     }
 
                     JSON_ASSERT(curr != f);
@@ -532,15 +535,9 @@ EscapeStringResult EscapeString(char const* curr, char const* last, Fn yield, bo
             char32_t U;
             auto const res = unicode::DecodeUTF8Sequence(curr, last, U);
 
-            if (res.ec != unicode::DecodeUTF8SequenceStatus::success)
+            switch (res.ec)
             {
-                if (!allow_invalid_unicode)
-                    return {curr, Status::invalid_utf8_encoding};
-
-                yield_n("\\uFFFD", 6);
-            }
-            else
-            {
+            case unicode::DecodeUTF8SequenceStatus::success:
                 //
                 // Always escape U+2028 (LINE SEPARATOR) and U+2029 (PARAGRAPH
                 // SEPARATOR). No string in JavaScript can contain a literal
@@ -561,6 +558,15 @@ EscapeStringResult EscapeString(char const* curr, char const* last, Fn yield, bo
                     yield_n(curr, res.ptr - curr);
                     break;
                 }
+                break;
+
+            case unicode::DecodeUTF8SequenceStatus::invalid_utf8_encoding:
+                if (!allow_invalid_unicode)
+                    return {curr, Status::invalid_utf8_encoding};
+
+                // Replace invalid UTF-8 sequences with a single Unicode replacement character.
+                yield_n("\\uFFFD", 6);
+                break;
             }
 
             JSON_ASSERT(curr != res.ptr);
