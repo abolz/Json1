@@ -363,7 +363,6 @@ UnescapeStringResult UnescapeString(char const* curr, char const* last, Fn yield
         if (static_cast<uint8_t>(*curr) >= 0x80)
         {
             auto const res = unicode::ValidateUTF8Sequence(curr, last);
-            JSON_ASSERT(curr != res.ptr);
 
             if (!res.success)
             {
@@ -378,6 +377,7 @@ UnescapeStringResult UnescapeString(char const* curr, char const* last, Fn yield
                 yield_n(curr, res.ptr - curr);
             }
 
+            JSON_ASSERT(curr != res.ptr);
             curr = res.ptr;
         }
         else if (*curr == '\\')
@@ -447,6 +447,8 @@ UnescapeStringResult UnescapeString(char const* curr, char const* last, Fn yield
                     {
                         unicode::EncodeUTF8(U, [&](uint8_t code_unit) { yield(static_cast<char>(code_unit)); });
                     }
+
+                    JSON_ASSERT(curr != f);
                 }
                 break;
             default:
@@ -524,7 +526,6 @@ EscapeStringResult EscapeString(char const* curr, char const* last, Fn yield, bo
         {
             char32_t U;
             auto const res = unicode::DecodeUTF8Sequence(curr, last, U);
-            JSON_ASSERT(curr != res.ptr);
 
             if (!res.success)
             {
@@ -557,6 +558,7 @@ EscapeStringResult EscapeString(char const* curr, char const* last, Fn yield, bo
                 }
             }
 
+            JSON_ASSERT(curr != res.ptr);
             curr = res.ptr;
         }
         else if (static_cast<uint8_t>(*curr) >= 0x20)
@@ -617,7 +619,7 @@ EscapeStringResult EscapeString(char const* curr, char const* last, Fn yield, bo
 } // namespace strings
 } // namespace json
 
-#if JSON_STRINGS_COMPILE_TEST
+#if 0
 #if 0
 size_t UnescapedStringLength(char const* next, char const* last)
 {
@@ -626,7 +628,7 @@ size_t UnescapedStringLength(char const* next, char const* last)
     return num_bytes;
 }
 #endif
-#if 1
+#if 0
 size_t EscapedStringLength(char const* next, char const* last)
 {
     size_t num_bytes = 0;
