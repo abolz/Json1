@@ -790,23 +790,14 @@ enum class ParseStatus {
     unrecognized_identifier,
 };
 
-class Failed
+struct Failed
 {
     ParseStatus ec;
-public:
+
     Failed(ParseStatus ec_) : ec(ec_) {}
     constexpr explicit operator bool() const noexcept { return ec != ParseStatus::success; }
     constexpr explicit operator ParseStatus() const noexcept { return ec; }
 };
-
-//class Succeeded
-//{
-//    ParseStatus ec;
-//public:
-//    Succeeded(ParseStatus ec_) : ec(ec_) {}
-//    constexpr explicit operator bool() const noexcept { return ec == ParseStatus::success; }
-//    constexpr explicit operator ParseStatus() const noexcept { return ec; }
-//};
 
 //struct ParseCallbacks
 //{
@@ -842,7 +833,6 @@ struct Parser
     ParseStatus ParseNumber();
     ParseStatus ParseIdentifier();
     ParseStatus ParsePrimitive();
-
     ParseStatus ParseValue();
 
     bool CheckEndStructured(TokenKind close);
@@ -924,10 +914,6 @@ ParseStatus Parser<ParseCallbacks>::ParseIdentifier()
     {
         ec = cb.HandleNumber(f, l, NumberClass::nan, options);
     }
-    //else if (options.allow_undefined && len == 9 && ::json::impl::StrEqual(f, "undefined", 9) == 0)
-    //{
-    //    ec = cb.HandleUndefined(f, l, options);
-    //}
     else
     {
         return ParseStatus::unrecognized_identifier;
@@ -1260,25 +1246,23 @@ inline LineInfo GetLineInfo(char const* first, char const* ptr)
 //
 //==================================================================================================
 
-#if JSON_PARSER_COMPILE_TEST
-struct ParseCallbacks
-{
-    virtual json::ParseStatus HandleNull(char const* first, char const* last, json::Options const& options) = 0;
-    virtual json::ParseStatus HandleTrue(char const* first, char const* last, json::Options const& options) = 0;
-    virtual json::ParseStatus HandleFalse(char const* first, char const* last, json::Options const& options) = 0;
-    virtual json::ParseStatus HandleNumber(char const* first, char const* last, json::NumberClass nc, json::Options const& options) = 0;
-    virtual json::ParseStatus HandleString(char const* first, char const* last, json::StringClass sc, json::Options const& options) = 0;
-    virtual json::ParseStatus HandleKey(char const* first, char const* last, json::StringClass sc, json::Options const& options) = 0;
-    virtual json::ParseStatus HandleBeginArray(json::Options const& options) = 0;
-    virtual json::ParseStatus HandleEndArray(size_t count, json::Options const& options) = 0;
-    virtual json::ParseStatus HandleEndElement(size_t& count, json::Options const& options) = 0;
-    virtual json::ParseStatus HandleBeginObject(json::Options const& options) = 0;
-    virtual json::ParseStatus HandleEndObject(size_t count, json::Options const& options) = 0;
-    virtual json::ParseStatus HandleEndMember(size_t& count, json::Options const& options) = 0;
-};
-
-json::ParseResult ParseJSON(ParseCallbacks& cb, char const* next, char const* last, json::Options const& options = {})
-{
-    return json::ParseSAX(cb, next, last, options);
-}
-#endif
+//struct ParseCallbacks
+//{
+//    virtual json::ParseStatus HandleNull(char const* first, char const* last, json::Options const& options) = 0;
+//    virtual json::ParseStatus HandleTrue(char const* first, char const* last, json::Options const& options) = 0;
+//    virtual json::ParseStatus HandleFalse(char const* first, char const* last, json::Options const& options) = 0;
+//    virtual json::ParseStatus HandleNumber(char const* first, char const* last, json::NumberClass nc, json::Options const& options) = 0;
+//    virtual json::ParseStatus HandleString(char const* first, char const* last, json::StringClass sc, json::Options const& options) = 0;
+//    virtual json::ParseStatus HandleKey(char const* first, char const* last, json::StringClass sc, json::Options const& options) = 0;
+//    virtual json::ParseStatus HandleBeginArray(json::Options const& options) = 0;
+//    virtual json::ParseStatus HandleEndArray(size_t count, json::Options const& options) = 0;
+//    virtual json::ParseStatus HandleEndElement(size_t& count, json::Options const& options) = 0;
+//    virtual json::ParseStatus HandleBeginObject(json::Options const& options) = 0;
+//    virtual json::ParseStatus HandleEndObject(size_t count, json::Options const& options) = 0;
+//    virtual json::ParseStatus HandleEndMember(size_t& count, json::Options const& options) = 0;
+//};
+//
+//json::ParseResult ParseJSON(ParseCallbacks& cb, char const* next, char const* last, json::Options const& options = {})
+//{
+//    return json::ParseSAX(cb, next, last, options);
+//}

@@ -630,21 +630,16 @@ EscapeStringResult EscapeString(char const* curr, char const* last, Fn yield, bo
 } // namespace strings
 } // namespace json
 
-#if 0
-#if 0
-size_t UnescapedStringLength(char const* next, char const* last)
-{
-    size_t num_bytes = 0;
-    json::strings::UnescapeString(next, last, [&](char) { ++num_bytes; });
-    return num_bytes;
-}
-#endif
-#if 0
-size_t EscapedStringLength(char const* next, char const* last)
-{
-    size_t num_bytes = 0;
-    json::strings::EscapeString(next, last, [&](char) { ++num_bytes; });
-    return num_bytes;
-}
-#endif
-#endif
+//size_t UnescapedStringLength(char const* next, char const* last)
+//{
+//    size_t num_bytes = 0;
+//    json::strings::UnescapeString(next, last, [&](char) { ++num_bytes; });
+//    return num_bytes;
+//}
+
+//size_t EscapedStringLength(char const* next, char const* last)
+//{
+//    size_t num_bytes = 0;
+//    json::strings::EscapeString(next, last, [&](char) { ++num_bytes; });
+//    return num_bytes;
+//}
