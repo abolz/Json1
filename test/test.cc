@@ -1899,12 +1899,12 @@ an empty object /*/
 
     json::Value val;
     auto const res = json::parse(val, input.data(), input.data() + input.size(), opts);
-    if (res.ec != json::ParseStatus::success)
-    {
-        auto const li = json::util::GetLineInfo(input.data(), res.ptr);
-        printf("Line %zu, column %zu:\n", li.line, li.column);
-        printf("|%.*s|\n", static_cast<int>(res.end - res.ptr), res.ptr);
-    }
+    //if (res.ec != json::ParseStatus::success)
+    //{
+    //    auto const li = json::util::GetLineInfo(input.data(), res.ptr);
+    //    printf("Line %zu, column %zu:\n", li.line, li.column);
+    //    printf("|%.*s|\n", static_cast<int>(res.end - res.ptr), res.ptr);
+    //}
 
     REQUIRE(res.ec == json::ParseStatus::success);
 

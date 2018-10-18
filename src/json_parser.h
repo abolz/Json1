@@ -1190,56 +1190,6 @@ ParseResult ParseSAX(ParseCallbacks& cb, char const* next, char const* last, Opt
     return res;
 }
 
-//==================================================================================================
-// Utility
-//==================================================================================================
-
-namespace util {
-
-struct LineInfo
-{
-    size_t line = 1;
-    size_t column = 1;
-};
-
-inline LineInfo GetLineInfo(char const* first, char const* ptr)
-{
-    //JSON_ASSERT(first != nullptr);
-    //JSON_ASSERT(ptr != nullptr);
-    //JSON_ASSERT(first <= ptr);
-
-    LineInfo li;
-
-    for (char const* next = first; next != ptr; )
-    {
-        ++li.column;
-
-        char const ch = *next;
-        ++next;
-#if 0
-        // Skip UTF-8 trail bytes.
-        for ( ; next != ptr && (0x80 == (static_cast<uint8_t>(*next) & 0xC0)); ++next)
-        {
-        }
-#endif
-
-        if (ch == '\n' || ch == '\r')
-        {
-            // If this is '\r\n', skip the other half.
-            if (ch == '\r' && next != ptr && *next == '\n') {
-                ++next;
-            }
-
-            ++li.line;
-            li.column = 1;
-        }
-    }
-
-    return li;
-}
-
-} // namespace util
-
 } // namespace json
 
 //==================================================================================================
