@@ -881,25 +881,25 @@ struct ParseValueCallbacks
     std::vector<Value> stack;
     std::vector<String> keys;
 
-    ParseStatus HandleNull(char const* /*first*/, char const* /*last*/, Options const& /*options*/)
+    ParseStatus HandleNull(char const* /*first*/, char const* /*last*/)
     {
         stack.emplace_back(nullptr);
         return {};
     }
 
-    ParseStatus HandleTrue(char const* /*first*/, char const* /*last*/, Options const& /*options*/)
+    ParseStatus HandleTrue(char const* /*first*/, char const* /*last*/)
     {
         stack.emplace_back(true);
         return {};
     }
 
-    ParseStatus HandleFalse(char const* /*first*/, char const* /*last*/, Options const& /*options*/)
+    ParseStatus HandleFalse(char const* /*first*/, char const* /*last*/)
     {
         stack.emplace_back(false);
         return {};
     }
 
-    ParseStatus HandleNumber(char const* first, char const* last, NumberClass nc, Options const& /*options*/)
+    ParseStatus HandleNumber(char const* first, char const* last, NumberClass nc)
     {
         //if (options.parse_numbers_as_strings)
         //    stack.emplace_back(json::string_tag, first, last);
@@ -909,7 +909,7 @@ struct ParseValueCallbacks
         return {};
     }
 
-    ParseStatus HandleString(char const* first, char const* last, StringClass string_class, Options const& /*options*/)
+    ParseStatus HandleString(char const* first, char const* last, StringClass string_class)
     {
         if (string_class == StringClass::needs_cleaning)
         {
@@ -931,19 +931,19 @@ struct ParseValueCallbacks
         return {};
     }
 
-    ParseStatus HandleBeginArray(Options const& /*options*/)
+    ParseStatus HandleBeginArray()
     {
         stack.emplace_back(json::array_tag);
         return {};
     }
 
-    ParseStatus HandleEndArray(size_t count, Options const& /*options*/)
+    ParseStatus HandleEndArray(size_t count)
     {
         PopElements(count);
         return {};
     }
 
-    ParseStatus HandleEndElement(size_t& count, Options const& /*options*/)
+    ParseStatus HandleEndElement(size_t& count)
     {
         JSON_ASSERT(!stack.empty());
         JSON_ASSERT(count != 0);
@@ -957,19 +957,19 @@ struct ParseValueCallbacks
         return {};
     }
 
-    ParseStatus HandleBeginObject(Options const& /*options*/)
+    ParseStatus HandleBeginObject()
     {
         stack.emplace_back(json::object_tag);
         return {};
     }
 
-    ParseStatus HandleEndObject(size_t count, Options const& /*options*/)
+    ParseStatus HandleEndObject(size_t count)
     {
         PopMembers(count);
         return {};
     }
 
-    ParseStatus HandleKey(char const* first, char const* last, StringClass string_class, Options const& /*options*/)
+    ParseStatus HandleKey(char const* first, char const* last, StringClass string_class)
     {
         if (string_class == StringClass::needs_cleaning)
         {
@@ -988,7 +988,7 @@ struct ParseValueCallbacks
         return {};
     }
 
-    ParseStatus HandleEndMember(size_t& count, Options const& /*options*/)
+    ParseStatus HandleEndMember(size_t& count)
     {
         JSON_ASSERT(!keys.empty());
         JSON_ASSERT(!stack.empty());

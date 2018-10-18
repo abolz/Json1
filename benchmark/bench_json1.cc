@@ -20,72 +20,72 @@ struct GenStatsCallbacks
 
     GenStatsCallbacks(jsonstats& s) : stats(s) {}
 
-    ParseStatus HandleNull(char const* /*first*/, char const* /*last*/, Options const& /*options*/)
+    ParseStatus HandleNull(char const* /*first*/, char const* /*last*/)
     {
         ++stats.null_count;
         return {};
     }
 
-    ParseStatus HandleTrue(char const* /*first*/, char const* /*last*/, Options const& /*options*/)
+    ParseStatus HandleTrue(char const* /*first*/, char const* /*last*/)
     {
         ++stats.true_count;
         return {};
     }
 
-    ParseStatus HandleFalse(char const* /*first*/, char const* /*last*/, Options const& /*options*/)
+    ParseStatus HandleFalse(char const* /*first*/, char const* /*last*/)
     {
         ++stats.false_count;
         return {};
     }
 
-    ParseStatus HandleNumber(char const* first, char const* last, NumberClass nc, Options const& /*options*/)
+    ParseStatus HandleNumber(char const* first, char const* last, NumberClass nc)
     {
         ++stats.number_count;
         stats.total_number_value += json::numbers::StringToNumber(first, last, nc);
         return {};
     }
 
-    ParseStatus HandleString(char const* first, char const* last, StringClass sc, Options const& /*options*/)
+    ParseStatus HandleString(char const* first, char const* last, StringClass sc)
     {
         ++stats.string_count;
         return AddStringLength(stats.total_string_length, first, last, sc);
     }
 
-    ParseStatus HandleBeginArray(Options const& /*options*/)
+    ParseStatus HandleBeginArray()
     {
         ++stats.array_count;
         return {};
     }
 
-    ParseStatus HandleEndArray(size_t /*count*/, Options const& /*options*/)
+    ParseStatus HandleEndArray(size_t /*count*/)
     {
         //stats.total_array_length += count;
         return {};
     }
 
-    ParseStatus HandleEndElement(size_t& /*count*/, Options const& /*options*/)
+    ParseStatus HandleEndElement(size_t& /*count*/)
     {
         return {};
     }
 
-    ParseStatus HandleBeginObject(Options const& /*options*/)
+    ParseStatus HandleBeginObject()
     {
         ++stats.object_count;
         return {};
     }
 
-    ParseStatus HandleEndObject(size_t /*count*/, Options const& /*options*/)
+    ParseStatus HandleEndObject(size_t /*count*/)
     {
         //stats.total_object_length += count;
         return {};
     }
 
-    ParseStatus HandleEndMember(size_t& /*count*/, Options const& /*options*/)
+    ParseStatus HandleEndMember(size_t& /*count*/)
     {
         return {};
     }
 
-    ParseStatus HandleKey(char const* first, char const* last, StringClass sc, Options const& /*options*/)
+    ParseStatus HandleKey(char const* first, char const* last, StringClass sc)
     {
         ++stats.key_count;
         return AddStringLength(stats.total_key_length, first, last, sc);
@@ -123,25 +123,25 @@ struct RapidjsonDocumentCallbacks
     {
     }
 
-    ParseStatus HandleNull(char const* /*first*/, char const* /*last*/, Options const& /*options*/)
+    ParseStatus HandleNull(char const* /*first*/, char const* /*last*/)
     {
         doc->Null();
         return {};
     }
 
-    ParseStatus HandleTrue(char const* /*first*/, char const* /*last*/, Options const& /*options*/)
+    ParseStatus HandleTrue(char const* /*first*/, char const* /*last*/)
     {
         doc->Bool(true);
         return {};
     }
 
-    ParseStatus HandleFalse(char const* /*first*/, char const* /*last*/, Options const& /*options*/)
+    ParseStatus HandleFalse(char const* /*first*/, char const* /*last*/)
     {
         doc->Bool(false);
         return {};
     }
 
-    ParseStatus HandleNumber(char const* first, char const* last, NumberClass nc, Options const& /*options*/)
+    ParseStatus HandleNumber(char const* first, char const* last, NumberClass nc)
     {
         // TODO:
         // nc == NumberClass::integer
@@ -150,7 +150,7 @@ struct RapidjsonDocumentCallbacks
         return {};
     }
 
-    ParseStatus HandleString(char const* first, char const* last, StringClass sc, Options const& /*options*/)
+    ParseStatus HandleString(char const* first, char const* last, StringClass sc)
     {
         if (sc == StringClass::needs_cleaning)
         {
@@ -172,41 +172,41 @@ struct RapidjsonDocumentCallbacks
         return {};
     }
 
-    ParseStatus HandleBeginArray(Options const& /*options*/)
+    ParseStatus HandleBeginArray()
     {
         doc->StartArray();
         return {};
     }
 
-    ParseStatus HandleEndArray(size_t count, Options const& /*options*/)
+    ParseStatus HandleEndArray(size_t count)
     {
         doc->EndArray(static_cast<rapidjson::SizeType>(count));
         return {};
     }
 
-    ParseStatus HandleEndElement(size_t& /*count*/, Options const& /*options*/)
+    ParseStatus HandleEndElement(size_t& /*count*/)
     {
         return {};
     }
 
-    ParseStatus HandleBeginObject(Options const& /*options*/)
+    ParseStatus HandleBeginObject()
     {
         doc->StartObject();
         return {};
     }
 
-    ParseStatus HandleEndObject(size_t count, Options const& /*options*/)
+    ParseStatus HandleEndObject(size_t count)
     {
         doc->EndObject(static_cast<rapidjson::SizeType>(count));
         return {};
     }
 
-    ParseStatus HandleEndMember(size_t& /*count*/, Options const& /*options*/)
+    ParseStatus HandleEndMember(size_t& /*count*/)
     {
         return {};
     }
 
-    ParseStatus HandleKey(char const* first, char const* last, StringClass sc, Options const& /*options*/)
+    ParseStatus HandleKey(char const* first, char const* last, StringClass sc)
     {
         if (sc == StringClass::needs_cleaning)
         {

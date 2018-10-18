@@ -857,7 +857,7 @@ ParseStatus Parser<ParseCallbacks>::ParseString()
 {
     JSON_ASSERT(token.kind == TokenKind::string);
 
-    if (Failed ec = cb.HandleString(token.ptr, token.end, token.string_class, options))
+    if (Failed ec = cb.HandleString(token.ptr, token.end, token.string_class))
         return ParseStatus(ec);
 
     // skip string
@@ -874,7 +874,7 @@ ParseStatus Parser<ParseCallbacks>::ParseNumber()
     if (token.number_class == NumberClass::invalid)
         return ParseStatus::invalid_number;
 
-    if (Failed ec = cb.HandleNumber(token.ptr, token.end, token.number_class, options))
+    if (Failed ec = cb.HandleNumber(token.ptr, token.end, token.number_class))
         return ParseStatus(ec);
 
     // skip number
@@ -896,23 +896,23 @@ ParseStatus Parser<ParseCallbacks>::ParseIdentifier()
     ParseStatus ec;
     if (len == 4 && ::json::impl::StrEqual(f, "null", 4))
     {
-        ec = cb.HandleNull(f, l, options);
+        ec = cb.HandleNull(f, l);
     }
     else if (len == 4 && ::json::impl::StrEqual(f, "true", 4))
     {
-        ec = cb.HandleTrue(f, l, options);
+        ec = cb.HandleTrue(f, l);
     }
     else if (len == 5 && ::json::impl::StrEqual(f, "false", 5))
     {
-        ec = cb.HandleFalse(f, l, options);
+        ec = cb.HandleFalse(f, l);
     }
     else if (options.allow_nan_inf && len == 8 && ::json::impl::StrEqual(f, "Infinity", 8))
     {
-        ec = cb.HandleNumber(f, l, NumberClass::pos_infinity, options);
+        ec = cb.HandleNumber(f, l, NumberClass::pos_infinity);
     }
     else if (options.allow_nan_inf && len == 3 && ::json::impl::StrEqual(f, "NaN", 3))
     {
-        ec = cb.HandleNumber(f, l, NumberClass::nan, options);
+        ec = cb.HandleNumber(f, l, NumberClass::nan);
     }
     else
     {
@@ -992,7 +992,7 @@ L_begin_object:
     // skip '{'
     token = lexer.Lex(options);
 
-    if (Failed ec = cb.HandleBeginObject(options))
+    if (Failed ec = cb.HandleBeginObject())
         return ParseStatus(ec);
 
     if (token.kind != TokenKind::r_brace)
@@ -1002,7 +1002,7 @@ L_begin_object:
             if (token.kind != TokenKind::string && (!options.allow_unquoted_keys || token.kind != TokenKind::identifier))
                 return ParseStatus::expected_key;
 
-            if (Failed ec = cb.HandleKey(token.ptr, token.end, token.string_class, options))
+            if (Failed ec = cb.HandleKey(token.ptr, token.end, token.string_class))
                 return ParseStatus(ec);
 
             // skip 'key'
@@ -1028,7 +1028,7 @@ L_end_member:
             JSON_ASSERT(stack[stack_size - 1].structure == Structure::object);
             ++stack[stack_size - 1].count;
 
-            if (Failed ec = cb.HandleEndMember(stack[stack_size - 1].count, options))
+            if (Failed ec = cb.HandleEndMember(stack[stack_size - 1].count))
                 return ParseStatus(ec);
 
             if (CheckEndStructured(TokenKind::r_brace))
@@ -1039,7 +1039,7 @@ L_end_member:
             return ParseStatus::expected_comma_or_closing_brace;
     }
 
-    if (Failed ec = cb.HandleEndObject(stack[stack_size - 1].count, options))
+    if (Failed ec = cb.HandleEndObject(stack[stack_size - 1].count))
         return ParseStatus(ec);
 
     // skip '}'
@@ -1066,7 +1066,7 @@ L_begin_array:
     // skip '['
     token = lexer.Lex(options);
 
-    if (Failed ec = cb.HandleBeginArray(options))
+    if (Failed ec = cb.HandleBeginArray())
         return ParseStatus(ec);
 
     if (token.kind != TokenKind::r_square)
@@ -1087,7 +1087,7 @@ L_end_element:
             JSON_ASSERT(stack[stack_size - 1].structure == Structure::array);
             ++stack[stack_size - 1].count;
 
-            if (Failed ec = cb.HandleEndElement(stack[stack_size - 1].count, options))
+            if (Failed ec = cb.HandleEndElement(stack[stack_size - 1].count))
                 return ParseStatus(ec);
 
             if (CheckEndStructured(TokenKind::r_square))
@@ -1098,7 +1098,7 @@ L_end_element:
             return ParseStatus::expected_comma_or_closing_bracket;
     }
 
-    if (Failed ec = cb.HandleEndArray(stack[stack_size - 1].count, options))
+    if (Failed ec = cb.HandleEndArray(stack[stack_size - 1].count))
         return ParseStatus(ec);
 
     // skip ']'
@@ -1248,21 +1248,21 @@ inline LineInfo GetLineInfo(char const* first, char const* ptr)
 
 //struct ParseCallbacks
 //{
-//    virtual json::ParseStatus HandleNull(char const* first, char const* last, json::Options const& options) = 0;
-//    virtual json::ParseStatus HandleTrue(char const* first, char const* last, json::Options const& options) = 0;
-//    virtual json::ParseStatus HandleFalse(char const* first, char const* last, json::Options const& options) = 0;
-//    virtual json::ParseStatus HandleNumber(char const* first, char const* last, json::NumberClass nc, json::Options const& options) = 0;
-//    virtual json::ParseStatus HandleString(char const* first, char const* last, json::StringClass sc, json::Options const& options) = 0;
-//    virtual json::ParseStatus HandleKey(char const* first, char const* last, json::StringClass sc, json::Options const& options) = 0;
-//    virtual json::ParseStatus HandleBeginArray(json::Options const& options) = 0;
-//    virtual json::ParseStatus HandleEndArray(size_t count, json::Options const& options) = 0;
-//    virtual json::ParseStatus HandleEndElement(size_t& count, json::Options const& options) = 0;
-//    virtual json::ParseStatus HandleBeginObject(json::Options const& options) = 0;
-//    virtual json::ParseStatus HandleEndObject(size_t count, json::Options const& options) = 0;
-//    virtual json::ParseStatus HandleEndMember(size_t& count, json::Options const& options) = 0;
+//    virtual json::ParseStatus HandleNull(char const* first, char const* last) = 0;
+//    virtual json::ParseStatus HandleTrue(char const* first, char const* last) = 0;
+//    virtual json::ParseStatus HandleFalse(char const* first, char const* last) = 0;
+//    virtual json::ParseStatus HandleNumber(char const* first, char const* last, json::NumberClass nc) = 0;
+//    virtual json::ParseStatus HandleString(char const* first, char const* last, json::StringClass sc) = 0;
+//    virtual json::ParseStatus HandleKey(char const* first, char const* last, json::StringClass sc) = 0;
+//    virtual json::ParseStatus HandleBeginArray() = 0;
+//    virtual json::ParseStatus HandleEndArray(size_t count) = 0;
+//    virtual json::ParseStatus HandleEndElement(size_t& count) = 0;
+//    virtual json::ParseStatus HandleBeginObject() = 0;
+//    virtual json::ParseStatus HandleEndObject(size_t count) = 0;
+//    virtual json::ParseStatus HandleEndMember(size_t& count) = 0;
 //};
 //
-//json::ParseResult ParseJSON(ParseCallbacks& cb, char const* next, char const* last, json::Options const& options = {})
+//json::ParseResult ParseJson(ParseCallbacks& cb, char const* next, char const* last, json::Options const& options = {})
 //{
 //    return json::ParseSAX(cb, next, last, options);
 //}
