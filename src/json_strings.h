@@ -75,9 +75,14 @@ inline bool IsValidCodepoint(char32_t U)
     return U < 0xD800 || (U > 0xDFFF && U <= 0x10FFFF);
 }
 
+enum class DecodeUTF8SequenceStatus {
+    success,
+    invalid_utf8_encoding,
+};
+
 struct DecodeUTF8SequenceResult {
     char const* ptr;
-    bool success;
+    DecodeUTF8SequenceStatus ec;
 };
 
 constexpr uint32_t kUTF8Accept = 0;
@@ -133,25 +138,25 @@ inline DecodeUTF8SequenceResult DecodeUTF8Sequence(char const* next, char const*
     uint32_t state = DecodeUTF8Step(kUTF8Accept, b1, W);
     if (state == kUTF8Reject)
     {
-        return {next, false};
+        return {next, DecodeUTF8SequenceStatus::invalid_utf8_encoding};
     }
 
     while (state != kUTF8Accept)
     {
         if (next == last)
         {
-            return {next, false};
+            return {next, DecodeUTF8SequenceStatus::invalid_utf8_encoding};
         }
         state = DecodeUTF8Step(state, static_cast<uint8_t>(*next), W);
         if (state == kUTF8Reject)
         {
-            return {next, false};
+            return {next, DecodeUTF8SequenceStatus::invalid_utf8_encoding};
         }
         ++next;
     }
 
     U = W;
-    return {next, true};
+    return {next, DecodeUTF8SequenceStatus::success};
 }
 
 inline DecodeUTF8SequenceResult ValidateUTF8Sequence(char const* next, char const* last)
@@ -197,7 +202,7 @@ enum class DecodeUCNSequenceStatus {
 
 struct DecodeUCNSequenceResult {
     char const* ptr;
-    DecodeUCNSequenceStatus status;
+    DecodeUCNSequenceStatus ec;
 };
 
 inline bool ReadHex16_unsafe(char const* next, char32_t& W)
@@ -307,8 +312,8 @@ enum class Status {
 };
 
 struct UnescapeStringResult {
-    char const* next;
-    Status status;
+    char const* ptr;
+    Status ec;
 };
 
 template <typename Fn>
@@ -364,7 +369,7 @@ UnescapeStringResult UnescapeString(char const* curr, char const* last, Fn yield
         {
             auto const res = unicode::ValidateUTF8Sequence(curr, last);
 
-            if (!res.success)
+            if (res.ec != unicode::DecodeUTF8SequenceStatus::success)
             {
                 if (!allow_invalid_unicode)
                     return {curr, Status::invalid_utf8_encoding};
@@ -430,12 +435,12 @@ UnescapeStringResult UnescapeString(char const* curr, char const* last, Fn yield
                     auto const res = unicode::DecodeUCNSequence(f, last, U);
                     curr = res.ptr;
 
-                    if (res.status == unicode::DecodeUCNSequenceStatus::incomplete_or_invalid_ucn)
+                    if (res.ec == unicode::DecodeUCNSequenceStatus::incomplete_or_invalid_ucn)
                     {
                         // Syntax error.
                         return {curr, Status::invalid_ucn};
                     }
-                    else if (res.status == unicode::DecodeUCNSequenceStatus::invalid_utf16_encoding)
+                    else if (res.ec == unicode::DecodeUCNSequenceStatus::invalid_utf16_encoding)
                     {
                         if (!allow_invalid_unicode)
                             return {curr, Status::invalid_utf16_encoding};
@@ -466,8 +471,8 @@ UnescapeStringResult UnescapeString(char const* curr, char const* last, Fn yield
 }
 
 struct EscapeStringResult {
-    char const* next;
-    Status status;
+    char const* ptr;
+    Status ec;
 };
 
 template <typename Fn>
@@ -527,7 +532,7 @@ EscapeStringResult EscapeString(char const* curr, char const* last, Fn yield, bo
             char32_t U;
             auto const res = unicode::DecodeUTF8Sequence(curr, last, U);
 
-            if (!res.success)
+            if (res.ec != unicode::DecodeUTF8SequenceStatus::success)
             {
                 if (!allow_invalid_unicode)
                     return {curr, Status::invalid_utf8_encoding};

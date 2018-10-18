@@ -98,7 +98,7 @@ private:
         if (sc == StringClass::needs_cleaning)
         {
             auto const res = json::strings::UnescapeString(first, last, [&](char) { ++len; });
-            if (res.status != json::strings::Status::success) {
+            if (res.ec != json::strings::Status::success) {
                 return ParseStatus::invalid_string;
             }
         }
@@ -159,7 +159,7 @@ struct RapidjsonDocumentCallbacks
 
             auto yield = [&](char ch) { str.push_back(ch); };
             auto const res = json::strings::UnescapeString(first, last, yield);
-            if (res.status != json::strings::Status::success) {
+            if (res.ec != json::strings::Status::success) {
                 return ParseStatus::invalid_string;
             }
 
@@ -215,7 +215,7 @@ struct RapidjsonDocumentCallbacks
 
             auto yield = [&](char ch) { str.push_back(ch); };
             auto const res = json::strings::UnescapeString(first, last, yield);
-            if (res.status != json::strings::Status::success) {
+            if (res.ec != json::strings::Status::success) {
                 return ParseStatus::invalid_string;
             }
 

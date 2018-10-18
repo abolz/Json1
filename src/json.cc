@@ -918,7 +918,7 @@ struct ParseValueCallbacks
             str.reserve(static_cast<size_t>(last - first));
 
             auto const res = strings::UnescapeString(first, last, [&](char ch) { str.push_back(ch); });
-            if (res.status != strings::Status::success)
+            if (res.ec != strings::Status::success)
                 return ParseStatus::invalid_string;
 
             stack.emplace_back(std::move(str));
@@ -977,7 +977,7 @@ struct ParseValueCallbacks
             keys.back().reserve(static_cast<size_t>(last - first));
 
             auto const res = strings::UnescapeString(first, last, [&](char ch) { keys.back().push_back(ch); });
-            if (res.status != strings::Status::success)
+            if (res.ec != strings::Status::success)
                 return ParseStatus::invalid_string; // return ParseStatus::invalid_key;
         }
         else
@@ -1150,7 +1150,7 @@ static bool StringifyString(std::string& str, String const& value, StringifyOpti
 #else
         auto const res = strings::EscapeString(next, last, [&](char ch) { str += ch; }, /*allow_invalid_unicode*/ false);
 #endif
-        success = res.status == strings::Status::success;
+        success = res.ec == strings::Status::success;
     }
 
     str += '"';

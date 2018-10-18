@@ -245,8 +245,8 @@ TEST_CASE("Invalid UTF-8")
 
         std::string str;
         auto const res = json::strings::UnescapeString(next, last, [&](char ch) { str += ch; }, /*allow_invalid_unicode*/ true);
-        CHECK(res.status == json::strings::Status::success);
-        CHECK(res.next == last);
+        CHECK(res.ec == json::strings::Status::success);
+        CHECK(res.ptr == last);
 
         CHECK(str == TimesString("\xEF\xBF\xBD", test.num_replacements));
     }
