@@ -11,7 +11,7 @@
 #include <vector>
 
 #define USE_MEMSTREAM 1
-#define USE_ITERATIVE_PARSER 1
+#define USE_ITERATIVE_PARSER 0
 
 namespace {
 
