@@ -29,17 +29,6 @@
 #define JSON_ASSERT(X) assert(X)
 #endif
 
-//#if _MSC_VER
-//#define JSON_FORCE_INLINE __forceinline
-//#define JSON_NEVER_INLINE __declspec(noinline) inline
-//#elif __GNUC__
-//#define JSON_FORCE_INLINE __attribute__((always_inline)) inline
-//#define JSON_NEVER_INLINE __attribute__((noinline)) inline
-//#else
-//#define JSON_FORCE_INLINE inline
-//#define JSON_NEVER_INLINE inline
-//#endif
-
 namespace json {
 
 //==================================================================================================
