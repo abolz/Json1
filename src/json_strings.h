@@ -357,12 +357,15 @@ UnescapeStringResult UnescapeString(char const* curr, char const* last, Fn yield
 
         if (static_cast<uint8_t>(*curr) >= 0x80)
         {
-            auto const res = unicode::ValidateUTF8Sequence(curr, last);
+            char const* const f = curr;
+
+            auto const res = unicode::ValidateUTF8Sequence(f, last);
+            curr = res.ptr;
 
             switch (res.ec)
             {
             case unicode::DecodeUTF8SequenceStatus::success:
-                yield_n(curr, res.ptr - curr);
+                yield_n(f, curr - f);
                 break;
 
             case unicode::DecodeUTF8SequenceStatus::invalid_utf8_encoding:
@@ -374,8 +377,7 @@ UnescapeStringResult UnescapeString(char const* curr, char const* last, Fn yield
                 break;
             }
 
-            JSON_ASSERT(curr != res.ptr);
-            curr = res.ptr;
+            JSON_ASSERT(curr != f);
         }
         else if (*curr == '\\')
         {
@@ -506,8 +508,11 @@ EscapeStringResult EscapeString(char const* curr, char const* last, Fn yield, bo
 
         if (static_cast<uint8_t>(*curr) >= 0x80)
         {
+            char const* const f = curr;
+
             char32_t U;
-            auto const res = unicode::DecodeUTF8Sequence(curr, last, U);
+            auto const res = unicode::DecodeUTF8Sequence(f, last, U);
+            curr = res.ptr;
 
             switch (res.ec)
             {
@@ -529,7 +534,7 @@ EscapeStringResult EscapeString(char const* curr, char const* last, Fn yield, bo
                     break;
                 default:
                     // The UTF-8 sequence is valid. No need to re-encode.
-                    yield_n(curr, res.ptr - curr);
+                    yield_n(f, curr - f);
                     break;
                 }
                 break;
@@ -542,9 +547,6 @@ EscapeStringResult EscapeString(char const* curr, char const* last, Fn yield, bo
                 yield_n("\\uFFFD", 6);
                 break;
             }
-
-            JSON_ASSERT(curr != res.ptr);
-            curr = res.ptr;
         }
         else if (static_cast<uint8_t>(*curr) >= 0x20)
         {
