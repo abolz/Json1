@@ -709,8 +709,8 @@ struct Failed
     ParseStatus ec;
 
     Failed(ParseStatus ec_) : ec(ec_) {}
-    constexpr explicit operator bool() const noexcept { return ec != ParseStatus::success; }
-    constexpr explicit operator ParseStatus() const noexcept { return ec; }
+    explicit operator bool() const noexcept { return ec != ParseStatus::success; }
+    explicit operator ParseStatus() const noexcept { return ec; }
 };
 
 //struct ParseCallbacks
