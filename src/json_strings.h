@@ -20,8 +20,6 @@
 
 #pragma once
 
-#include "json_parser.h" // only JSON_USE_SSE42
-
 #include <cassert>
 #include <cstdint>
 #include <cstring>
@@ -329,27 +327,12 @@ UnescapeStringResult UnescapeString(char const* curr, char const* last, Fn yield
 {
     namespace unicode = json::impl::unicode;
 
-#if JSON_USE_SSE42
-    auto const kSpecialChars = _mm_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '\xFF', '\x80', '\x1F', '\x00', '\\', '\\');
-#endif
-
     auto skip_non_special = [=](char const* f, char const* l)
     {
-#if JSON_USE_SSE42
-        for ( ; l - f >= 16; f += 16)
-        {
-            auto const bytes = _mm_loadu_si128(reinterpret_cast<__m128i const*>(f));
-            int const index = _mm_cmpestri(kSpecialChars, 6, bytes, 16, _SIDD_UBYTE_OPS | _SIDD_CMP_RANGES | _SIDD_LEAST_SIGNIFICANT);
-            if (index != 16)
-                return f + index;
-        }
-#endif
-        for ( ; f != l; ++f)
-        {
+        for ( ; f != l; ++f) {
             if (static_cast<uint8_t>(*f) >= 0x80 || static_cast<uint8_t>(*f) <= 0x1F || *f == '\\')
                 break;
         }
-
         return f;
     };
 
@@ -492,27 +475,12 @@ EscapeStringResult EscapeString(char const* curr, char const* last, Fn yield, bo
 
     static constexpr char const kHexDigits[] = "0123456789ABCDEF";
 
-#if JSON_USE_SSE42
-    auto const kSpecialChars = _mm_set_epi8(0, 0, 0, 0, 0, 0, '/','/', '\xFF','\x80', '\x1F','\x00', '\\','\\', '"','"');
-#endif
-
     auto skip_non_special = [=](char const* f, char const* l)
     {
-#if JSON_USE_SSE42
-        for ( ; l - f >= 16; f += 16)
-        {
-            auto const bytes = _mm_loadu_si128(reinterpret_cast<__m128i const*>(f));
-            int const index = _mm_cmpestri(kSpecialChars, 10, bytes, 16, _SIDD_UBYTE_OPS | _SIDD_CMP_RANGES | _SIDD_LEAST_SIGNIFICANT);
-            if (index != 16)
-                return f + index;
-        }
-#endif
-        for ( ; f != l; ++f)
-        {
+        for ( ; f != l; ++f) {
             if (static_cast<uint8_t>(*f) >= 0x80 || static_cast<uint8_t>(*f) <= 0x1F || *f == '\\' || *f == '"' || *f == '/')
                 break;
         }
-
         return f;
     };
 
