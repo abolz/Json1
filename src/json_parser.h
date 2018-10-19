@@ -771,7 +771,7 @@ inline char const* Lexer::SkipWhitespace(char const* f, char const* l)
 // Parser
 //==================================================================================================
 
-enum class ParseStatus {
+enum class ParseStatus : uint8_t {
     success,
     duplicate_key,
     expected_colon_after_key,

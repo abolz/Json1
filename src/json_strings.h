@@ -20,7 +20,15 @@
 
 #pragma once
 
-#include "json_parser.h"
+#include "json_parser.h" // only JSON_USE_SSE42
+
+#include <cassert>
+#include <cstdint>
+#include <cstring>
+
+#ifndef JSON_ASSERT
+#define JSON_ASSERT(X) assert(X)
+#endif
 
 namespace json {
 
@@ -75,7 +83,7 @@ inline bool IsValidCodepoint(char32_t U)
     return U < 0xD800 || (U > 0xDFFF && U <= 0x10FFFF);
 }
 
-enum class DecodeUTF8SequenceStatus {
+enum class DecodeUTF8SequenceStatus : uint8_t {
     success,
     invalid_utf8_encoding,
 };
@@ -194,7 +202,7 @@ void EncodeUTF8(char32_t U, Put8 put)
     }
 }
 
-enum class DecodeUCNSequenceStatus {
+enum class DecodeUCNSequenceStatus : uint8_t {
     success,
     incomplete_or_invalid_ucn,
     invalid_utf16_encoding,
@@ -207,7 +215,7 @@ struct DecodeUCNSequenceResult {
 
 inline bool ReadHex16_unsafe(char const* next, char32_t& W)
 {
-    using namespace ::json::charclass;
+    using json::charclass::HexDigitValue;
 
     char32_t const h0 = HexDigitValue(next[0]);
     char32_t const h1 = HexDigitValue(next[1]);
@@ -301,7 +309,7 @@ namespace strings {
 //      '\u' four-hex-digits
 //
 
-enum class Status {
+enum class Status : uint8_t {
     success,
     incomplete,
     invalid_escaped_character,
@@ -319,8 +327,7 @@ struct UnescapeStringResult {
 template <typename Fn>
 UnescapeStringResult UnescapeString(char const* curr, char const* last, Fn yield, bool allow_invalid_unicode = false)
 {
-    namespace unicode = ::json::impl::unicode;
-    using namespace ::json::charclass;
+    namespace unicode = json::impl::unicode;
 
 #if JSON_USE_SSE42
     auto const kSpecialChars = _mm_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '\xFF', '\x80', '\x1F', '\x00', '\\', '\\');
@@ -482,7 +489,6 @@ template <typename Fn>
 EscapeStringResult EscapeString(char const* curr, char const* last, Fn yield, bool allow_invalid_unicode = false)
 {
     namespace unicode = json::impl::unicode;
-    using namespace ::json::charclass;
 
     static constexpr char const kHexDigits[] = "0123456789ABCDEF";
 
