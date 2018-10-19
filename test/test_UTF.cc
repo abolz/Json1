@@ -1,6 +1,6 @@
-#include "catch.hpp"
-#include "../src/json.h"
 #include "../src/json_strings.h"
+#include "../src/json.h"
+#include "catch.hpp"
 
 struct UTF8Test {
     std::string input;
