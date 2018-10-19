@@ -40,17 +40,6 @@
 //#define JSON_NEVER_INLINE inline
 //#endif
 
-//#define JSON_USE_SSE42 1
-#ifndef JSON_USE_SSE42
-#if defined(__SSE_4_2__) || (/* for MSVC: */ defined(__AVX__) || defined(__AVX2__))
-#define JSON_USE_SSE42 1
-#endif
-#endif
-
-#if JSON_USE_SSE42
-#include <nmmintrin.h>
-#endif
-
 namespace json {
 
 //==================================================================================================
@@ -532,34 +521,9 @@ inline Token Lexer::LexString(char const* p)
 
     ptr = ++p; // skip "
 
-#if JSON_USE_SSE42
-    auto const kSpecialChars = _mm_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, '\xFF', '\x80', '\x1F', '\x00', '\\', '\\', '"', '"');
-    int special_chars_length = 8;
-#endif
-
     uint32_t mask = 0;
     for (;;)
     {
-#if JSON_USE_SSE42
-        for ( ; end - p >= 16; p += 16)
-        {
-            auto const bytes = _mm_loadu_si128(reinterpret_cast<__m128i const*>(p));
-            int const index = _mm_cmpestri(kSpecialChars, special_chars_length, bytes, 16, _SIDD_UBYTE_OPS | _SIDD_CMP_RANGES | _SIDD_LEAST_SIGNIFICANT);
-            if (index != 16)
-            {
-                p += index;
-                break;
-            }
-        }
-
-        if (p == end)
-            return MakeToken(p, TokenKind::incomplete);
-        if (*p == '"')
-            break;
-#endif
-
-        // Scan inputs smaller than 16 characters (or the rest of small inputs)
-        // or initial runs of UTF-8 sequences.
         for ( ; p != end; ++p)
         {
             uint32_t const m = CharClass(*p);
@@ -578,12 +542,6 @@ inline Token Lexer::LexString(char const* p)
         if (p == end)
             return MakeToken(p, TokenKind::incomplete);
         ++p;
-
-#if JSON_USE_SSE42
-        // Once the NeedsCleaning flag is set, we only need to look at '\' and '"'.
-        JSON_ASSERT((mask & CC_needs_cleaning) != 0);
-        special_chars_length = 4;
-#endif
     }
 
     JSON_ASSERT(p != end);
@@ -618,29 +576,9 @@ inline Token Lexer::LexNumber(char const* p, Options const& options)
     return MakeNumberToken(p, nc);
 }
 
-inline Token Lexer::LexIdentifier(char const* p, Options const& options)
+inline Token Lexer::LexIdentifier(char const* p, Options const& /*options*/)
 {
-    using namespace ::json::charclass;
-
-#if 0 && JSON_USE_SSE42
-    if (options.allow_unquoted_keys)
-    {
-        auto const kSpecialChars = _mm_set_epi8(0, 0, 0, 0, 0, 0, '$', '$', '9', '0', '_', '_', 'Z', 'A', 'a', 'z');
-
-        for ( ; end - p >= 16; p += 16)
-        {
-            auto const bytes = _mm_loadu_si128(reinterpret_cast<__m128i const*>(p));
-            int const index = _mm_cmpestri(kSpecialChars, 10, bytes, 16, _SIDD_UBYTE_OPS | _SIDD_CMP_RANGES | _SIDD_LEAST_SIGNIFICANT | _SIDD_NEGATIVE_POLARITY);
-            if (index != 16)
-            {
-                p += index;
-                return MakeToken(p, TokenKind::identifier);
-            }
-        }
-    }
-#else
-    static_cast<void>(options); // unused
-#endif
+    using json::charclass::IsIdentifierBody;
 
     for ( ; p != end && IsIdentifierBody(*p); ++p)
     {
@@ -745,20 +683,7 @@ inline Token Lexer::MakeNumberToken(char const* p, NumberClass number_class)
 
 inline char const* Lexer::SkipWhitespace(char const* f, char const* l)
 {
-#if 0 && JSON_USE_SSE42
-    auto const kSpecialChars = _mm_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '\t', '\r', '\n', ' ');
-
-    for ( ; l - f >= 16; f += 16)
-    {
-        auto const bytes = _mm_loadu_si128(reinterpret_cast<__m128i const*>(f));
-        int const index = _mm_cmpestri(kSpecialChars, 4, bytes, 16, _SIDD_UBYTE_OPS | _SIDD_CMP_EQUAL_ANY | _SIDD_LEAST_SIGNIFICANT | _SIDD_NEGATIVE_POLARITY);
-        if (index != 16) {
-            return f + index;
-        }
-    }
-#endif
-
-    using ::json::charclass::IsWhitespace;
+    using json::charclass::IsWhitespace;
 
     for ( ; f != l && IsWhitespace(*f); ++f)
     {
