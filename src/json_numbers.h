@@ -24,6 +24,7 @@
 
 #include "json_parser.h" // NumberClass, Options
 
+#include <climits>
 #include <limits>
 
 #if JSON_NUMBERS_USE_GRISU2
