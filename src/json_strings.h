@@ -327,7 +327,7 @@ UnescapeStringResult UnescapeString(char const* curr, char const* last, Fn yield
 {
     namespace unicode = json::impl::unicode;
 
-    auto skip_non_special = [=](char const* f, char const* l)
+    auto skip_non_special = [](char const* f, char const* l)
     {
         for ( ; f != l; ++f) {
             if (static_cast<uint8_t>(*f) >= 0x80 || static_cast<uint8_t>(*f) <= 0x1F || *f == '\\')
@@ -477,7 +477,7 @@ EscapeStringResult EscapeString(char const* curr, char const* last, Fn yield, bo
 
     static constexpr char const kHexDigits[] = "0123456789ABCDEF";
 
-    auto skip_non_special = [=](char const* f, char const* l)
+    auto skip_non_special = [](char const* f, char const* l)
     {
         for ( ; f != l; ++f) {
             if (static_cast<uint8_t>(*f) >= 0x80 || static_cast<uint8_t>(*f) <= 0x1F || *f == '\\' || *f == '"' || *f == '/')
@@ -544,7 +544,7 @@ EscapeStringResult EscapeString(char const* curr, char const* last, Fn yield, bo
                     return {curr, Status::invalid_utf8_encoding};
 
                 // Replace invalid UTF-8 sequences with a single Unicode replacement character.
-                yield_n("\\uFFFD", 6);
+                yield_n("\xEF\xBF\xBD", 3);
                 break;
             }
         }
