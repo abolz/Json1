@@ -20,7 +20,11 @@
 
 #pragma once
 
-#define JSON_NUMBERS_USE_GRISU2 1
+// If non-zero, use the Grisu2 algorithm for converting binary to decimal
+// floating-point numbers, otherwise use the Ryu algorithm.
+// The results obtained from Grisu2 are not always optimal, but always correct.
+// Additionally this uses only ~2KB of tables (instead of ~16KB for Ryu).
+#define JSON_NUMBERS_USE_GRISU2 0
 
 #include "json_parser.h" // NumberClass, Options
 
