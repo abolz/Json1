@@ -189,7 +189,7 @@ struct ScanNumberResult
 // PRE: next points at '0', ..., '9', or '-'
 inline ScanNumberResult ScanNumber(char const* next, char const* last, Options const& options)
 {
-    using ::json::charclass::IsDigit;
+    using json::charclass::IsDigit;
 
     if (next == last)
         return {next, NumberClass::invalid};
@@ -229,11 +229,11 @@ inline ScanNumberResult ScanNumber(char const* next, char const* last, Options c
                 break;
         }
     }
-    else if (options.allow_nan_inf && last - next >= 8 && ::json::impl::StrEqual(next, "Infinity", 8))
+    else if (options.allow_nan_inf && last - next >= 8 && json::impl::StrEqual(next, "Infinity", 8))
     {
         return {next + 8, is_neg ? NumberClass::neg_infinity : NumberClass::pos_infinity};
     }
-    else if (options.allow_nan_inf && last - next >= 3 && ::json::impl::StrEqual(next, "NaN", 3))
+    else if (options.allow_nan_inf && last - next >= 3 && json::impl::StrEqual(next, "NaN", 3))
     {
         return {next + 3, NumberClass::nan};
     }
@@ -503,7 +503,7 @@ L_again:
 
 inline Token Lexer::LexString(char const* p)
 {
-    using namespace ::json::charclass;
+    using namespace json::charclass;
 
     JSON_ASSERT(p != end);
     JSON_ASSERT(*p == '"');
@@ -513,23 +513,21 @@ inline Token Lexer::LexString(char const* p)
     uint32_t mask = 0;
     for (;;)
     {
-        for ( ; p != end; ++p)
+        if (p == end)
+            return MakeToken(p, TokenKind::incomplete);
+
+        uint32_t const m = CharClass(*p);
+        mask |= m;
+        if ((m & CC_string_special) != 0)
         {
-            uint32_t const m = CharClass(*p);
-            mask |= m;
-            if ((m & CC_string_special) != 0)
+            if (*p == '"')
                 break;
+
+            JSON_ASSERT(*p == '\\');
+            ++p;
+            if (p == end)
+                return MakeToken(p, TokenKind::incomplete);
         }
-
-        if (p == end)
-            return MakeToken(p, TokenKind::incomplete);
-        if (*p == '"')
-            break;
-
-        JSON_ASSERT(*p == '\\');
-        ++p;
-        if (p == end)
-            return MakeToken(p, TokenKind::incomplete);
         ++p;
     }
 
@@ -541,7 +539,7 @@ inline Token Lexer::LexString(char const* p)
 
 inline Token Lexer::LexNumber(char const* p, Options const& options)
 {
-    using ::json::charclass::IsSeparator;
+    using json::charclass::IsSeparator;
 
     auto const res = ScanNumber(p, end, options);
 
@@ -808,23 +806,23 @@ ParseStatus Parser<ParseCallbacks>::ParseIdentifier()
     auto const len = l - f;
 
     ParseStatus ec;
-    if (len == 4 && ::json::impl::StrEqual(f, "null", 4))
+    if (len == 4 && json::impl::StrEqual(f, "null", 4))
     {
         ec = cb.HandleNull(f, l);
     }
-    else if (len == 4 && ::json::impl::StrEqual(f, "true", 4))
+    else if (len == 4 && json::impl::StrEqual(f, "true", 4))
     {
         ec = cb.HandleTrue(f, l);
     }
-    else if (len == 5 && ::json::impl::StrEqual(f, "false", 5))
+    else if (len == 5 && json::impl::StrEqual(f, "false", 5))
     {
         ec = cb.HandleFalse(f, l);
     }
-    else if (options.allow_nan_inf && len == 8 && ::json::impl::StrEqual(f, "Infinity", 8))
+    else if (options.allow_nan_inf && len == 8 && json::impl::StrEqual(f, "Infinity", 8))
     {
         ec = cb.HandleNumber(f, l, NumberClass::pos_infinity);
     }
-    else if (options.allow_nan_inf && len == 3 && ::json::impl::StrEqual(f, "NaN", 3))
+    else if (options.allow_nan_inf && len == 3 && json::impl::StrEqual(f, "NaN", 3))
     {
         ec = cb.HandleNumber(f, l, NumberClass::nan);
     }
