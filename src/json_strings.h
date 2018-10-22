@@ -544,7 +544,9 @@ EscapeStringResult EscapeString(char const* curr, char const* last, YieldChar yi
                     return {curr, Status::invalid_utf8_encoding};
 
                 // Replace invalid UTF-8 sequences with a single Unicode replacement character.
-                yield_n("\xEF\xBF\xBD", 3);
+                // U-escape the replacement character (instead of writing the UTF-8 encoded version),
+                // since U-escaped characters are more likely to be detected by humans.
+                yield_n("\\uFFFD", 6);
                 break;
             }
         }
