@@ -171,32 +171,32 @@ inline DecodeUTF8SequenceResult ValidateUTF8Sequence(char const* next, char cons
     return DecodeUTF8Sequence(next, last, U);
 }
 
-template <typename Put8>
-void EncodeUTF8(char32_t U, Put8 put)
+template <typename YieldChar>
+void EncodeUTF8(char32_t U, YieldChar yield)
 {
     JSON_ASSERT(IsValidCodepoint(U));
 
     if (U <= 0x7F)
     {
-        put( static_cast<uint8_t>( U ) );
+        yield( static_cast<char>(static_cast<uint8_t>( U )) );
     }
     else if (U <= 0x7FF)
     {
-        put( static_cast<uint8_t>( 0xC0 | ((U >>  6)       ) ) );
-        put( static_cast<uint8_t>( 0x80 | ((U      ) & 0x3F) ) );
+        yield( static_cast<char>(static_cast<uint8_t>( 0xC0 | ((U >>  6)       ) )) );
+        yield( static_cast<char>(static_cast<uint8_t>( 0x80 | ((U      ) & 0x3F) )) );
     }
     else if (U <= 0xFFFF)
     {
-        put( static_cast<uint8_t>( 0xE0 | ((U >> 12)       ) ) );
-        put( static_cast<uint8_t>( 0x80 | ((U >>  6) & 0x3F) ) );
-        put( static_cast<uint8_t>( 0x80 | ((U      ) & 0x3F) ) );
+        yield( static_cast<char>(static_cast<uint8_t>( 0xE0 | ((U >> 12)       ) )) );
+        yield( static_cast<char>(static_cast<uint8_t>( 0x80 | ((U >>  6) & 0x3F) )) );
+        yield( static_cast<char>(static_cast<uint8_t>( 0x80 | ((U      ) & 0x3F) )) );
     }
     else
     {
-        put( static_cast<uint8_t>( 0xF0 | ((U >> 18) & 0x3F) ) );
-        put( static_cast<uint8_t>( 0x80 | ((U >> 12) & 0x3F) ) );
-        put( static_cast<uint8_t>( 0x80 | ((U >>  6) & 0x3F) ) );
-        put( static_cast<uint8_t>( 0x80 | ((U      ) & 0x3F) ) );
+        yield( static_cast<char>(static_cast<uint8_t>( 0xF0 | ((U >> 18) & 0x3F) )) );
+        yield( static_cast<char>(static_cast<uint8_t>( 0x80 | ((U >> 12) & 0x3F) )) );
+        yield( static_cast<char>(static_cast<uint8_t>( 0x80 | ((U >>  6) & 0x3F) )) );
+        yield( static_cast<char>(static_cast<uint8_t>( 0x80 | ((U      ) & 0x3F) )) );
     }
 }
 
@@ -322,8 +322,8 @@ struct UnescapeStringResult {
     Status ec;
 };
 
-template <typename Fn>
-UnescapeStringResult UnescapeString(char const* curr, char const* last, Fn yield, bool allow_invalid_unicode = false)
+template <typename YieldChar>
+UnescapeStringResult UnescapeString(char const* curr, char const* last, YieldChar yield, bool allow_invalid_unicode = false)
 {
     namespace unicode = json::impl::unicode;
 
@@ -432,7 +432,7 @@ UnescapeStringResult UnescapeString(char const* curr, char const* last, Fn yield
                     switch (res.ec)
                     {
                     case unicode::DecodeUCNSequenceStatus::success:
-                        unicode::EncodeUTF8(U, [&](uint8_t code_unit) { yield(static_cast<char>(code_unit)); });
+                        unicode::EncodeUTF8(U, yield);
                         break;
 
                     case unicode::DecodeUCNSequenceStatus::incomplete_or_invalid_ucn:
@@ -470,8 +470,8 @@ struct EscapeStringResult {
     Status ec;
 };
 
-template <typename Fn>
-EscapeStringResult EscapeString(char const* curr, char const* last, Fn yield, bool allow_invalid_unicode = false)
+template <typename YieldChar>
+EscapeStringResult EscapeString(char const* curr, char const* last, YieldChar yield, bool allow_invalid_unicode = false)
 {
     namespace unicode = json::impl::unicode;
 
