@@ -1,5 +1,4 @@
 #include "bench_rapidjson.h"
-#include "bench.h"
 #include "jsonstats.h"
 #include "traverse.h"
 
@@ -10,6 +9,7 @@
 
 #include <vector>
 
+#define USE_RAPIDJSON_DOCUMENT 1
 #define USE_MEMSTREAM 1
 #define USE_ITERATIVE_PARSER 0
 
@@ -91,9 +91,9 @@ struct GenStatsHandler : public rapidjson::BaseReaderHandler<>
         return true;
     }
 
-    bool EndObject(rapidjson::SizeType /*memberCount*/)
+    bool EndObject(rapidjson::SizeType memberCount)
     {
-        //stats.total_object_length += memberCount;
+        stats.total_object_length += memberCount;
         return true;
     }
 
@@ -103,13 +103,14 @@ struct GenStatsHandler : public rapidjson::BaseReaderHandler<>
         return true;
     }
 
-    bool EndArray(rapidjson::SizeType /*elementCount*/)
+    bool EndArray(rapidjson::SizeType elementCount)
     {
-        //stats.total_array_length += elementCount;
+        stats.total_array_length += elementCount;
         return true;
     }
 };
 
+#if !USE_RAPIDJSON_DOCUMENT
 struct ParseValueHandler : public rapidjson::BaseReaderHandler<>
 {
     std::vector<json::Value> stack;
@@ -233,6 +234,7 @@ private:
         keys.erase(Ik, keys.end());
     }
 };
+#endif
 
 } // namespace
 
@@ -271,7 +273,7 @@ bool rapidjson_dom_stats(jsonstats& stats, char const* first, char const* last)
     static_cast<void>(last);
 #endif
 
-#if BENCH_USE_RAPIDJSON_DOCUMENT
+#if USE_RAPIDJSON_DOCUMENT
     rapidjson::Document doc;
     doc.ParseStream<kParseFlags>(is);
 

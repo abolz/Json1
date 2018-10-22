@@ -1,4 +1,0 @@
-#pragma once
-#define BENCH_USE_RAPIDJSON_DOCUMENT 1
-//#define RAPIDJSON_SSE2 1
-//#define RAPIDJSON_SSE42 1

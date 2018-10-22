@@ -1,5 +1,4 @@
 #include "bench_json1.h"
-#include "bench.h"
 #include "jsonstats.h"
 #include "traverse.h"
 
@@ -8,7 +7,11 @@
 #include "../src/json_strings.h"
 #include "../src/json_numbers.h"
 
+#define USE_RAPIDJSON_DOCUMENT 1
+
+#if USE_RAPIDJSON_DOCUMENT
 #include "../ext/rapidjson/document.h"
+#endif
 
 using namespace json;
 
@@ -57,9 +60,9 @@ struct GenStatsCallbacks
         return {};
     }
 
-    ParseStatus HandleEndArray(size_t /*count*/)
+    ParseStatus HandleEndArray(size_t count)
     {
-        //stats.total_array_length += count;
+        stats.total_array_length += count;
         return {};
     }
 
@@ -74,9 +77,9 @@ struct GenStatsCallbacks
         return {};
     }
 
-    ParseStatus HandleEndObject(size_t /*count*/)
+    ParseStatus HandleEndObject(size_t count)
     {
-        //stats.total_object_length += count;
+        stats.total_object_length += count;
         return {};
     }
 
@@ -97,7 +100,7 @@ private:
         intptr_t len = 0;
         if (sc == StringClass::needs_cleaning)
         {
-            auto const res = json::strings::UnescapeString(first, last, [&](char) { ++len; });
+            auto const res = json::strings::UnescapeString(first, last, [&](char) { ++len; }, /*allow_invalid_unicode*/ false);
             if (res.ec != json::strings::Status::success) {
                 return ParseStatus::invalid_string;
             }
@@ -112,6 +115,7 @@ private:
     }
 };
 
+#if USE_RAPIDJSON_DOCUMENT
 struct RapidjsonDocumentCallbacks
 {
     static constexpr bool kCopyCleanStrings = true;
@@ -320,9 +324,9 @@ struct RapidjsonStatsHandler
         return true;
     }
 
-    bool EndObject(size_t /*memberCount*/)
+    bool EndObject(size_t memberCount)
     {
-        //stats.total_object_length += memberCount;
+        stats.total_object_length += memberCount;
         return true;
     }
 
@@ -332,12 +336,13 @@ struct RapidjsonStatsHandler
         return true;
     }
 
-    bool EndArray(size_t /*elementCount*/)
+    bool EndArray(size_t elementCount)
     {
-        //stats.total_array_length += elementCount;
+        stats.total_array_length += elementCount;
         return true;
     }
 };
+#endif
 
 } // namespace
 
@@ -351,7 +356,7 @@ bool json1_sax_stats(jsonstats& stats, char const* first, char const* last)
 
 bool json1_dom_stats(jsonstats& stats, char const* first, char const* last)
 {
-#if BENCH_USE_RAPIDJSON_DOCUMENT
+#if USE_RAPIDJSON_DOCUMENT
     rapidjson::Document doc;
 
     auto const res = ParseRapidjsonDocument(doc, first, last);

@@ -142,7 +142,7 @@ struct TestImplementation {
 };
 
 TestImplementation test_implementations[] = {
-#if 1
+#if 0
 #if REVERSE_ORDER
     { "json1 sax", &json1_sax_test::test },
     { "rapidjson sax", &rapidjson_sax_test::test },
