@@ -1419,8 +1419,9 @@ ParseStatus parse(Value& value, std::string const& str, Options const& options =
 
 struct StringifyOptions
 {
-    // If true, parses "NaN" and "Infinity" (without the quotes) as numbers.
+    // If true, NaN and Infinity will be strinigified as "NaN" or "Infinity", resp.
     // Default is false.
+    // NOTE: Setting this flag to true, may result in invalid JSON.
     bool allow_nan_inf = false;
 
     // If >= 0, pretty-print the JSON.
