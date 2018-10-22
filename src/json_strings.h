@@ -200,9 +200,74 @@ void EncodeUTF8(char32_t U, YieldChar yield)
     }
 }
 
+enum class DecodeUTF16SequenceStatus : uint8_t {
+    success,
+    invalid_utf16_encoding,
+};
+
+struct DecodeUTF16SequenceResult {
+    char16_t const* ptr;
+    DecodeUTF16SequenceStatus ec;
+};
+
+inline DecodeUTF16SequenceResult DecodeUTF16Sequence(char16_t const* next, char16_t const* last, char32_t& U)
+{
+    JSON_ASSERT(next != last);
+
+    // Always consume the first code-unit.
+    // The second code-unit - if any - will only be consumed if the UTF16-sequence is valid.
+    char32_t const W1 = *next;
+    ++next;
+
+    if (W1 < 0xD800 || W1 > 0xDFFF)
+    {
+        U = W1;
+        return {next, DecodeUTF16SequenceStatus::success};
+    }
+
+    if (W1 > 0xDBFF)
+    {
+        return {next, DecodeUTF16SequenceStatus::invalid_utf16_encoding};
+    }
+
+    if (next == last)
+    {
+        return {next, DecodeUTF16SequenceStatus::invalid_utf16_encoding};
+    }
+
+    char32_t const W2 = *next;
+    if (W2 < 0xDC00 || W2 > 0xDFFF)
+    {
+        return {next, DecodeUTF16SequenceStatus::invalid_utf16_encoding};
+    }
+
+    ++next;
+
+    U = (((W1 & 0x3FF) << 10) | (W2 & 0x3FF)) + 0x10000;
+    return {next, DecodeUTF16SequenceStatus::success};
+}
+
+template <typename YieldChar16>
+void EncodeUTF16(char32_t U, YieldChar16 yield)
+{
+    JSON_ASSERT(IsValidCodepoint(U));
+
+    if (U < 0x10000)
+    {
+        yield( static_cast<char16_t>(U) );
+    }
+    else
+    {
+        char32_t const Up = U - 0x10000;
+
+        yield( static_cast<char16_t>(0xD800 + ((Up >> 10) & 0x3FF)) );
+        yield( static_cast<char16_t>(0xDC00 + ((Up      ) & 0x3FF)) );
+    }
+}
+
 enum class DecodeUCNSequenceStatus : uint8_t {
     success,
-    incomplete_or_invalid_ucn,
+    invalid_ucn,
     invalid_utf16_encoding,
 };
 
@@ -235,7 +300,7 @@ inline DecodeUCNSequenceResult DecodeUCNSequence(char const* next, char const* l
     {
         // Incomplete or syntax error.
         // Return the position of the first (invalid) UCN.
-        return {next, DecodeUCNSequenceStatus::incomplete_or_invalid_ucn};
+        return {next, DecodeUCNSequenceStatus::invalid_ucn};
     }
 
     // Always consume the first UCN.
@@ -260,7 +325,7 @@ inline DecodeUCNSequenceResult DecodeUCNSequence(char const* next, char const* l
     {
         // Incomplete or syntax error.
         // Return the position of the second (invalid) UCN.
-        return {next, DecodeUCNSequenceStatus::incomplete_or_invalid_ucn};
+        return {next, DecodeUCNSequenceStatus::invalid_ucn};
     }
 
     if (W2 < 0xDC00 || W2 > 0xDFFF)
@@ -435,7 +500,7 @@ UnescapeStringResult UnescapeString(char const* curr, char const* last, YieldCha
                         unicode::EncodeUTF8(U, yield);
                         break;
 
-                    case unicode::DecodeUCNSequenceStatus::incomplete_or_invalid_ucn:
+                    case unicode::DecodeUCNSequenceStatus::invalid_ucn:
                         // Syntax error.
                         return {curr, Status::invalid_ucn};
 
