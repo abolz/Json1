@@ -713,18 +713,18 @@ struct Failed
 
 //struct ParseCallbacks
 //{
-//    ParseStatus HandleNull(char const* first, char const* last, Options const& options);
-//    ParseStatus HandleTrue(char const* first, char const* last, Options const& options);
-//    ParseStatus HandleFalse(char const* first, char const* last, Options const& options);
-//    ParseStatus HandleNumber(char const* first, char const* last, NumberClass nc, Options const& options);
-//    ParseStatus HandleString(char const* first, char const* last, StringClass sc, Options const& options);
-//    ParseStatus HandleKey(char const* first, char const* last, StringClass sc, Options const& options);
-//    ParseStatus HandleBeginArray(Options const& options);
-//    ParseStatus HandleEndArray(size_t count, Options const& options);
-//    ParseStatus HandleEndElement(size_t& count, Options const& options);
-//    ParseStatus HandleBeginObject(Options const& options);
-//    ParseStatus HandleEndObject(size_t count, Options const& options);
-//    ParseStatus HandleEndMember(size_t& count, Options const& options);
+//    ParseStatus HandleNull(char const* first, char const* last);
+//    ParseStatus HandleTrue(char const* first, char const* last);
+//    ParseStatus HandleFalse(char const* first, char const* last,);
+//    ParseStatus HandleNumber(char const* first, char const* last, NumberClass nc);
+//    ParseStatus HandleString(char const* first, char const* last, StringClass sc);
+//    ParseStatus HandleKey(char const* first, char const* last, StringClass sc);
+//    ParseStatus HandleBeginArray();
+//    ParseStatus HandleEndArray(size_t count);
+//    ParseStatus HandleEndElement(size_t& count);
+//    ParseStatus HandleBeginObject();
+//    ParseStatus HandleEndObject(size_t count);
+//    ParseStatus HandleEndMember(size_t& count);
 //};
 
 template <typename ParseCallbacks>
