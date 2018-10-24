@@ -881,19 +881,19 @@ struct ParseValueCallbacks
     std::vector<Value> stack;
     std::vector<String> keys;
 
-    ParseStatus HandleNull(char const* /*first*/, char const* /*last*/)
+    ParseStatus HandleNull()
     {
         stack.emplace_back(nullptr);
         return {};
     }
 
-    ParseStatus HandleTrue(char const* /*first*/, char const* /*last*/)
+    ParseStatus HandleTrue()
     {
         stack.emplace_back(true);
         return {};
     }
 
-    ParseStatus HandleFalse(char const* /*first*/, char const* /*last*/)
+    ParseStatus HandleFalse()
     {
         stack.emplace_back(false);
         return {};

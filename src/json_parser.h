@@ -713,9 +713,9 @@ struct Failed
 
 //struct ParseCallbacks
 //{
-//    ParseStatus HandleNull(char const* first, char const* last);
-//    ParseStatus HandleTrue(char const* first, char const* last);
-//    ParseStatus HandleFalse(char const* first, char const* last,);
+//    ParseStatus HandleNull();
+//    ParseStatus HandleTrue();
+//    ParseStatus HandleFalse();
 //    ParseStatus HandleNumber(char const* first, char const* last, NumberClass nc);
 //    ParseStatus HandleString(char const* first, char const* last, StringClass sc);
 //    ParseStatus HandleKey(char const* first, char const* last, StringClass sc);
@@ -808,15 +808,15 @@ ParseStatus Parser<ParseCallbacks>::ParseIdentifier()
     ParseStatus ec;
     if (len == 4 && json::impl::StrEqual(f, "null", 4))
     {
-        ec = cb.HandleNull(f, l);
+        ec = cb.HandleNull();
     }
     else if (len == 4 && json::impl::StrEqual(f, "true", 4))
     {
-        ec = cb.HandleTrue(f, l);
+        ec = cb.HandleTrue();
     }
     else if (len == 5 && json::impl::StrEqual(f, "false", 5))
     {
-        ec = cb.HandleFalse(f, l);
+        ec = cb.HandleFalse();
     }
     else if (options.allow_nan_inf && len == 8 && json::impl::StrEqual(f, "Infinity", 8))
     {
@@ -1110,9 +1110,9 @@ ParseResult ParseSAX(ParseCallbacks& cb, char const* next, char const* last, Opt
 
 //struct ParseCallbacks
 //{
-//    virtual json::ParseStatus HandleNull(char const* first, char const* last) = 0;
-//    virtual json::ParseStatus HandleTrue(char const* first, char const* last) = 0;
-//    virtual json::ParseStatus HandleFalse(char const* first, char const* last) = 0;
+//    virtual json::ParseStatus HandleNull() = 0;
+//    virtual json::ParseStatus HandleTrue() = 0;
+//    virtual json::ParseStatus HandleFalse() = 0;
 //    virtual json::ParseStatus HandleNumber(char const* first, char const* last, json::NumberClass nc) = 0;
 //    virtual json::ParseStatus HandleString(char const* first, char const* last, json::StringClass sc) = 0;
 //    virtual json::ParseStatus HandleKey(char const* first, char const* last, json::StringClass sc) = 0;

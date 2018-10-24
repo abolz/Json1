@@ -23,19 +23,19 @@ struct GenStatsCallbacks
 
     GenStatsCallbacks(jsonstats& s) : stats(s) {}
 
-    ParseStatus HandleNull(char const* /*first*/, char const* /*last*/)
+    ParseStatus HandleNull()
     {
         ++stats.null_count;
         return {};
     }
 
-    ParseStatus HandleTrue(char const* /*first*/, char const* /*last*/)
+    ParseStatus HandleTrue()
     {
         ++stats.true_count;
         return {};
     }
 
-    ParseStatus HandleFalse(char const* /*first*/, char const* /*last*/)
+    ParseStatus HandleFalse()
     {
         ++stats.false_count;
         return {};
@@ -66,7 +66,7 @@ struct GenStatsCallbacks
         return {};
     }
 
-    ParseStatus HandleEndElement(size_t& /*count*/)
+    ParseStatus HandleEndElement(size_t /*count*/)
     {
         return {};
     }
@@ -83,7 +83,7 @@ struct GenStatsCallbacks
         return {};
     }
 
-    ParseStatus HandleEndMember(size_t& /*count*/)
+    ParseStatus HandleEndMember(size_t /*count*/)
     {
         return {};
     }
@@ -127,19 +127,19 @@ struct RapidjsonDocumentCallbacks
     {
     }
 
-    ParseStatus HandleNull(char const* /*first*/, char const* /*last*/)
+    ParseStatus HandleNull()
     {
         doc->Null();
         return {};
     }
 
-    ParseStatus HandleTrue(char const* /*first*/, char const* /*last*/)
+    ParseStatus HandleTrue()
     {
         doc->Bool(true);
         return {};
     }
 
-    ParseStatus HandleFalse(char const* /*first*/, char const* /*last*/)
+    ParseStatus HandleFalse()
     {
         doc->Bool(false);
         return {};
@@ -188,7 +188,7 @@ struct RapidjsonDocumentCallbacks
         return {};
     }
 
-    ParseStatus HandleEndElement(size_t& /*count*/)
+    ParseStatus HandleEndElement(size_t /*count*/)
     {
         return {};
     }
@@ -205,7 +205,7 @@ struct RapidjsonDocumentCallbacks
         return {};
     }
 
-    ParseStatus HandleEndMember(size_t& /*count*/)
+    ParseStatus HandleEndMember(size_t /*count*/)
     {
         return {};
     }
