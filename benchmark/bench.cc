@@ -29,57 +29,6 @@ struct TestFile {
     const unsigned char* data;
 };
 
-class ZeroTerminatedCopy {
-public:
-    ZeroTerminatedCopy(const TestFile& file) {
-        data = new char[1 + file.length];
-        memcpy(data, file.data, file.length);
-        data[file.length] = 0;
-    }
-
-    ZeroTerminatedCopy(size_t length, const void* original_data) {
-        data = new char[1 + length];
-        memcpy(data, original_data, length);
-        data[length] = 0;
-    }
-
-    ~ZeroTerminatedCopy() {
-        delete[] data;
-    }
-
-    char* get() const {
-        return data;
-    }
-
-private:
-    char* data;
-};
-
-class Copy {
-public:
-    Copy(const TestFile& file) {
-        data = new char[file.length];
-        memcpy(data, file.data, file.length);
-    }
-
-    Copy(size_t length, const void* original_data) {
-        data = new char[length];
-        memcpy(data, original_data, length);
-    }
-
-    ~Copy() {
-        delete[] data;
-    }
-
-    char* get() const {
-        return data;
-    }
-
-private:
-    char* data;
-};
-
-
 namespace json1_sax_test {
     void test(jsonstats& stats, const TestFile& file) {
         if (!json1_sax_stats(stats, reinterpret_cast<char const*>(file.data), reinterpret_cast<char const*>(file.data) + file.length)) {
