@@ -1952,9 +1952,14 @@ inline double FastPath(uint64_t digits, int num_digits, int exponent)
 
 #else // ^^^ CC_CORRECT_DOUBLE_OPERATIONS
 
-inline bool FastPath(double& /*result*/, uint64_t /*digits*/, int /*num_digits*/, int /*exponent*/)
+inline bool UseFastPath(int /*num_digits*/, int /*exponent*/)
 {
     return false;
+}
+
+inline double FastPath(uint64_t /*digits*/, int /*num_digits*/, int /*exponent*/)
+{
+    return 0;
 }
 
 #endif // ^^^ !CC_CORRECT_DOUBLE_OPERATIONS
