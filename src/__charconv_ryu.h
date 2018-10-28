@@ -1089,7 +1089,7 @@ inline uint64_t Div100(const uint64_t x)
     return Mul128(x >> 2, 0x28F5C28F5C28F5C3u).hi >> 2;
 }
 
-inline uint64_t Div100000000(const uint64_t x)
+inline uint64_t Div100_000_000(const uint64_t x)
 {
     return Mul128(x, 0xABCC77118461CEFDu).hi >> 26;
 }
@@ -1182,7 +1182,7 @@ inline int PrintDecimalDigitsDouble(char* buf, uint64_t output)
     {
         CC_ASSERT(i > 8);
 #if CC_32_BIT_PLATFORM
-        uint64_t const q = Div100000000(output);
+        uint64_t const q = Div100_000_000(output);
         uint32_t const r = static_cast<uint32_t>(output - 100000000 * q);
 #else
         uint64_t const q = output / 100000000;
