@@ -2997,6 +2997,11 @@ inline double LoadFloat(uint64_t f, int e)
     return Double((exponent << Double::PhysicalSignificandSize) | (f & Double::SignificandMask)).Value();
 }
 
+struct StrtodApproxResult {
+    double value;
+    bool is_correct;
+};
+
 // Use DiyFp's to approximate digits * 10^exponent.
 //
 // If the function returns true then 'result' is the correct double.
@@ -3005,7 +3010,7 @@ inline double LoadFloat(uint64_t f, int e)
 //
 // PRE: num_digits + exponent <= kMaxDecimalPower
 // PRE: num_digits + exponent >  kMinDecimalPower
-inline bool StrtodApprox(double& result, char const* digits, int num_digits, int exponent)
+inline StrtodApproxResult StrtodApprox(char const* digits, int num_digits, int exponent)
 {
     static_assert(DiyFp::SignificandSize == 64,
         "We use uint64's. This only works if the DiyFp uses uint64's too.");
@@ -3035,8 +3040,7 @@ inline bool StrtodApprox(double& result, char const* digits, int num_digits, int
 
     if (UseFastPath(num_digits, exponent))
     {
-        result = FastPath(input.x.f, num_digits, exponent);
-        return true;
+        return {FastPath(input.x.f, num_digits, exponent), true};
     }
 
     constexpr uint32_t ULP = DiyFpWithError::Denominator;
@@ -3241,11 +3245,10 @@ inline bool StrtodApprox(double& result, char const* digits, int num_digits, int
         success = false;
     }
 
-    result = LoadFloat(input.x.f, input.x.e);
-    return success;
+    return {LoadFloat(input.x.f, input.x.e), success};
 }
 
-inline bool ComputeGuess(double& result, char const* digits, int num_digits, int exponent)
+inline StrtodApproxResult ComputeGuess(char const* digits, int num_digits, int exponent)
 {
     CC_ASSERT(num_digits > 0);
     CC_ASSERT(num_digits <= kMaxSignificantDigits);
@@ -3256,19 +3259,17 @@ inline bool ComputeGuess(double& result, char const* digits, int num_digits, int
     if (num_digits + exponent > kMaxDecimalPower)
     {
         // Overflow.
-        result = std::numeric_limits<double>::infinity();
-        return true;
+        return {std::numeric_limits<double>::infinity(), true};
     }
 
     // Any v <= 10^-324 is interpreted as 0.
     if (num_digits + exponent <= kMinDecimalPower)
     {
         // Underflow.
-        result = 0;
-        return true;
+        return {0.0, true};
     }
 
-    return StrtodApprox(result, digits, num_digits, exponent);
+    return StrtodApprox(digits, num_digits, exponent);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -3634,12 +3635,14 @@ inline double DigitsToDouble(char const* digits, int num_digits, int exponent, b
         return 0;
     }
 
-    double v;
-    if (ComputeGuess(v, digits, num_digits, exponent))
+    auto const approx = ComputeGuess(digits, num_digits, exponent);
+    if (approx.is_correct)
     {
-        return v;
+        return approx.value;
     }
 
+    // v = approx.value
+    //
     // Now v is either the correct or the next-lower double (i.e. the correct
     // double is v+).
     // Compare B = buffer * 10^exponent with v's upper boundary m+.
@@ -3648,12 +3651,12 @@ inline double DigitsToDouble(char const* digits, int num_digits, int exponent, b
     //  ---+--------+----+-------------+---
     //              B
 
-    int const cmp = CompareBufferWithDiyFp(digits, num_digits, exponent, nonzero_tail, UpperBoundary(v));
-    if (cmp < 0 || (cmp == 0 && SignificandIsEven(v)))
+    int const cmp = CompareBufferWithDiyFp(digits, num_digits, exponent, nonzero_tail, UpperBoundary(approx.value));
+    if (cmp < 0 || (cmp == 0 && SignificandIsEven(approx.value)))
     {
-        return v;
+        return approx.value;
     }
-    return NextLarger(v);
+    return NextLarger(approx.value);
 }
 
 } // namespace charconv_internal
