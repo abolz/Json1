@@ -353,9 +353,7 @@ private:
     Token LexIdentifier (char const* p, Options const& options);
     Token LexComment    (char const* p);
 
-    Token MakeToken       (char const* p, TokenKind kind);
-    Token MakeStringToken (char const* p, StringClass string_class);
-    Token MakeNumberToken (char const* p, NumberClass number_class);
+    Token MakeToken(char const* p, TokenKind kind);
 
     static char const* SkipWhitespace(char const* f, char const* l);
 };
@@ -505,36 +503,38 @@ inline Token Lexer::LexString(char const* p)
 {
     using namespace json::charclass;
 
-    JSON_ASSERT(p != end);
-    JSON_ASSERT(*p == '"');
+    JSON_ASSERT(p != end && *p == '"');
 
     ptr = ++p; // skip "
 
     uint32_t mask = 0;
-    for (;;)
+    while (p != end)
     {
-        if (p == end)
-            return MakeToken(p, TokenKind::incomplete);
-
-        uint32_t const m = CharClass(*p);
+        auto const m = CharClass(*p);
         mask |= m;
         if ((m & CC_string_special) != 0)
         {
-            if (*p == '"')
+            if (*p == '"' || ++p == end)
                 break;
-
-            JSON_ASSERT(*p == '\\');
-            ++p;
-            if (p == end)
-                return MakeToken(p, TokenKind::incomplete);
         }
         ++p;
     }
 
-    JSON_ASSERT(p != end);
-    JSON_ASSERT(*p == '"');
+    JSON_ASSERT(p == end || *p == '"');
 
-    return MakeStringToken(p, (mask & CC_needs_cleaning) != 0 ? StringClass::needs_cleaning : StringClass::plain_ascii);
+    Token tok;
+
+    tok.ptr = ptr;
+    tok.end = p;
+    tok.kind = p == end ? TokenKind::incomplete : TokenKind::string;
+    tok.string_class = (mask & CC_needs_cleaning) != 0 ? StringClass::needs_cleaning : StringClass::plain_ascii;
+//  tok.number_class = 0;
+
+    ptr = (p == end)
+        ? p
+        : p + 1; // skip "
+
+    return tok;
 }
 
 inline Token Lexer::LexNumber(char const* p, Options const& options)
@@ -560,7 +560,17 @@ inline Token Lexer::LexNumber(char const* p, Options const& options)
         }
     }
 
-    return MakeNumberToken(p, nc);
+    Token tok;
+
+    tok.ptr = ptr;
+    tok.end = p;
+    tok.kind = TokenKind::number;
+//  tok.string_class = 0;
+    tok.number_class = nc;
+
+    ptr = p;
+
+    return tok;
 }
 
 inline Token Lexer::LexIdentifier(char const* p, Options const& /*options*/)
@@ -630,38 +640,6 @@ inline Token Lexer::MakeToken(char const* p, TokenKind kind)
     tok.kind = kind;
 //  tok.string_class = 0;
 //  tok.number_class = 0;
-
-    ptr = p;
-
-    return tok;
-}
-
-inline Token Lexer::MakeStringToken(char const* p, StringClass string_class)
-{
-    Token tok;
-
-    tok.ptr = ptr;
-    tok.end = p;
-    tok.kind = TokenKind::string;
-    tok.string_class = string_class;
-//  tok.number_class = 0;
-
-    JSON_ASSERT(p != end);
-    JSON_ASSERT(*p == '"' || *p == '\'');
-    ptr = ++p; // skip " or '
-
-    return tok;
-}
-
-inline Token Lexer::MakeNumberToken(char const* p, NumberClass number_class)
-{
-    Token tok;
-
-    tok.ptr = ptr;
-    tok.end = p;
-    tok.kind = TokenKind::number;
-//  tok.string_class = 0;
-    tok.number_class = number_class;
 
     ptr = p;
 

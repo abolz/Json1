@@ -177,27 +177,6 @@ inline char* Utoa_8Digits(char* buf, uint32_t digits)
     return buf + 8;
 }
 
-inline int Pow5BitLength(int e) // e == 0 ? 1 : ceil(log_2(5^e))
-{
-    CC_ASSERT(e >= 0);
-    CC_ASSERT(e <= 1500); // Only tested for e <= 1500
-    return static_cast<int>((static_cast<uint32_t>(e) * 1217359) >> 19) + 1;
-}
-
-inline int Log10Pow2(int e) // floor(log_10(2^e))
-{
-    CC_ASSERT(e >= 0);
-    CC_ASSERT(e <= 1500); // Only tested for e <= 1500
-    return static_cast<int>((static_cast<uint32_t>(e) * 78913) >> 18);
-}
-
-inline int Log10Pow5(int e) // floor(log_10(5^e))
-{
-    CC_ASSERT(e >= 0);
-    CC_ASSERT(e <= 1500); // Only tested for e <= 1500
-    return static_cast<int>((static_cast<uint32_t>(e) * 732923) >> 20);
-}
-
 //==================================================================================================
 // DoubleToDecimal
 //
@@ -243,6 +222,27 @@ FOR ANY DAMAGES OR OTHER LIABILITY, WHETHER IN CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 */
+
+inline int Pow5BitLength(int e) // e == 0 ? 1 : ceil(log_2(5^e))
+{
+    CC_ASSERT(e >= 0);
+    CC_ASSERT(e <= 1500); // Only tested for e <= 1500
+    return static_cast<int>((static_cast<uint32_t>(e) * 1217359) >> 19) + 1;
+}
+
+inline int Log10Pow2(int e) // floor(log_10(2^e))
+{
+    CC_ASSERT(e >= 0);
+    CC_ASSERT(e <= 1500); // Only tested for e <= 1500
+    return static_cast<int>((static_cast<uint32_t>(e) * 78913) >> 18);
+}
+
+inline int Log10Pow5(int e) // floor(log_10(5^e))
+{
+    CC_ASSERT(e >= 0);
+    CC_ASSERT(e <= 1500); // Only tested for e <= 1500
+    return static_cast<int>((static_cast<uint32_t>(e) * 732923) >> 20);
+}
 
 // sizeof(tables) = 9888 bytes
 
