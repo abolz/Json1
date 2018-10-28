@@ -1628,17 +1628,17 @@ inline char* ExponentToString(char* buffer, int value)
     return buffer + n;
 }
 
-inline char* FormatFixed(char* buffer, int length, int decimal_point, bool force_trailing_dot_zero)
+inline char* FormatFixed(char* buffer, int num_digits, int decimal_point, bool force_trailing_dot_zero)
 {
     CC_ASSERT(buffer != nullptr);
-    CC_ASSERT(length >= 1);
+    CC_ASSERT(num_digits >= 1);
 
-    if (length <= decimal_point)
+    if (num_digits <= decimal_point)
     {
         // digits[000]
         // CC_ASSERT(buffer_capacity >= decimal_point + (force_trailing_dot_zero ? 2 : 0));
 
-        std::memset(buffer + length, '0', static_cast<size_t>(decimal_point - length));
+        std::memset(buffer + num_digits, '0', static_cast<size_t>(decimal_point - num_digits));
         buffer += decimal_point;
         if (force_trailing_dot_zero)
         {
@@ -1652,48 +1652,48 @@ inline char* FormatFixed(char* buffer, int length, int decimal_point, bool force
         // dig.its
         // CC_ASSERT(buffer_capacity >= length + 1);
 
-        std::memmove(buffer + (decimal_point + 1), buffer + decimal_point, static_cast<size_t>(length - decimal_point));
+        std::memmove(buffer + (decimal_point + 1), buffer + decimal_point, static_cast<size_t>(num_digits - decimal_point));
         buffer[decimal_point] = '.';
-        return buffer + (length + 1);
+        return buffer + (num_digits + 1);
     }
     else // decimal_point <= 0
     {
         // 0.[000]digits
         // CC_ASSERT(buffer_capacity >= 2 + (-decimal_point) + length);
 
-        std::memmove(buffer + (2 + -decimal_point), buffer, static_cast<size_t>(length));
+        std::memmove(buffer + (2 + -decimal_point), buffer, static_cast<size_t>(num_digits));
         buffer[0] = '0';
         buffer[1] = '.';
         std::memset(buffer + 2, '0', static_cast<size_t>(-decimal_point));
-        return buffer + (2 + (-decimal_point) + length);
+        return buffer + (2 + (-decimal_point) + num_digits);
     }
 }
 
-inline char* FormatExponential(char* buffer, int length, int exponent)
+inline char* FormatExponential(char* buffer, int num_digits, int exponent, bool /*force_trailing_dot_zero*/)
 {
     CC_ASSERT(buffer != nullptr);
-    CC_ASSERT(length >= 1);
+    CC_ASSERT(num_digits >= 1);
 
-    if (length == 1)
+    if (num_digits == 1)
     {
         // dE+123
-        // CC_ASSERT(buffer_capacity >= length + 5);
-
-        //
-        // XXX:
-        // Should force_trailing_dot_zero apply here?!?!
-        //
+        // CC_ASSERT(buffer_capacity >= num_digits + 5);
 
         buffer += 1;
+//      if (force_trailing_dot_zero)
+//      {
+//          *buffer++ = '.';
+//          *buffer++ = '0';
+//      }
     }
     else
     {
         // d.igitsE+123
-        // CC_ASSERT(buffer_capacity >= length + 1 + 5);
+        // CC_ASSERT(buffer_capacity >= num_digits + 1 + 5);
 
-        std::memmove(buffer + 2, buffer + 1, static_cast<size_t>(length - 1));
+        std::memmove(buffer + 2, buffer + 1, static_cast<size_t>(num_digits - 1));
         buffer[1] = '.';
-        buffer += 1 + length;
+        buffer += 1 + num_digits;
     }
 
 //  if (exponent != 0)
@@ -1735,7 +1735,7 @@ inline char* FormatGeneral(char* buffer, int num_digits, int exponent, bool forc
 
     return use_fixed
         ? FormatFixed(buffer, num_digits, decimal_point, force_trailing_dot_zero)
-        : FormatExponential(buffer, num_digits, decimal_point - 1);
+        : FormatExponential(buffer, num_digits, decimal_point - 1, force_trailing_dot_zero);
 
 #endif
 }
@@ -1746,7 +1746,6 @@ inline char* PositiveDoubleToString(char* buffer, double value, bool force_trail
     CC_ASSERT(value > 0);
 
     auto const res = DoubleToDigits(buffer, value);
-
     CC_ASSERT(res.num_digits <= std::numeric_limits<double>::max_digits10);
 
     return FormatGeneral(buffer, res.num_digits, res.exponent, force_trailing_dot_zero);
