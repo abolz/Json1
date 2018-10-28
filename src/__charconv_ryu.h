@@ -1573,15 +1573,20 @@ inline DoubleToDecimalResult DoubleToDecimal(double value)
 // Dtoa
 //==================================================================================================
 
-inline void DoubleToDigits(char* buffer, int& num_digits, int& exponent, double value)
+struct DoubleToDigitsResult {
+    int num_digits;
+    int exponent;
+};
+
+inline DoubleToDigitsResult DoubleToDigits(char* buffer, double value)
 {
     CC_ASSERT(Double(value).IsFinite());
     CC_ASSERT(value > 0);
 
-    DoubleToDecimalResult res = DoubleToDecimal(value);
+    DoubleToDecimalResult const res = DoubleToDecimal(value);
 
-    num_digits = PrintDecimalDigitsDouble(buffer, res.digits);
-    exponent = res.exponent;
+    int const num_digits = PrintDecimalDigitsDouble(buffer, res.digits);
+    return {num_digits, res.exponent};
 }
 
 inline char* ExponentToString(char* buffer, int value)
@@ -1740,13 +1745,11 @@ inline char* PositiveDoubleToString(char* buffer, double value, bool force_trail
     CC_ASSERT(Double(value).IsFinite());
     CC_ASSERT(value > 0);
 
-    int num_digits = 0;
-    int exponent = 0;
-    DoubleToDigits(buffer, num_digits, exponent, value);
+    auto const res = DoubleToDigits(buffer, value);
 
-    CC_ASSERT(num_digits <= std::numeric_limits<double>::max_digits10);
+    CC_ASSERT(res.num_digits <= std::numeric_limits<double>::max_digits10);
 
-    return FormatGeneral(buffer, num_digits, exponent, force_trailing_dot_zero);
+    return FormatGeneral(buffer, res.num_digits, res.exponent, force_trailing_dot_zero);
 }
 
 //==================================================================================================
