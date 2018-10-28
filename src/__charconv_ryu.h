@@ -1872,10 +1872,24 @@ inline int DigitValue(char ch)
 // Any integer with at most 15 decimal digits will hence fit into a double
 // (which has a 53-bit significand) without loss of precision.
 constexpr int kMaxExactDoubleIntegerDecimalDigits = 15;
+constexpr int kMaxExactPowerOfTen = 22;
 
-inline bool FastPath(double& result, uint64_t digits, int num_digits, int exponent)
+inline bool UseFastPath(int num_digits, int exponent)
 {
-    static constexpr int kMaxExactPowerOfTen = 22;
+    if (num_digits > kMaxExactDoubleIntegerDecimalDigits)
+        return false;
+    if (exponent < -kMaxExactPowerOfTen)
+        return false;
+    if (exponent > (kMaxExactDoubleIntegerDecimalDigits - num_digits) + kMaxExactPowerOfTen)
+        return false;
+
+    return true;
+}
+
+inline double FastPath(uint64_t digits, int num_digits, int exponent)
+{
+    CC_ASSERT(UseFastPath(num_digits, exponent));
+
     static constexpr double kExactPowersOfTen[] = {
         1.0e+00,
         1.0e+01,
@@ -1903,44 +1917,37 @@ inline bool FastPath(double& result, uint64_t digits, int num_digits, int expone
 //      1.0e+23,
     };
 
-    if (num_digits > kMaxExactDoubleIntegerDecimalDigits)
-        return false;
-
     // The significand fits into a double.
-    // If 10^exponent (resp. 10^-exponent) fits into a double too then we can
+    // Since 10^exponent (resp. 10^-exponent) fits into a double too, we can
     // compute the result simply by multiplying (resp. dividing) the two
     // numbers.
     // This is possible because IEEE guarantees that floating-point operations
     // return the best possible approximation.
 
     int const remaining_digits = kMaxExactDoubleIntegerDecimalDigits - num_digits; // 0 <= rd <= 15
-    if (-kMaxExactPowerOfTen <= exponent && exponent <= remaining_digits + kMaxExactPowerOfTen)
-    {
-        CC_ASSERT(digits <= INT64_MAX);
-        double d = static_cast<double>(static_cast<int64_t>(digits));
-        if (exponent < 0)
-        {
-            d /= kExactPowersOfTen[-exponent];
-        }
-        else if (exponent <= kMaxExactPowerOfTen)
-        {
-            d *= kExactPowersOfTen[exponent];
-        }
-        else
-        {
-            // The buffer is short and we can multiply it with 10^remaining_digits
-            // and the remaining exponent fits into a double.
-            //
-            // Eg. 123 * 10^25 = (123*1000) * 10^22
 
-            d *= kExactPowersOfTen[remaining_digits]; // exact
-            d *= kExactPowersOfTen[exponent - remaining_digits];
-        }
-        result = d;
-        return true;
+    CC_ASSERT(digits <= INT64_MAX);
+    double d = static_cast<double>(static_cast<int64_t>(digits));
+    if (exponent < 0)
+    {
+        d /= kExactPowersOfTen[-exponent];
+    }
+    else if (exponent <= kMaxExactPowerOfTen)
+    {
+        d *= kExactPowersOfTen[exponent];
+    }
+    else
+    {
+        // The buffer is short and we can multiply it with 10^remaining_digits
+        // and the remaining exponent fits into a double.
+        //
+        // Eg. 123 * 10^25 = (123*1000) * 10^22
+
+        d *= kExactPowersOfTen[remaining_digits]; // exact
+        d *= kExactPowersOfTen[exponent - remaining_digits];
     }
 
-    return false;
+    return d;
 }
 
 #else // ^^^ CC_CORRECT_DOUBLE_OPERATIONS
@@ -3026,8 +3033,11 @@ inline bool StrtodApprox(double& result, char const* digits, int num_digits, int
     input.x.e = 0;
     input.error = 0;
 
-    if (FastPath(result, input.x.f, num_digits, exponent))
+    if (UseFastPath(num_digits, exponent))
+    {
+        result = FastPath(input.x.f, num_digits, exponent);
         return true;
+    }
 
     constexpr uint32_t ULP = DiyFpWithError::Denominator;
     constexpr uint32_t InitialError = ULP / 2;
