@@ -420,31 +420,7 @@ UnescapeStringResult UnescapeString(char const* curr, char const* last, YieldCha
             break;
         }
 
-        if (static_cast<uint8_t>(*curr) >= 0x80)
-        {
-            char const* const f = curr;
-
-            auto const res = unicode::ValidateUTF8Sequence(f, last);
-            curr = res.ptr;
-
-            switch (res.ec)
-            {
-            case unicode::DecodeUTF8SequenceStatus::success:
-                yield_n(f, curr - f);
-                break;
-
-            case unicode::DecodeUTF8SequenceStatus::invalid_utf8_encoding:
-                if (!allow_invalid_unicode)
-                    return {curr, Status::invalid_utf8_encoding};
-
-                // Replace invalid UTF-8 sequences with a single Unicode replacement character.
-                yield_n("\xEF\xBF\xBD", 3);
-                break;
-            }
-
-            JSON_ASSERT(curr != f);
-        }
-        else if (*curr == '\\')
+        if (*curr == '\\')
         {
             char const* const f = curr; // The start of the possible UCN sequence
 
@@ -520,6 +496,30 @@ UnescapeStringResult UnescapeString(char const* curr, char const* last, YieldCha
                 return {curr, Status::invalid_escaped_character};
             }
         }
+        else if (static_cast<uint8_t>(*curr) >= 0x80)
+        {
+            char const* const f = curr;
+
+            auto const res = unicode::ValidateUTF8Sequence(f, last);
+            curr = res.ptr;
+
+            switch (res.ec)
+            {
+            case unicode::DecodeUTF8SequenceStatus::success:
+                yield_n(f, curr - f);
+                break;
+
+            case unicode::DecodeUTF8SequenceStatus::invalid_utf8_encoding:
+                if (!allow_invalid_unicode)
+                    return {curr, Status::invalid_utf8_encoding};
+
+                // Replace invalid UTF-8 sequences with a single Unicode replacement character.
+                yield_n("\xEF\xBF\xBD", 3);
+                break;
+            }
+
+            JSON_ASSERT(curr != f);
+        }
         else
         {
             JSON_ASSERT(static_cast<uint8_t>(*curr) <= 0x1F);
@@ -571,7 +571,27 @@ EscapeStringResult EscapeString(char const* curr, char const* last, YieldChar yi
             break;
         }
 
-        if (static_cast<uint8_t>(*curr) >= 0x80)
+        if (0x20 <= static_cast<uint8_t>(*curr) && static_cast<uint8_t>(*curr) < 0x80)
+        {
+            auto do_escape = [&](char ch) {
+                switch (ch) {
+                case '"':
+                case '\\':
+                    return true;
+                case '/':
+                    return curr != first && curr[-1] == '<';
+                }
+                return false;
+            };
+
+            if (do_escape(*curr))
+            {
+                yield('\\');
+            }
+            yield(*curr);
+            ++curr;
+        }
+        else if (static_cast<uint8_t>(*curr) >= 0x80)
         {
             char const* const f = curr;
 
@@ -615,28 +635,10 @@ EscapeStringResult EscapeString(char const* curr, char const* last, YieldChar yi
                 break;
             }
         }
-        else if (static_cast<uint8_t>(*curr) >= 0x20)
-        {
-            auto do_escape = [&](char ch) {
-                switch (ch) {
-                case '"':
-                case '\\':
-                    return true;
-                case '/':
-                    return curr != first && curr[-1] == '<';
-                }
-                return false;
-            };
-
-            if (do_escape(*curr))
-            {
-                yield('\\');
-            }
-            yield(*curr);
-            ++curr;
-        }
         else // (ASCII) control character
         {
+            JSON_ASSERT(static_cast<uint8_t>(*curr) <= 0x1F);
+
             yield('\\');
             switch (*curr)
             {
