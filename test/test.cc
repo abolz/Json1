@@ -779,6 +779,19 @@ TEST_CASE("Parse_string")
     }
 }
 
+TEST_CASE("Invalid/incomplete strings")
+{
+    static const std::string kStrings[] = {
+        "[\"0123456789ABCDEF",
+    };
+
+    for (auto const& s : kStrings) {
+        json::Value j;
+        auto const ec = json::parse(j, s);
+        CHECK(ec != json::ParseStatus::success);
+    }
+}
+
 TEST_CASE("Stringify")
 {
     std::string const input = R"({
