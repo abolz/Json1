@@ -226,6 +226,9 @@ inline double InternalStrtod(char const* next, char const* last)
     int  exponent     = 0;
     bool zero_tail    = true;
 
+    JSON_ASSERT(next != last);
+    JSON_ASSERT(IsDigit(*next));
+
     if (last - next > kMaxInt)
         return std::numeric_limits<double>::quiet_NaN();
 
@@ -237,13 +240,14 @@ inline double InternalStrtod(char const* next, char const* last)
 
         JSON_ASSERT(!IsDigit(*next));
     }
-    else if (IsDigit(*next))
+    else
     {
         for (;;)
         {
             if (num_digits < kMaxSignificantDigits)
             {
-                digits[num_digits++] = *next;
+                digits[num_digits] = *next;
+                ++num_digits;
             }
             else
             {
@@ -252,20 +256,13 @@ inline double InternalStrtod(char const* next, char const* last)
             }
             ++next;
             if (next == last)
-                goto L_convert;
+                break;
             if (!IsDigit(*next))
                 break;
         }
     }
-    //else if (*next == '.')
-    //{
-    //}
-    else
-    {
-        JSON_ASSERT(false);
-    }
 
-    if (*next == '.')
+    if (next != last && *next == '.')
     {
         ++next;
         JSON_ASSERT(next != last);
@@ -273,6 +270,8 @@ inline double InternalStrtod(char const* next, char const* last)
 
         if (num_digits == 0)
         {
+            // 0.xxx
+            // Skip leading zeros in the fractional part and adjust the exponent.
             while (*next == '0')
             {
                 --exponent;
@@ -288,7 +287,8 @@ inline double InternalStrtod(char const* next, char const* last)
         {
             if (num_digits < kMaxSignificantDigits)
             {
-                digits[num_digits++] = *next;
+                digits[num_digits] = *next;
+                ++num_digits;
                 --exponent;
             }
             else
@@ -297,11 +297,11 @@ inline double InternalStrtod(char const* next, char const* last)
             }
             ++next;
             if (next == last)
-                goto L_convert;
+                break;
         }
     }
 
-    if (*next == 'e' || *next == 'E')
+    if (next != last && (*next == 'e' || *next == 'E'))
     {
         ++next;
         JSON_ASSERT(next != last);
@@ -313,13 +313,32 @@ inline double InternalStrtod(char const* next, char const* last)
             JSON_ASSERT(next != last);
         }
 
-        int const max_exp_len = static_cast<int>(last - next);
-        int const exp_val = ReadInt<int>(next, max_exp_len < 8 ? max_exp_len : 8);
+        // Skip leading zeros.
+        // The exponent is always decimal, not octal.
+        while (next != last && *next == '0')
+        {
+            ++next;
+        }
 
-        exponent += exp_is_neg ? -exp_val : exp_val;
+        if (last - next <= 8)
+        {
+            // NB:
+            // ReadInt returns 0 for empty inputs.
+            int const e = ReadInt<int>(next, static_cast<int>(last - next));
+            exponent += exp_is_neg ? -e : e;
+        }
+        else
+        {
+            // Exponents >= 10^8 are considered to be +Infinity.
+            // This is slightly incorrect (since the computed exponent and the
+            // parsed exponent might cancel each other out), but still correct
+            // for sane inputs.
+            return exp_is_neg || num_digits == 0
+                ? 0.0
+                : std::numeric_limits<double>::infinity();
+        }
     }
 
-L_convert:
     return DigitsToDouble(digits, num_digits, exponent, !zero_tail);
 }
 
