@@ -887,12 +887,12 @@ inline uint64_t ShiftRight128(Uint64x2 x, int dist)
 //   The 64-bit factor is variable and passed in, the 128-bit factor comes
 //   from a lookup table. We know that the 64-bit factor only has 55
 //   significant bits (i.e., the 9 topmost bits are zeros). The 128-bit
-//   factor only has 124 significant bits (i.e., the 4 topmost bits are
+//   factor only has 123 significant bits (i.e., the 5 topmost bits are
 //   zeros).
 // Shift:
-//   In principle, the multiplication result requires 55 + 124 = 179 bits to
+//   In principle, the multiplication result requires 55 + 123 = 178 bits to
 //   represent. However, we then shift this value to the right by j, which is
-//   at least j >= 115, so the result is guaranteed to fit into 179 - 115 = 64
+//   at least j >= 114, so the result is guaranteed to fit into 178 - 114 = 64
 //   bits. This means that we only need the topmost 64 significant bits of
 //   the 64x128-bit multiplication.
 //
@@ -923,6 +923,7 @@ inline uint64_t ShiftRight128(Uint64x2 x, int dist)
 inline uint64_t MulShift(uint64_t m, Uint64x2 const* mul, int j)
 {
     CC_ASSERT((m >> 55) == 0); // m is maximum 55 bits
+    CC_ASSERT((mul->hi >> (123 - 64)) == 0); // mul has at most 123 bits
 
 #if 1 && CC_HAS_UINT128
     __extension__ using uint128_t = unsigned __int128;
@@ -955,6 +956,7 @@ inline void MulShiftAll(uint64_t mv, uint64_t mp, uint64_t mm, Uint64x2 const* m
 inline void MulShiftAll(uint64_t mv, uint64_t /*mp*/, uint64_t mm, Uint64x2 const* mul, int j, uint64_t* vr, uint64_t* vp, uint64_t* vm)
 {
     CC_ASSERT((mv >> 55) == 0); // m2 is maximum 55 bits
+    CC_ASSERT((mul->hi >> (123 - 64)) == 0); // mul has at most 123 bits
 
     uint64_t const m2 = mv / 2;
     uint32_t const mmShift = static_cast<uint32_t>(mv - mm - 1);
@@ -1173,7 +1175,7 @@ inline DoubleToDecimalResult DoubleToDecimal(double value)
         CC_ASSERT(q >= 0);
         int const k = kPow5InvDoubleBitLength + Pow5BitLength(q) - 1;
         int const j = -e2 + q + k;
-        CC_ASSERT(j >= 114 + (q == 0 ? 1 : 0));
+        CC_ASSERT(j >= 114);
 
         e10 = q;
 
@@ -1182,7 +1184,7 @@ inline DoubleToDecimalResult DoubleToDecimal(double value)
 
         // 22 = floor(log_5(2^53))
         // 23 = floor(log_5(2^(53+2)))
-        if (q <= 22) 
+        if (q <= 22)
         {
             // This should use q <= 22, but I think 21 is also safe. Smaller values
             // may still be safe, but it's more difficult to reason about them.
