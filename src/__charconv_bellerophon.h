@@ -36,22 +36,6 @@
 #define CC_ASSERT(X) assert(X)
 #endif
 
-// 0: Numbers of the form ...5000...0 round upwards.
-// 1: Numbers of the form ...5000...0 round towards even. (Match double-conversion.)
-#define CC_DTOA_ROUND_TO_NEAREST_EVEN 1
-
-#if defined(_M_IX86) || defined(_M_ARM) || defined(__i386__) || defined(__arm__)
-#define CC_32_BIT_PLATFORM 1
-#else
-// Assume 64-bit platform
-#endif
-
-#if defined(__GNUC__) && defined(__SIZEOF_INT128__)
-#define CC_HAS_UINT128 1
-#elif defined(_MSC_VER) && defined(_M_X64)
-#define CC_HAS_64_BIT_INTRINSICS 1
-#endif
-
 namespace charconv_bellerophon {
 
 //==================================================================================================
