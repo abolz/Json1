@@ -135,49 +135,6 @@ struct Double
 };
 
 //==================================================================================================
-// Itoa helper
-//==================================================================================================
-
-inline char* Utoa_2Digits(char* buf, uint32_t digits)
-{
-    static constexpr char const* kDigits100 =
-        "00010203040506070809"
-        "10111213141516171819"
-        "20212223242526272829"
-        "30313233343536373839"
-        "40414243444546474849"
-        "50515253545556575859"
-        "60616263646566676869"
-        "70717273747576777879"
-        "80818283848586878889"
-        "90919293949596979899";
-
-    CC_ASSERT(digits < 100);
-    std::memcpy(buf, kDigits100 + 2*digits, 2 * sizeof(char));
-    return buf + 2;
-}
-
-inline char* Utoa_4Digits(char* buf, uint32_t digits)
-{
-    CC_ASSERT(digits < 10000);
-    uint32_t const q = digits / 100;
-    uint32_t const r = digits % 100;
-    Utoa_2Digits(buf + 0, q);
-    Utoa_2Digits(buf + 2, r);
-    return buf + 4;
-}
-
-inline char* Utoa_8Digits(char* buf, uint32_t digits)
-{
-    CC_ASSERT(digits < 100000000);
-    uint32_t const q = digits / 10000;
-    uint32_t const r = digits % 10000;
-    Utoa_4Digits(buf + 0, q);
-    Utoa_4Digits(buf + 4, r);
-    return buf + 8;
-}
-
-//==================================================================================================
 // DoubleToDecimal
 //
 // Implements the Ryu algorithm for (IEEE) binary to decimal floating-point conversion.
@@ -1146,88 +1103,6 @@ inline bool MultipleOfPow2(uint64_t value, int p)
 //  return (value << (64 - p)) == 0;
 }
 
-inline int DecimalLengthDouble(uint64_t v)
-{
-    CC_ASSERT(v < 100000000000000000ull);
-
-    if (v >= 10000000000000000ull) { return 17; }
-    if (v >= 1000000000000000ull) { return 16; }
-    if (v >= 100000000000000ull) { return 15; }
-    if (v >= 10000000000000ull) { return 14; }
-    if (v >= 1000000000000ull) { return 13; }
-    if (v >= 100000000000ull) { return 12; }
-    if (v >= 10000000000ull) { return 11; }
-    if (v >= 1000000000ull) { return 10; }
-    if (v >= 100000000ull) { return 9; }
-    if (v >= 10000000ull) { return 8; }
-    if (v >= 1000000ull) { return 7; }
-    if (v >= 100000ull) { return 6; }
-    if (v >= 10000ull) { return 5; }
-    if (v >= 1000ull) { return 4; }
-    if (v >= 100ull) { return 3; }
-    if (v >= 10ull) { return 2; }
-    return 1;
-}
-
-inline int PrintDecimalDigitsDouble(char* buf, uint64_t output)
-{
-    int const output_length = DecimalLengthDouble(output);
-    int i = output_length;
-
-    // We prefer 32-bit operations, even on 64-bit platforms.
-    // We have at most 17 digits, and uint32_t can store 9 digits.
-    // If output doesn't fit into uint32_t, we cut off 8 digits,
-    // so the rest will fit into uint32_t.
-    if (static_cast<uint32_t>(output >> 32) != 0)
-    {
-        CC_ASSERT(i > 8);
-#if CC_32_BIT_PLATFORM
-        uint64_t const q = Div100_000_000(output);
-        uint32_t const r = static_cast<uint32_t>(output - 100000000 * q);
-#else
-        uint64_t const q = output / 100000000;
-        uint32_t const r = static_cast<uint32_t>(output % 100000000);
-#endif
-        output = q;
-        i -= 8;
-        Utoa_8Digits(buf + i, r);
-    }
-
-    CC_ASSERT(output <= UINT32_MAX);
-    uint32_t output2 = static_cast<uint32_t>(output);
-
-    while (output2 >= 10000)
-    {
-        CC_ASSERT(i > 4);
-        uint32_t const r = output2 % 10000;
-        output2 /= 10000;
-        i -= 4;
-        Utoa_4Digits(buf + i, r);
-    }
-
-    if (output2 >= 100)
-    {
-        CC_ASSERT(i > 2);
-        uint32_t const r = output2 % 100;
-        output2 /= 100;
-        i -= 2;
-        Utoa_2Digits(buf + i, r);
-    }
-
-    if (output2 >= 10)
-    {
-        CC_ASSERT(i == 2);
-        Utoa_2Digits(buf, output2);
-    }
-    else
-    {
-        CC_ASSERT(i == 1);
-        buf[0] = static_cast<char>('0' + output2);
-    }
-
-    return output_length;
-}
-
 struct DoubleToDecimalResult {
     uint64_t digits;
     int exponent;
@@ -1572,6 +1447,127 @@ inline DoubleToDecimalResult DoubleToDecimal(double value)
 //==================================================================================================
 // Dtoa
 //==================================================================================================
+
+inline int DecimalLengthDouble(uint64_t v)
+{
+    CC_ASSERT(v < 100000000000000000ull);
+
+    if (v >= 10000000000000000ull) { return 17; }
+    if (v >= 1000000000000000ull) { return 16; }
+    if (v >= 100000000000000ull) { return 15; }
+    if (v >= 10000000000000ull) { return 14; }
+    if (v >= 1000000000000ull) { return 13; }
+    if (v >= 100000000000ull) { return 12; }
+    if (v >= 10000000000ull) { return 11; }
+    if (v >= 1000000000ull) { return 10; }
+    if (v >= 100000000ull) { return 9; }
+    if (v >= 10000000ull) { return 8; }
+    if (v >= 1000000ull) { return 7; }
+    if (v >= 100000ull) { return 6; }
+    if (v >= 10000ull) { return 5; }
+    if (v >= 1000ull) { return 4; }
+    if (v >= 100ull) { return 3; }
+    if (v >= 10ull) { return 2; }
+    return 1;
+}
+
+inline char* Utoa_2Digits(char* buf, uint32_t digits)
+{
+    static constexpr char const* kDigits100 =
+        "00010203040506070809"
+        "10111213141516171819"
+        "20212223242526272829"
+        "30313233343536373839"
+        "40414243444546474849"
+        "50515253545556575859"
+        "60616263646566676869"
+        "70717273747576777879"
+        "80818283848586878889"
+        "90919293949596979899";
+
+    CC_ASSERT(digits < 100);
+    std::memcpy(buf, kDigits100 + 2*digits, 2 * sizeof(char));
+    return buf + 2;
+}
+
+inline char* Utoa_4Digits(char* buf, uint32_t digits)
+{
+    CC_ASSERT(digits < 10000);
+    uint32_t const q = digits / 100;
+    uint32_t const r = digits % 100;
+    Utoa_2Digits(buf + 0, q);
+    Utoa_2Digits(buf + 2, r);
+    return buf + 4;
+}
+
+inline char* Utoa_8Digits(char* buf, uint32_t digits)
+{
+    CC_ASSERT(digits < 100000000);
+    uint32_t const q = digits / 10000;
+    uint32_t const r = digits % 10000;
+    Utoa_4Digits(buf + 0, q);
+    Utoa_4Digits(buf + 4, r);
+    return buf + 8;
+}
+
+inline int PrintDecimalDigitsDouble(char* buf, uint64_t output)
+{
+    int const output_length = DecimalLengthDouble(output);
+    int i = output_length;
+
+    // We prefer 32-bit operations, even on 64-bit platforms.
+    // We have at most 17 digits, and uint32_t can store 9 digits.
+    // If output doesn't fit into uint32_t, we cut off 8 digits,
+    // so the rest will fit into uint32_t.
+    if (static_cast<uint32_t>(output >> 32) != 0)
+    {
+        CC_ASSERT(i > 8);
+#if CC_32_BIT_PLATFORM
+        uint64_t const q = Div100_000_000(output);
+        uint32_t const r = static_cast<uint32_t>(output - 100000000 * q);
+#else
+        uint64_t const q = output / 100000000;
+        uint32_t const r = static_cast<uint32_t>(output % 100000000);
+#endif
+        output = q;
+        i -= 8;
+        Utoa_8Digits(buf + i, r);
+    }
+
+    CC_ASSERT(output <= UINT32_MAX);
+    uint32_t output2 = static_cast<uint32_t>(output);
+
+    while (output2 >= 10000)
+    {
+        CC_ASSERT(i > 4);
+        uint32_t const r = output2 % 10000;
+        output2 /= 10000;
+        i -= 4;
+        Utoa_4Digits(buf + i, r);
+    }
+
+    if (output2 >= 100)
+    {
+        CC_ASSERT(i > 2);
+        uint32_t const r = output2 % 100;
+        output2 /= 100;
+        i -= 2;
+        Utoa_2Digits(buf + i, r);
+    }
+
+    if (output2 >= 10)
+    {
+        CC_ASSERT(i == 2);
+        Utoa_2Digits(buf, output2);
+    }
+    else
+    {
+        CC_ASSERT(i == 1);
+        buf[0] = static_cast<char>('0' + output2);
+    }
+
+    return output_length;
+}
 
 struct DoubleToDigitsResult {
     int num_digits;
