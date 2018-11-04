@@ -64,7 +64,7 @@ inline char* NumberToString(char* buffer, int buffer_length, double value, bool 
         }
 
         if (v.SignBit())
-            *buffer = '-';
+            *buffer++ = '-';
 
         std::memcpy(buffer, "Infinity", 8);
         return buffer + 8;
