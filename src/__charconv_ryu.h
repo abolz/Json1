@@ -1028,21 +1028,24 @@ inline uint64_t Div100_000_000(const uint64_t x)
 
 #endif // CC_32_BIT_PLATFORM
 
-inline int Pow5BitLength(int e) // e == 0 ? 1 : ceil(log_2(5^e))
+// e == 0 ? 1 : ceil(log_2(5^e))
+inline int Pow5BitLength(int e)
 {
     CC_ASSERT(e >= 0);
     CC_ASSERT(e <= 1500); // Only tested for e <= 1500
     return static_cast<int>((static_cast<uint32_t>(e) * 1217359) >> 19) + 1;
 }
 
-inline int Log10Pow2(int e) // floor(log_10(2^e))
+// floor(log_10(2^e))
+inline int Log10Pow2(int e)
 {
     CC_ASSERT(e >= 0);
     CC_ASSERT(e <= 1500); // Only tested for e <= 1500
     return static_cast<int>((static_cast<uint32_t>(e) * 78913) >> 18);
 }
 
-inline int Log10Pow5(int e) // floor(log_10(5^e))
+// floor(log_10(5^e))
+inline int Log10Pow5(int e)
 {
     CC_ASSERT(e >= 0);
     CC_ASSERT(e <= 1500); // Only tested for e <= 1500
@@ -1095,8 +1098,8 @@ inline bool MultipleOfPow2(uint64_t value, int p)
     CC_ASSERT(p >= 0);
     CC_ASSERT(p <= 63);
 
+    //return (value << (64 - p)) == 0;
     return (value & ((uint64_t{1} << p) - 1)) == 0;
-//  return (value << (64 - p)) == 0;
 }
 
 struct DoubleToDecimalResult {
@@ -1177,8 +1180,9 @@ inline DoubleToDecimalResult DoubleToDecimal(double value)
         CC_ASSERT(q < kPow5InvDoubleTableSize);
         MulShiftAll(mv, mp, mm, kPow5InvDouble + q, j, &vr, &vp, &vm);
 
-        if (q <= 22) // 22 = floor(log_5(2^53))
-//      if (q <= 23) // 23 = floor(log_5(2^(53+2)))
+        // 22 = floor(log_5(2^53))
+        // 23 = floor(log_5(2^(53+2)))
+        if (q <= 22) 
         {
             // This should use q <= 22, but I think 21 is also safe. Smaller values
             // may still be safe, but it's more difficult to reason about them.
@@ -1236,7 +1240,6 @@ inline DoubleToDecimalResult DoubleToDecimal(double value)
                 vpIsTrailingZeros = true;
             }
         }
-//      else if (q <= 64)
         else if (q <= Double::SignificandSize + 2)
         {
             // TODO(ulfjack): Use a tighter bound here.
@@ -1313,7 +1316,7 @@ inline DoubleToDecimalResult DoubleToDecimal(double value)
                 ++e10;
             }
         }
-#else // ^^^ CC_32_BIT_PLATFORM
+#else
         while (vm / 10 < vp / 10)
         {
             vmIsTrailingZeros &= vm % 10 == 0;
@@ -1341,7 +1344,7 @@ inline DoubleToDecimalResult DoubleToDecimal(double value)
                 ++e10;
             }
         }
-#endif // ^^^ !CC_32_BIT_PLATFORM
+#endif
 
         bool roundUp = lastRemovedDigit >= 5;
         if (lastRemovedDigit == 5 && vrPrevIsTrailingZeros)
@@ -1411,11 +1414,6 @@ inline DoubleToDecimalResult DoubleToDecimal(double value)
 
         output = vr + (inc ? 1 : 0);
     }
-
-    //
-    // Step 5:
-    // Print the decimal representation.
-    //
 
     return {output, e10};
 }
@@ -1641,7 +1639,7 @@ inline char* FormatFixed(char* buffer, int num_digits, int decimal_point, bool f
     }
 }
 
-inline char* FormatExponential(char* buffer, int num_digits, int exponent, bool /*force_trailing_dot_zero*/)
+inline char* FormatExponential(char* buffer, int num_digits, int exponent, bool force_trailing_dot_zero)
 {
     CC_ASSERT(buffer != nullptr);
     CC_ASSERT(num_digits >= 1);
@@ -1652,11 +1650,11 @@ inline char* FormatExponential(char* buffer, int num_digits, int exponent, bool 
         // CC_ASSERT(buffer_capacity >= num_digits + 5);
 
         buffer += 1;
-//      if (force_trailing_dot_zero)
-//      {
-//          *buffer++ = '.';
-//          *buffer++ = '0';
-//      }
+        if (force_trailing_dot_zero)
+        {
+            *buffer++ = '.';
+            *buffer++ = '0';
+        }
     }
     else
     {
@@ -1668,11 +1666,8 @@ inline char* FormatExponential(char* buffer, int num_digits, int exponent, bool 
         buffer += 1 + num_digits;
     }
 
-//  if (exponent != 0)
-    {
-        buffer[0] = 'e';
-        buffer = ExponentToString(buffer + 1, exponent);
-    }
+    buffer[0] = 'e';
+    buffer = ExponentToString(buffer + 1, exponent);
 
     return buffer;
 }
@@ -1707,7 +1702,7 @@ inline char* FormatGeneral(char* buffer, int num_digits, int exponent, bool forc
 
     return use_fixed
         ? FormatFixed(buffer, num_digits, decimal_point, force_trailing_dot_zero)
-        : FormatExponential(buffer, num_digits, decimal_point - 1, force_trailing_dot_zero);
+        : FormatExponential(buffer, num_digits, decimal_point - 1, /*force_trailing_dot_zero*/ false);
 
 #endif
 }
