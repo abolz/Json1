@@ -1672,50 +1672,23 @@ inline char* FormatExponential(char* buffer, int num_digits, int exponent, bool 
     return buffer;
 }
 
-inline char* FormatGeneral(char* buffer, int num_digits, int exponent, bool force_trailing_dot_zero)
-{
-    int const decimal_point = num_digits + exponent;
-
-#if 0
-
-#if 1
-    buffer[num_digits] = 'e';
-    return ExponentToString(buffer + (num_digits + 1), decimal_point - 1);
-#else
-    return FormatExponential(buffer, num_digits, decimal_point - 1);
-#endif
-
-#else
-
-    // Changing these constants requires changing kDtoaMaxLength (see below) too.
-    // XXX:
-    // Compute kDtoaMaxLength using these constants...?!
-#if 0
-    constexpr int const kMinExp = -4;
-    constexpr int const kMaxExp = 17; // std::numeric_limits<Fp>::max_digits10;
-#else
-    constexpr int const kMinExp = -6;
-    constexpr int const kMaxExp = 21;
-#endif
-
-    bool const use_fixed = kMinExp < decimal_point && decimal_point <= kMaxExp;
-
-    return use_fixed
-        ? FormatFixed(buffer, num_digits, decimal_point, force_trailing_dot_zero)
-        : FormatExponential(buffer, num_digits, decimal_point - 1, /*force_trailing_dot_zero*/ false);
-
-#endif
-}
-
 inline char* PositiveDoubleToString(char* buffer, double value, bool force_trailing_dot_zero = false)
 {
+    constexpr int const kMinExp = -6;
+    constexpr int const kMaxExp = 21;
+
     CC_ASSERT(Double(value).IsFinite());
     CC_ASSERT(value > 0);
 
     auto const res = DoubleToDigits(buffer, value);
     CC_ASSERT(res.num_digits <= std::numeric_limits<double>::max_digits10);
 
-    return FormatGeneral(buffer, res.num_digits, res.exponent, force_trailing_dot_zero);
+    int const decimal_point = res.num_digits + res.exponent;
+
+    bool const use_fixed = -6 < decimal_point && decimal_point <= 21;
+    return use_fixed
+        ? FormatFixed(buffer, res.num_digits, decimal_point, force_trailing_dot_zero)
+        : FormatExponential(buffer, res.num_digits, decimal_point - 1, /*force_trailing_dot_zero*/ false);
 }
 
 } // namespace charconv_ryu
