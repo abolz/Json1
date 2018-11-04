@@ -187,7 +187,7 @@ struct ScanNumberResult
 };
 
 // PRE: next points at '0', ..., '9', or '-'
-inline ScanNumberResult ScanNumber(char const* next, char const* last, Options const& options)
+inline ScanNumberResult ScanNumber(char const* next, char const* last, Options const& options = {})
 {
     using json::charclass::IsDigit;
 
