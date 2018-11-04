@@ -20,12 +20,6 @@
 
 #pragma once
 
-// If non-zero, use the Grisu2 algorithm for converting binary to decimal
-// floating-point numbers, otherwise use the Ryu algorithm.
-// The results obtained from Grisu2 are not always optimal, but always correct.
-// Additionally this uses only ~2KB of tables (instead of ~16KB for Ryu).
-#define JSON_NUMBERS_USE_GRISU2 0
-
 #include "json_parser.h" // NumberClass, Options
 
 #include <climits>
@@ -40,89 +34,6 @@
 //==================================================================================================
 // NumberToString
 //==================================================================================================
-
-#if JSON_NUMBERS_USE_GRISU2
-namespace charconv_internal {
-
-inline int DecimalLengthDouble(uint64_t v)
-{
-    CC_ASSERT(v < 100000000000000000ull);
-
-    if (v >= 10000000000000000ull) { return 17; }
-    if (v >= 1000000000000000ull) { return 16; }
-    if (v >= 100000000000000ull) { return 15; }
-    if (v >= 10000000000000ull) { return 14; }
-    if (v >= 1000000000000ull) { return 13; }
-    if (v >= 100000000000ull) { return 12; }
-    if (v >= 10000000000ull) { return 11; }
-    if (v >= 1000000000ull) { return 10; }
-    if (v >= 100000000ull) { return 9; }
-    if (v >= 10000000ull) { return 8; }
-    if (v >= 1000000ull) { return 7; }
-    if (v >= 100000ull) { return 6; }
-    if (v >= 10000ull) { return 5; }
-    if (v >= 1000ull) { return 4; }
-    if (v >= 100ull) { return 3; }
-    if (v >= 10ull) { return 2; }
-    return 1;
-}
-
-inline int PrintDecimalDigitsDouble(char* buf, uint64_t output)
-{
-    int const output_length = DecimalLengthDouble(output);
-    int i = output_length;
-
-    // We prefer 32-bit operations, even on 64-bit platforms.
-    // We have at most 17 digits, and uint32_t can store 9 digits.
-    // If output doesn't fit into uint32_t, we cut off 8 digits,
-    // so the rest will fit into uint32_t.
-    if (static_cast<uint32_t>(output >> 32) != 0)
-    {
-        CC_ASSERT(i > 8);
-        uint64_t const q = output / 100000000;
-        uint32_t const r = static_cast<uint32_t>(output % 100000000);
-        output = q;
-        i -= 8;
-        Utoa_8Digits(buf + i, r);
-    }
-
-    CC_ASSERT(output <= UINT32_MAX);
-    uint32_t output2 = static_cast<uint32_t>(output);
-
-    while (output2 >= 10000)
-    {
-        CC_ASSERT(i > 4);
-        uint32_t const r = output2 % 10000;
-        output2 /= 10000;
-        i -= 4;
-        Utoa_4Digits(buf + i, r);
-    }
-
-    if (output2 >= 100)
-    {
-        CC_ASSERT(i > 2);
-        uint32_t const r = output2 % 100;
-        output2 /= 100;
-        i -= 2;
-        Utoa_2Digits(buf + i, r);
-    }
-
-    if (output2 >= 10)
-    {
-        CC_ASSERT(i == 2);
-        Utoa_2Digits(buf, output2);
-    }
-    else
-    {
-        CC_ASSERT(i == 1);
-        buf[0] = static_cast<char>('0' + output2);
-    }
-
-    return output_length;
-}
-
-} // namespace charconv_internal
-#endif
 
 namespace json {
 namespace numbers {
