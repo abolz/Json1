@@ -25,11 +25,8 @@
 #include <climits>
 #include <limits>
 
-#if JSON_NUMBERS_USE_GRISU2
-#include "__charconv_grisu2.h"
-#else
+#include "__charconv_bellerophon.h"
 #include "__charconv_ryu.h"
-#endif
 
 //==================================================================================================
 // NumberToString
@@ -54,7 +51,7 @@ inline char* NumberToString(char* buffer, int buffer_length, double value, bool 
     constexpr double kMinInteger = -9007199254740992.0; // -2^53
     constexpr double kMaxInteger =  9007199254740992.0; //  2^53
 
-    charconv_internal::Double const v(value);
+    charconv_ryu::Double const v(value);
 
     if (!v.IsFinite())
     {
@@ -101,7 +98,7 @@ inline char* NumberToString(char* buffer, int buffer_length, double value, bool 
             // Reuse PrintDecimalDigits.
             // This routine assumes that 'i' has at most 17 decimal digits.
             // We only get here if 'i' has at most 16 decimal digits.
-            return buffer + charconv_internal::PrintDecimalDigitsDouble(buffer, static_cast<uint64_t>(i));
+            return buffer + charconv_ryu::PrintDecimalDigitsDouble(buffer, static_cast<uint64_t>(i));
         }
     }
 
@@ -111,7 +108,7 @@ inline char* NumberToString(char* buffer, int buffer_length, double value, bool 
         *buffer++ = '-';
     }
 
-    return charconv_internal::PositiveDoubleToString(buffer, value, force_trailing_dot_zero);
+    return charconv_ryu::PositiveDoubleToString(buffer, value, force_trailing_dot_zero);
 }
 
 } // namespace numbers
@@ -121,7 +118,7 @@ inline char* NumberToString(char* buffer, int buffer_length, double value, bool 
 // StringToNumber
 //==================================================================================================
 
-namespace charconv_internal {
+namespace charconv_bellerophon {
 
 // PRE: NumberClass = floating_point
 inline double InternalStrtod(char const* next, char const* last)
@@ -253,7 +250,7 @@ inline double InternalStrtod(char const* next, char const* last)
     return DigitsToDouble(digits, num_digits, exponent, !zero_tail);
 }
 
-} // namespace charconv_internal
+} // namespace charconv_bellerophon
 
 namespace json {
 namespace numbers {
@@ -299,7 +296,7 @@ inline double StringToNumber(char const* first, char const* last, NumberClass nc
         int const num_digits = static_cast<int>(last - first);
         int const max_digits = num_digits <= 19 ? num_digits : 19;
 
-        uint64_t u = charconv_internal::ReadInt<uint64_t>(first, max_digits);
+        uint64_t u = charconv_bellerophon::ReadInt<uint64_t>(first, max_digits);
         if (num_digits == 20)
         {
             uint32_t const digit = static_cast<uint32_t>(first[19] - '0');
@@ -316,7 +313,7 @@ inline double StringToNumber(char const* first, char const* last, NumberClass nc
     }
 
 L_use_strtod:
-    double const value = charconv_internal::InternalStrtod(first, last);
+    double const value = charconv_bellerophon::InternalStrtod(first, last);
     return is_neg ? -value : value;
 }
 
