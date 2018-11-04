@@ -95,10 +95,13 @@ inline char* NumberToString(char* buffer, int buffer_length, double value, bool 
                 i = -i;
             }
 
+            uint64_t const digits = static_cast<uint64_t>(i);
+
             // Reuse PrintDecimalDigits.
             // This routine assumes that 'i' has at most 17 decimal digits.
             // We only get here if 'i' has at most 16 decimal digits.
-            return buffer + charconv_ryu::PrintDecimalDigitsDouble(buffer, static_cast<uint64_t>(i));
+            int const num_digits = charconv_ryu::DecimalLengthDouble(digits);
+            return buffer + charconv_ryu::PrintDecimalDigitsDouble(buffer, digits, num_digits);
         }
     }
 

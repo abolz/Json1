@@ -1486,9 +1486,8 @@ inline char* Utoa_8Digits(char* buf, uint32_t digits)
     return buf + 8;
 }
 
-inline int PrintDecimalDigitsDouble(char* buf, uint64_t output)
+inline int PrintDecimalDigitsDouble(char* buf, uint64_t output, int output_length)
 {
-    int const output_length = DecimalLengthDouble(output);
     int i = output_length;
 
     // We prefer 32-bit operations, even on 64-bit platforms.
@@ -1557,7 +1556,9 @@ inline DoubleToDigitsResult DoubleToDigits(char* buffer, double value)
 
     DoubleToDecimalResult const res = DoubleToDecimal(value);
 
-    int const num_digits = PrintDecimalDigitsDouble(buffer, res.digits);
+    int const num_digits = DecimalLengthDouble(res.digits);
+    PrintDecimalDigitsDouble(buffer, res.digits, num_digits);
+
     return {num_digits, res.exponent};
 }
 
