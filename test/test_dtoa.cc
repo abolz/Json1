@@ -19,7 +19,7 @@ static double DoubleFromBits(int biased_exponent, uint64_t significand)
     assert(biased_exponent <= 0x7FF);
     assert(significand <= 0x000FFFFFFFFFFFFFull);
 
-    return DoubleFromBits(((uint64_t)biased_exponent << 52) | significand);
+    return DoubleFromBits((static_cast<uint64_t>(biased_exponent) << 52) | significand);
 }
 
 // Ldexp = f * 2^e
