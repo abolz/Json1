@@ -180,27 +180,6 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 */
 
-inline int Pow5BitLength(int e) // e == 0 ? 1 : ceil(log_2(5^e))
-{
-    CC_ASSERT(e >= 0);
-    CC_ASSERT(e <= 1500); // Only tested for e <= 1500
-    return static_cast<int>((static_cast<uint32_t>(e) * 1217359) >> 19) + 1;
-}
-
-inline int Log10Pow2(int e) // floor(log_10(2^e))
-{
-    CC_ASSERT(e >= 0);
-    CC_ASSERT(e <= 1500); // Only tested for e <= 1500
-    return static_cast<int>((static_cast<uint32_t>(e) * 78913) >> 18);
-}
-
-inline int Log10Pow5(int e) // floor(log_10(5^e))
-{
-    CC_ASSERT(e >= 0);
-    CC_ASSERT(e <= 1500); // Only tested for e <= 1500
-    return static_cast<int>((static_cast<uint32_t>(e) * 732923) >> 20);
-}
-
 // sizeof(tables) = 9888 bytes
 
 struct Uint64x2 {
@@ -1052,6 +1031,27 @@ inline uint64_t Div100_000_000(const uint64_t x)
 }
 
 #endif // CC_32_BIT_PLATFORM
+
+inline int Pow5BitLength(int e) // e == 0 ? 1 : ceil(log_2(5^e))
+{
+    CC_ASSERT(e >= 0);
+    CC_ASSERT(e <= 1500); // Only tested for e <= 1500
+    return static_cast<int>((static_cast<uint32_t>(e) * 1217359) >> 19) + 1;
+}
+
+inline int Log10Pow2(int e) // floor(log_10(2^e))
+{
+    CC_ASSERT(e >= 0);
+    CC_ASSERT(e <= 1500); // Only tested for e <= 1500
+    return static_cast<int>((static_cast<uint32_t>(e) * 78913) >> 18);
+}
+
+inline int Log10Pow5(int e) // floor(log_10(5^e))
+{
+    CC_ASSERT(e >= 0);
+    CC_ASSERT(e <= 1500); // Only tested for e <= 1500
+    return static_cast<int>((static_cast<uint32_t>(e) * 732923) >> 20);
+}
 
 inline int ComputeQForNonNegativeExponent(int e)
 {
