@@ -123,32 +123,27 @@ inline char* NumberToString(char* buffer, int buffer_length, double value, bool 
 
 namespace charconv_bellerophon {
 
+// Inputs larger than kMaxInt (currently) can not be handled.
+// To avoid overflow in integer arithmetic.
+constexpr int const kMaxLen = 99999999; // < INT_MAX / 4
+
 // PRE: NumberClass = floating_point
 inline double InternalStrtod(char const* next, char const* last)
 {
-    using json::charclass::IsDigit;
-
-    // Inputs larger than kMaxInt (currently) can not be handled.
-    // To avoid overflow in integer arithmetic.
-    constexpr int const kMaxInt = 99999999; // < INT_MAX / 4
-
     char digits[kMaxSignificantDigits];
     int  num_digits   = 0;
     int  exponent     = 0;
     bool zero_tail    = true;
 
     JSON_ASSERT(next != last);
+    JSON_ASSERT(last - next <= kMaxLen);
     JSON_ASSERT(IsDigit(*next));
-
-    if (last - next > kMaxInt)
-        return std::numeric_limits<double>::quiet_NaN();
 
     if (*next == '0')
     {
         ++next;
-        if (next == last)
-            return 0;
 
+        JSON_ASSERT(next != last);
         JSON_ASSERT(!IsDigit(*next));
     }
     else
@@ -166,14 +161,15 @@ inline double InternalStrtod(char const* next, char const* last)
                 zero_tail &= *next == '0';
             }
             ++next;
-            if (next == last)
-                break;
+            JSON_ASSERT(next != last);
             if (!IsDigit(*next))
                 break;
         }
     }
 
-    if (next != last && *next == '.')
+    JSON_ASSERT(next != last);
+
+    if (*next == '.')
     {
         ++next;
         JSON_ASSERT(next != last);
@@ -188,7 +184,7 @@ inline double InternalStrtod(char const* next, char const* last)
                 --exponent;
                 ++next;
                 if (next == last)
-                    return 0;
+                    return 0.0;
             }
         }
 
@@ -226,9 +222,8 @@ inline double InternalStrtod(char const* next, char const* last)
 
         // Skip leading zeros.
         // The exponent is always decimal, not octal.
-        while (next != last && *next == '0')
+        while (*next == '0' && ++next != last)
         {
-            ++next;
         }
 
         if (last - next <= 8)
@@ -263,12 +258,11 @@ namespace numbers {
 // class defined by `nc` (which must not be `NumberClass::invalid`).
 inline double StringToNumber(char const* first, char const* last, NumberClass nc)
 {
-    JSON_ASSERT(first != last);
-    JSON_ASSERT(nc != NumberClass::invalid);
-
-    if (first == last) {
+    if (first == last)
         return 0.0;
-    }
+
+    if (last - first > charconv_bellerophon::kMaxLen)
+        return std::numeric_limits<double>::quiet_NaN();
 
     switch (nc) {
     case NumberClass::invalid:
@@ -287,36 +281,47 @@ inline double StringToNumber(char const* first, char const* last, NumberClass nc
     {
         ++first;
     }
-    //else if (*first == '+')
-    //{
-    //    ++first;
-    //}
 
-    // Use a faster method for integers which will fit into a uint64_t.
-    // Let static_cast do the conversion.
-    if (nc == NumberClass::integer && last - first <= 20)
+    double value;
+    if (nc == NumberClass::integer)
     {
         int const num_digits = static_cast<int>(last - first);
-        int const max_digits = num_digits <= 19 ? num_digits : 19;
 
-        uint64_t u = charconv_bellerophon::ReadInt<uint64_t>(first, max_digits);
-        if (num_digits == 20)
+        // Use a faster method for integers which will fit into a uint64_t.
+        // Let static_cast do the conversion.
+        if (num_digits <= 20)
         {
-            uint32_t const digit = static_cast<uint32_t>(first[19] - '0');
-            if (u > UINT64_MAX / 10 || digit > UINT64_MAX - 10 * u)
+            uint64_t const u = charconv_bellerophon::ReadInt<uint64_t>(first, num_digits <= 19 ? num_digits : 19);
+
+            if (num_digits <= 19)
             {
-                goto L_use_strtod;
+                value = static_cast<double>(u);
+                return is_neg ? -value : value;
             }
 
-            u = 10 * u + digit;
+            if (u <= UINT64_MAX / 10)
+            {
+                uint32_t const d = static_cast<uint32_t>(first[19] - '0');
+                if (d <= UINT64_MAX - 10 * u)
+                {
+                    value = static_cast<double>(10 * u + d);
+                    return is_neg ? -value : value;
+                }
+            }
         }
 
-        double const value = static_cast<double>(u);
-        return is_neg ? -value : value;
+        value = charconv_bellerophon::DigitsToDouble(first, num_digits, /*exponent*/ 0, /*nonzero_tail*/ false);
+    }
+    else
+    {
+        //
+        // TODO:
+        // Avoid a copy if the number is of the form DDDDe+nnn
+        //
+
+        value = charconv_bellerophon::InternalStrtod(first, last);
     }
 
-L_use_strtod:
-    double const value = charconv_bellerophon::InternalStrtod(first, last);
     return is_neg ? -value : value;
 }
 
