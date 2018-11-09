@@ -20,8 +20,6 @@
 
 #pragma once
 
-// sizeof(tables) = 201 + 184 + 40 + 56 + (4672 + 5216 + 5384) = 16753
-
 #include <cassert>
 #include <cstdint>
 #include <cstdio>

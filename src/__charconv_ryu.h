@@ -20,8 +20,6 @@
 
 #pragma once
 
-// sizeof(tables) = 201 + 184 + 40 + 56 + (4672 + 5216 + 5384) = 16753
-
 #include <cassert>
 #include <cstdint>
 #include <cstdio>
@@ -946,8 +944,6 @@ inline uint64_t MulShift(uint64_t m, Uint64x2 const* mul, int j)
 #if 1 && (CC_HAS_UINT128 || CC_HAS_64_BIT_INTRINSICS)
 inline void MulShiftAll(uint64_t mv, uint64_t mp, uint64_t mm, Uint64x2 const* mul, int j, uint64_t* vr, uint64_t* vp, uint64_t* vm)
 {
-    CC_ASSERT((mv >> 55) == 0); // m2 is maximum 55 bits
-
     *vr = MulShift(mv, mul, j);
     *vp = MulShift(mp, mul, j);
     *vm = MulShift(mm, mul, j);
