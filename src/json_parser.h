@@ -174,7 +174,9 @@ struct Options
 enum class NumberClass : uint8_t {
     invalid,
     integer,
-    floating_point,
+    integer_with_exponent,
+    decimal,
+    decimal_with_exponent,
     nan,
     pos_infinity,
     neg_infinity,
@@ -195,7 +197,8 @@ inline ScanNumberResult ScanNumber(char const* next, char const* last, Options c
         return {next, NumberClass::invalid};
 
     bool is_neg = false;
-    bool is_float = false;
+    bool has_decimal_point = false;
+    bool has_exponent = false;
 
 // [-]
 
@@ -246,7 +249,7 @@ inline ScanNumberResult ScanNumber(char const* next, char const* last, Options c
 
     if (*next == '.')
     {
-        is_float = true;
+        has_decimal_point = true;
 
         ++next;
         if (next == last || !IsDigit(*next))
@@ -256,7 +259,7 @@ inline ScanNumberResult ScanNumber(char const* next, char const* last, Options c
         {
             ++next;
             if (next == last)
-                return {next, NumberClass::floating_point};
+                return {next, NumberClass::decimal};
             if (!IsDigit(*next))
                 break;
         }
@@ -266,7 +269,7 @@ inline ScanNumberResult ScanNumber(char const* next, char const* last, Options c
 
     if (*next == 'e' || *next == 'E')
     {
-        is_float = true;
+        has_exponent = true;
 
         ++next;
         if (next == last)
@@ -290,7 +293,10 @@ inline ScanNumberResult ScanNumber(char const* next, char const* last, Options c
         }
     }
 
-    return {next, is_float ? NumberClass::floating_point : NumberClass::integer};
+    if (has_decimal_point)
+        return {next, has_exponent ? NumberClass::decimal_with_exponent : NumberClass::decimal};
+    else
+        return {next, has_exponent ? NumberClass::integer_with_exponent : NumberClass::integer};
 }
 
 //==================================================================================================
