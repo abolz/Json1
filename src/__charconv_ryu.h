@@ -1683,11 +1683,12 @@ inline char* PositiveDoubleToString(char* buffer, double value, bool force_trail
     CC_ASSERT(res.num_digits <= std::numeric_limits<double>::max_digits10);
 
     int const decimal_point = res.num_digits + res.exponent;
+    int const exponent = decimal_point - 1;
 
-    bool const use_fixed = -6 < decimal_point && decimal_point <= 21;
-    return use_fixed
-        ? FormatFixed(buffer, res.num_digits, decimal_point, force_trailing_dot_zero)
-        : FormatExponential(buffer, res.num_digits, decimal_point - 1, /*force_trailing_dot_zero*/ false);
+    if (kMinExp <= exponent && exponent < kMaxExp)
+        return FormatFixed(buffer, res.num_digits, decimal_point, force_trailing_dot_zero);
+    else
+        return FormatExponential(buffer, res.num_digits, exponent, /*force_trailing_dot_zero*/ false);
 }
 
 } // namespace charconv_ryu
