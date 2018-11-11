@@ -127,147 +127,167 @@ namespace charconv_bellerophon {
 // To avoid overflow in integer arithmetic.
 constexpr int const kMaxLen = 99999999; // < INT_MAX / 4
 
-inline double InternalIntegerToDouble(char const* next, char const* last)
+inline double InternalNumberToDouble(char const* next, char const* last, json::NumberClass nc)
 {
-    int const num_digits = static_cast<int>(last - next);
-
-    // Use a faster method for integers which will fit into a uint64_t.
-    // Let static_cast do the conversion.
-    if (num_digits <= 20)
-    {
-        uint64_t const u = charconv_bellerophon::ReadInt<uint64_t>(next, num_digits <= 19 ? num_digits : 19);
-
-        if (num_digits <= 19)
-        {
-            return static_cast<double>(u);
-        }
-
-        if (u <= UINT64_MAX / 10)
-        {
-            uint32_t const d = static_cast<uint32_t>(next[19] - '0');
-            if (d <= UINT64_MAX - 10 * u)
-            {
-                return static_cast<double>(10 * u + d);
-            }
-        }
-    }
-
-    return charconv_bellerophon::DigitsToDouble(next, num_digits, /*exponent*/ 0, /*nonzero_tail*/ false);
-}
-
-// PRE: NumberClass = integer_with_exponent | decimal | decimal_with_exponent
-inline double InternalDecimalToDouble(char const* next, char const* last)
-{
-    char digits[kMaxSignificantDigits];
-    int  num_digits = 0;
-    int  exponent   = 0;
-    bool zero_tail  = true;
+    char        buffer[kMaxSignificantDigits];
+    char const* digits     = nullptr;
+    int         num_digits = 0;
+    int         exponent   = 0;
+    bool        zero_tail  = true;
 
     JSON_ASSERT(next != last);
     JSON_ASSERT(last - next <= kMaxLen);
     JSON_ASSERT(IsDigit(*next));
 
-    if (*next == '0')
+    if (nc == json::NumberClass::integer)
     {
-        ++next;
+        // No need to copy the digits into a temporary buffer.
+        // DigitsToDouble will trim the input to kMaxSignificantDigits.
+
+        digits     = next;
+        num_digits = static_cast<int>(last - next);
+
+        // Use a faster method for integers which will fit into a uint64_t.
+        // Let static_cast do the conversion.
+        if (num_digits <= 20)
+        {
+            uint64_t const u = ReadInt<uint64_t>(next, num_digits <= 19 ? num_digits : 19);
+
+            if (num_digits <= 19)
+            {
+                return static_cast<double>(u);
+            }
+
+            if (u <= UINT64_MAX / 10)
+            {
+                uint32_t const d = static_cast<uint32_t>(next[19] - '0');
+                if (d <= UINT64_MAX - 10 * u)
+                {
+                    return static_cast<double>(10 * u + d);
+                }
+            }
+        }
     }
     else
     {
-        for (;;)
+        //
+        // TODO:
+        // - Avoid a copy if the number is of the form DDD[.000]e+nnn?
+        // - Use memcpy if the number is of the form DDD.DDD[e+nnn]
+        //   and the length excluding the exponent-part fits into kMaxSignificantDigits?
+        //
+
+        digits     = buffer;
+        num_digits = 0;
+
+        if (*next == '0')
         {
-            if (num_digits < kMaxSignificantDigits)
-            {
-                digits[num_digits] = *next;
-                ++num_digits;
-            }
-            else
-            {
-                ++exponent;
-                zero_tail &= *next == '0';
-            }
+            // Number is of the form 0[.xxx][e+nnn].
+            // The leading zero here is not a significant digit.
             ++next;
-            JSON_ASSERT(next != last);
-            if (!IsDigit(*next))
-                break;
-        }
-    }
-
-    JSON_ASSERT(next != last);
-    JSON_ASSERT(*next == '.' || *next == 'e' || *next == 'E');
-
-    if (*next == '.')
-    {
-        ++next;
-        JSON_ASSERT(next != last);
-        JSON_ASSERT(IsDigit(*next));
-
-        if (num_digits == 0)
-        {
-            // 0.xxx
-            // Skip leading zeros in the fractional part and adjust the exponent.
-            while (*next == '0')
-            {
-                --exponent;
-                ++next;
-                if (next == last)
-                    return 0.0;
-            }
-        }
-
-        JSON_ASSERT(next != last);
-
-        while (IsDigit(*next))
-        {
-            if (num_digits < kMaxSignificantDigits)
-            {
-                digits[num_digits] = *next;
-                ++num_digits;
-                --exponent;
-            }
-            else
-            {
-                zero_tail &= *next == '0';
-            }
-            ++next;
-            if (next == last)
-                break;
-        }
-    }
-
-    if (next != last && (*next == 'e' || *next == 'E'))
-    {
-        ++next;
-        JSON_ASSERT(next != last);
-
-        bool const exp_is_neg = (*next == '-');
-        if (exp_is_neg || *next == '+')
-        {
-            ++next;
-            JSON_ASSERT(next != last);
-        }
-
-        // Skip leading zeros.
-        // The exponent is always decimal, not octal.
-        while (*next == '0' && ++next != last)
-        {
-        }
-
-        if (last - next <= 8)
-        {
-            // NB:
-            // ReadInt returns 0 for empty inputs.
-            int const e = ReadInt<int>(next, static_cast<int>(last - next));
-            exponent += exp_is_neg ? -e : e;
         }
         else
         {
-            // Exponents >= 10^8 are considered to be +Infinity.
-            // This is slightly incorrect (since the computed exponent and the
-            // parsed exponent might cancel each other out), but still correct
-            // for sane inputs.
-            return exp_is_neg || num_digits == 0
-                ? 0.0
-                : std::numeric_limits<double>::infinity();
+            for (;;)
+            {
+                if (num_digits < kMaxSignificantDigits)
+                {
+                    buffer[num_digits++] = *next;
+                }
+                else
+                {
+                    ++exponent;
+                    zero_tail &= *next == '0';
+                }
+                ++next;
+                JSON_ASSERT(next != last);
+                if (!IsDigit(*next))
+                    break;
+            }
+        }
+
+        JSON_ASSERT(next != last);
+        JSON_ASSERT(*next == '.' || *next == 'e' || *next == 'E');
+
+        if (*next == '.')
+        {
+            ++next;
+            JSON_ASSERT(next != last);
+            JSON_ASSERT(IsDigit(*next));
+
+            if (num_digits == 0)
+            {
+                // Number is of the form 0.xxx[e+nnn].
+                // Skip leading zeros in the fractional part and adjust the exponent.
+                while (*next == '0')
+                {
+                    --exponent;
+                    ++next;
+                    if (next == last)
+                        return 0.0;
+                }
+            }
+
+            JSON_ASSERT(next != last);
+
+            while (IsDigit(*next))
+            {
+                if (num_digits < kMaxSignificantDigits)
+                {
+                    buffer[num_digits++] = *next;
+                    --exponent;
+                }
+                else
+                {
+                    zero_tail &= *next == '0';
+                }
+                ++next;
+                if (next == last)
+                    break;
+            }
+        }
+
+        if (next != last && (*next == 'e' || *next == 'E'))
+        {
+            if (num_digits == 0)
+            {
+                // Number is of the form 0[.000]e+nnn.
+                return 0.0;
+            }
+
+            ++next;
+            JSON_ASSERT(next != last);
+
+            bool const exp_is_neg = (*next == '-');
+            if (exp_is_neg || *next == '+')
+            {
+                ++next;
+                JSON_ASSERT(next != last);
+            }
+
+            // Skip leading zeros.
+            // The exponent is always decimal, not octal.
+            while (*next == '0' && ++next != last)
+            {
+            }
+
+            if (last - next <= 8)
+            {
+                // NB:
+                // ReadInt returns 0 for empty inputs.
+                int const e = ReadInt<int>(next, static_cast<int>(last - next));
+                exponent += exp_is_neg ? -e : e;
+            }
+            else
+            {
+                // Exponents >= 10^8 are considered to be +Infinity.
+                // This is slightly incorrect (since the computed exponent and the
+                // parsed exponent might cancel each other out), but still correct
+                // for sane inputs.
+                return exp_is_neg
+                    ? 0.0
+                    : std::numeric_limits<double>::infinity();
+            }
         }
     }
 
@@ -282,12 +302,12 @@ namespace numbers {
 // Convert the string `[first, last)` to a double-precision value.
 // The string must be valid according to the JSON grammar and match the number
 // class defined by `nc` (which must not be `NumberClass::invalid`).
-inline double StringToNumber(char const* first, char const* last, NumberClass nc)
+inline double StringToNumber(char const* next, char const* last, NumberClass nc)
 {
-    if (first == last)
+    if (next == last)
         return 0.0;
 
-    if (last - first > charconv_bellerophon::kMaxLen)
+    if (last - next > charconv_bellerophon::kMaxLen)
         return std::numeric_limits<double>::quiet_NaN();
 
     switch (nc) {
@@ -302,48 +322,32 @@ inline double StringToNumber(char const* first, char const* last, NumberClass nc
         break;
     }
 
-    bool const is_neg = *first == '-';
+    bool const is_neg = (*next == '-');
     if (is_neg)
     {
-        ++first;
+        ++next;
     }
 
-    double value;
-    if (nc == NumberClass::integer)
-    {
-        value = charconv_bellerophon::InternalIntegerToDouble(first, last);
-    }
-    else
-    {
-        //
-        // TODO:
-        // - Avoid a copy if the number is of the form DDD[.000]e+nnn?
-        // - Use memcpy if the number is of the form DDD.DDD[e+nnn]
-        //   and the length excluding the exponent-part fits into kMaxSignificantDigits?
-        //
-
-        value = charconv_bellerophon::InternalDecimalToDouble(first, last);
-    }
-
+    double const value = charconv_bellerophon::InternalNumberToDouble(next, last, nc);
     return is_neg ? -value : value;
 }
 
-// Convert the string `[first, last)` to a double-precision value.
+// Convert the string `[next, last)` to a double-precision value.
 // Returns true if the string is a valid number according to the JSON grammar.
 // Otherwise returns false and stores 'NaN' in `result`.
-inline bool StringToNumber(double& result, char const* first, char const* last, Options const& options = {})
+inline bool StringToNumber(double& result, char const* next, char const* last, Options const& options = {})
 {
-    if (first == last)
+    if (next == last)
     {
         result = 0.0;
         return true;
     }
 
-    auto const res = json::ScanNumber(first, last, options);
+    auto const res = json::ScanNumber(next, last, options);
 
     if (res.next == last && res.number_class != NumberClass::invalid)
     {
-        result = json::numbers::StringToNumber(first, last, res.number_class);
+        result = json::numbers::StringToNumber(next, last, res.number_class);
         return true;
     }
 
