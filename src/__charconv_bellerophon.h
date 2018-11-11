@@ -117,7 +117,7 @@ struct Double
 };
 
 //==================================================================================================
-// DigitsToIEEE
+// DigitsToDouble
 //
 // Derived from the double-conversion library:
 // https://github.com/google/double-conversion
@@ -453,10 +453,8 @@ inline DiyFp Multiply(DiyFp x, DiyFp y)
 // Decomposes `value` into `f * 2^e`.
 // The result is not normalized.
 // PRE: `value` must be finite and non-negative, i.e. >= +0.0.
-inline DiyFp DiyFpFromFloat(double value)
+inline DiyFp DiyFpFromFloat(Double v)
 {
-    auto const v = Double(value);
-
     CC_ASSERT(v.IsFinite());
     CC_ASSERT(!v.SignBit());
 
@@ -498,7 +496,7 @@ inline DiyFp DiyFpFromFloat(double value)
 // interval for v.
 // The result is not normalized.
 // PRE: `value` must be finite and non-negative.
-inline DiyFp UpperBoundary(double value)
+inline DiyFp UpperBoundary(Double value)
 {
     auto const v = DiyFpFromFloat(value);
 //  return DiyFp(2*v.f + 1, v.e - 1);
@@ -1946,21 +1944,8 @@ inline int CompareBufferWithDiyFp(char const* digits, int num_digits, int expone
 }
 
 //--------------------------------------------------------------------------------------------------
-// DigitsToIEEE
+// DigitsToDouble
 //--------------------------------------------------------------------------------------------------
-
-inline bool SignificandIsEven(double v)
-{
-//  return (Double(v).PhysicalSignificand() & 1) == 0;
-    return (Double(v).bits & 1) == 0;
-}
-
-// Returns the next larger double-precision value.
-// If v is +Infinity returns v.
-inline double NextLarger(double v)
-{
-    return Double(v).NextValue();
-}
 
 // Convert the decimal representation 'digits * 10^exponent' into an IEEE
 // double-precision number.
@@ -2007,28 +1992,28 @@ inline double DigitsToDouble(char const* digits, int num_digits, int exponent, b
         return 0;
     }
 
-    auto const approx = ComputeGuess(digits, num_digits, exponent);
-    if (approx.is_correct)
+    auto const guess = ComputeGuess(digits, num_digits, exponent);
+    if (guess.is_correct)
     {
-        return approx.value;
+        return guess.value;
     }
 
-    // v = approx.value
-    //
-    // Now v is either the correct or the next-lower double (i.e. the correct
-    // double is v+).
+    Double v(guess.value);
+
+    // Now v is either the correct or the next-lower double (i.e. the correct double is v+).
     // Compare B = buffer * 10^exponent with v's upper boundary m+.
     //
     //     v             m+            v+
     //  ---+--------+----+-------------+---
     //              B
 
-    int const cmp = CompareBufferWithDiyFp(digits, num_digits, exponent, nonzero_tail, UpperBoundary(approx.value));
-    if (cmp < 0 || (cmp == 0 && SignificandIsEven(approx.value)))
+    int const cmp = CompareBufferWithDiyFp(digits, num_digits, exponent, nonzero_tail, UpperBoundary(v));
+    if (cmp < 0 || (cmp == 0 && (v.bits & 1) == 0))
     {
-        return approx.value;
+        return guess.value;
     }
-    return NextLarger(approx.value);
+
+    return v.NextValue();
 }
 
 } // namespace charconv_bellerophon
