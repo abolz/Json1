@@ -127,13 +127,41 @@ namespace charconv_bellerophon {
 // To avoid overflow in integer arithmetic.
 constexpr int const kMaxLen = 99999999; // < INT_MAX / 4
 
-// PRE: NumberClass = floating_point
-inline double InternalStrtod(char const* next, char const* last)
+inline double InternalIntegerToDouble(char const* next, char const* last)
+{
+    int const num_digits = static_cast<int>(last - next);
+
+    // Use a faster method for integers which will fit into a uint64_t.
+    // Let static_cast do the conversion.
+    if (num_digits <= 20)
+    {
+        uint64_t const u = charconv_bellerophon::ReadInt<uint64_t>(next, num_digits <= 19 ? num_digits : 19);
+
+        if (num_digits <= 19)
+        {
+            return static_cast<double>(u);
+        }
+
+        if (u <= UINT64_MAX / 10)
+        {
+            uint32_t const d = static_cast<uint32_t>(next[19] - '0');
+            if (d <= UINT64_MAX - 10 * u)
+            {
+                return static_cast<double>(10 * u + d);
+            }
+        }
+    }
+
+    return charconv_bellerophon::DigitsToDouble(next, num_digits, /*exponent*/ 0, /*nonzero_tail*/ false);
+}
+
+// PRE: NumberClass = integer_with_exponent | decimal | decimal_with_exponent
+inline double InternalDecimalToDouble(char const* next, char const* last)
 {
     char digits[kMaxSignificantDigits];
-    int  num_digits   = 0;
-    int  exponent     = 0;
-    bool zero_tail    = true;
+    int  num_digits = 0;
+    int  exponent   = 0;
+    bool zero_tail  = true;
 
     JSON_ASSERT(next != last);
     JSON_ASSERT(last - next <= kMaxLen);
@@ -142,9 +170,6 @@ inline double InternalStrtod(char const* next, char const* last)
     if (*next == '0')
     {
         ++next;
-
-        JSON_ASSERT(next != last);
-        JSON_ASSERT(!IsDigit(*next));
     }
     else
     {
@@ -168,6 +193,7 @@ inline double InternalStrtod(char const* next, char const* last)
     }
 
     JSON_ASSERT(next != last);
+    JSON_ASSERT(*next == '.' || *next == 'e' || *next == 'E');
 
     if (*next == '.')
     {
@@ -285,41 +311,18 @@ inline double StringToNumber(char const* first, char const* last, NumberClass nc
     double value;
     if (nc == NumberClass::integer)
     {
-        int const num_digits = static_cast<int>(last - first);
-
-        // Use a faster method for integers which will fit into a uint64_t.
-        // Let static_cast do the conversion.
-        if (num_digits <= 20)
-        {
-            uint64_t const u = charconv_bellerophon::ReadInt<uint64_t>(first, num_digits <= 19 ? num_digits : 19);
-
-            if (num_digits <= 19)
-            {
-                value = static_cast<double>(u);
-                return is_neg ? -value : value;
-            }
-
-            if (u <= UINT64_MAX / 10)
-            {
-                uint32_t const d = static_cast<uint32_t>(first[19] - '0');
-                if (d <= UINT64_MAX - 10 * u)
-                {
-                    value = static_cast<double>(10 * u + d);
-                    return is_neg ? -value : value;
-                }
-            }
-        }
-
-        value = charconv_bellerophon::DigitsToDouble(first, num_digits, /*exponent*/ 0, /*nonzero_tail*/ false);
+        value = charconv_bellerophon::InternalIntegerToDouble(first, last);
     }
     else
     {
         //
         // TODO:
-        // Avoid a copy if the number is of the form DDDDe+nnn
+        // - Avoid a copy if the number is of the form DDD[.000]e+nnn?
+        // - Use memcpy if the number is of the form DDD.DDD[e+nnn]
+        //   and the length excluding the exponent-part fits into kMaxSignificantDigits?
         //
 
-        value = charconv_bellerophon::InternalStrtod(first, last);
+        value = charconv_bellerophon::InternalDecimalToDouble(first, last);
     }
 
     return is_neg ? -value : value;
