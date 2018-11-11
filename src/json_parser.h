@@ -293,10 +293,13 @@ inline ScanNumberResult ScanNumber(char const* next, char const* last, Options c
         }
     }
 
+    NumberClass nc;
     if (has_decimal_point)
-        return {next, has_exponent ? NumberClass::decimal_with_exponent : NumberClass::decimal};
+        nc = has_exponent ? NumberClass::decimal_with_exponent : NumberClass::decimal;
     else
-        return {next, has_exponent ? NumberClass::integer_with_exponent : NumberClass::integer};
+        nc = has_exponent ? NumberClass::integer_with_exponent : NumberClass::integer;
+
+    return {next, nc};
 }
 
 //==================================================================================================
