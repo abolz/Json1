@@ -121,14 +121,17 @@ inline char* NumberToString(char* buffer, int buffer_length, double value, bool 
 // StringToNumber
 //==================================================================================================
 
-namespace charconv_bellerophon {
+namespace json {
+namespace impl {
 
 // Inputs larger than kMaxInt (currently) can not be handled.
 // To avoid overflow in integer arithmetic.
-constexpr int const kMaxLen = 99999999; // < INT_MAX / 4
+constexpr int const kMaxStringToDoubleLen = 99999999; // < INT_MAX / 4
 
-inline double InternalNumberToDouble(char const* next, char const* last, json::NumberClass nc)
+inline double InternalStringToDouble(char const* next, char const* last, NumberClass nc)
 {
+    using namespace charconv_bellerophon;
+
     char        buffer[kMaxSignificantDigits];
     char const* digits     = nullptr;
     int         num_digits = 0;
@@ -136,10 +139,10 @@ inline double InternalNumberToDouble(char const* next, char const* last, json::N
     bool        zero_tail  = true;
 
     JSON_ASSERT(next != last);
-    JSON_ASSERT(last - next <= kMaxLen);
+    JSON_ASSERT(last - next <= kMaxStringToDoubleLen);
     JSON_ASSERT(IsDigit(*next));
 
-    if (nc == json::NumberClass::integer)
+    if (nc == NumberClass::integer)
     {
         // No need to copy the digits into a temporary buffer.
         // DigitsToDouble will trim the input to kMaxSignificantDigits.
@@ -175,6 +178,7 @@ inline double InternalNumberToDouble(char const* next, char const* last, json::N
         // - Avoid a copy if the number is of the form DDD[.000]e+nnn?
         // - Use memcpy if the number is of the form DDD.DDD[e+nnn]
         //   and the length excluding the exponent-part fits into kMaxSignificantDigits?
+        // - Rewrite DigitsToDouble to allow a decimal separator?
         //
 
         digits     = buffer;
@@ -294,7 +298,8 @@ inline double InternalNumberToDouble(char const* next, char const* last, json::N
     return DigitsToDouble(digits, num_digits, exponent, !zero_tail);
 }
 
-} // namespace charconv_bellerophon
+} // namespace impl
+} // namespace json
 
 namespace json {
 namespace numbers {
@@ -307,7 +312,7 @@ inline double StringToNumber(char const* next, char const* last, NumberClass nc)
     if (next == last)
         return 0.0;
 
-    if (last - next > charconv_bellerophon::kMaxLen)
+    if (last - next > json::impl::kMaxStringToDoubleLen)
         return std::numeric_limits<double>::quiet_NaN();
 
     switch (nc) {
@@ -328,7 +333,7 @@ inline double StringToNumber(char const* next, char const* last, NumberClass nc)
         ++next;
     }
 
-    double const value = charconv_bellerophon::InternalNumberToDouble(next, last, nc);
+    double const value = json::impl::InternalStringToDouble(next, last, nc);
     return is_neg ? -value : value;
 }
 
