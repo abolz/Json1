@@ -33,6 +33,261 @@
 //==================================================================================================
 
 namespace json {
+namespace impl {
+
+inline int DecimalLengthDouble(uint64_t v)
+{
+    CC_ASSERT(v < 100000000000000000ull);
+
+    if (v >= 10000000000000000ull) { return 17; }
+    if (v >= 1000000000000000ull) { return 16; }
+    if (v >= 100000000000000ull) { return 15; }
+    if (v >= 10000000000000ull) { return 14; }
+    if (v >= 1000000000000ull) { return 13; }
+    if (v >= 100000000000ull) { return 12; }
+    if (v >= 10000000000ull) { return 11; }
+    if (v >= 1000000000ull) { return 10; }
+    if (v >= 100000000ull) { return 9; }
+    if (v >= 10000000ull) { return 8; }
+    if (v >= 1000000ull) { return 7; }
+    if (v >= 100000ull) { return 6; }
+    if (v >= 10000ull) { return 5; }
+    if (v >= 1000ull) { return 4; }
+    if (v >= 100ull) { return 3; }
+    if (v >= 10ull) { return 2; }
+    return 1;
+}
+
+inline char* Utoa_2Digits(char* buf, uint32_t digits)
+{
+    static constexpr char const* kDigits100 =
+        "00010203040506070809"
+        "10111213141516171819"
+        "20212223242526272829"
+        "30313233343536373839"
+        "40414243444546474849"
+        "50515253545556575859"
+        "60616263646566676869"
+        "70717273747576777879"
+        "80818283848586878889"
+        "90919293949596979899";
+
+    JSON_ASSERT(digits < 100);
+    std::memcpy(buf, &kDigits100[2*digits], 2*sizeof(char));
+    return buf + 2;
+}
+
+inline char* Utoa_4Digits(char* buf, uint32_t digits)
+{
+    JSON_ASSERT(digits < 10000);
+    uint32_t const q = digits / 100;
+    uint32_t const r = digits % 100;
+    Utoa_2Digits(buf + 0, q);
+    Utoa_2Digits(buf + 2, r);
+    return buf + 4;
+}
+
+inline char* Utoa_8Digits(char* buf, uint32_t digits)
+{
+    JSON_ASSERT(digits < 100000000);
+    uint32_t const q = digits / 10000;
+    uint32_t const r = digits % 10000;
+    Utoa_4Digits(buf + 0, q);
+    Utoa_4Digits(buf + 4, r);
+    return buf + 8;
+}
+
+inline int PrintDecimalDigitsDouble(char* buf, uint64_t output, int output_length)
+{
+    int i = output_length;
+
+    // We prefer 32-bit operations, even on 64-bit platforms.
+    // We have at most 17 digits, and uint32_t can store 9 digits.
+    // If output doesn't fit into uint32_t, we cut off 8 digits,
+    // so the rest will fit into uint32_t.
+    if (static_cast<uint32_t>(output >> 32) != 0)
+    {
+        JSON_ASSERT(i > 8);
+        uint64_t const q = output / 100000000;
+        uint32_t const r = static_cast<uint32_t>(output % 100000000);
+        output = q;
+        i -= 8;
+        Utoa_8Digits(buf + i, r);
+    }
+
+    JSON_ASSERT(output <= UINT32_MAX);
+    uint32_t output2 = static_cast<uint32_t>(output);
+
+    while (output2 >= 10000)
+    {
+        JSON_ASSERT(i > 4);
+        uint32_t const r = output2 % 10000;
+        output2 /= 10000;
+        i -= 4;
+        Utoa_4Digits(buf + i, r);
+    }
+
+    if (output2 >= 100)
+    {
+        JSON_ASSERT(i > 2);
+        uint32_t const r = output2 % 100;
+        output2 /= 100;
+        i -= 2;
+        Utoa_2Digits(buf + i, r);
+    }
+
+    if (output2 >= 10)
+    {
+        JSON_ASSERT(i == 2);
+        Utoa_2Digits(buf, output2);
+    }
+    else
+    {
+        JSON_ASSERT(i == 1);
+        buf[0] = static_cast<char>('0' + output2);
+    }
+
+    return output_length;
+}
+
+inline char* ExponentToString(char* buffer, int value)
+{
+    JSON_ASSERT(value > -1000);
+    JSON_ASSERT(value <  1000);
+
+    int n = 0;
+
+    if (value < 0)
+    {
+        buffer[n++] = '-';
+        value = -value;
+    }
+    else
+    {
+        buffer[n++] = '+';
+    }
+
+    uint32_t const k = static_cast<uint32_t>(value);
+    if (k < 10)
+    {
+        buffer[n++] = static_cast<char>('0' + k);
+    }
+    else if (k < 100)
+    {
+        Utoa_2Digits(buffer + n, k);
+        n += 2;
+    }
+    else
+    {
+        uint32_t const r = k % 10;
+        uint32_t const q = k / 10;
+        Utoa_2Digits(buffer + n, q);
+        n += 2;
+        buffer[n++] = static_cast<char>('0' + r);
+    }
+
+    return buffer + n;
+}
+
+inline char* FormatFixed(char* buffer, int num_digits, int decimal_point, bool force_trailing_dot_zero)
+{
+    JSON_ASSERT(buffer != nullptr);
+    JSON_ASSERT(num_digits >= 1);
+
+    if (num_digits <= decimal_point)
+    {
+        // digits[000]
+        // CC_ASSERT(buffer_capacity >= decimal_point + (force_trailing_dot_zero ? 2 : 0));
+
+        std::memset(buffer + num_digits, '0', static_cast<size_t>(decimal_point - num_digits));
+        buffer += decimal_point;
+        if (force_trailing_dot_zero)
+        {
+            *buffer++ = '.';
+            *buffer++ = '0';
+        }
+        return buffer;
+    }
+    else if (0 < decimal_point)
+    {
+        // dig.its
+        // CC_ASSERT(buffer_capacity >= length + 1);
+
+        std::memmove(buffer + (decimal_point + 1), buffer + decimal_point, static_cast<size_t>(num_digits - decimal_point));
+        buffer[decimal_point] = '.';
+        return buffer + (num_digits + 1);
+    }
+    else // decimal_point <= 0
+    {
+        // 0.[000]digits
+        // CC_ASSERT(buffer_capacity >= 2 + (-decimal_point) + length);
+
+        std::memmove(buffer + (2 + -decimal_point), buffer, static_cast<size_t>(num_digits));
+        buffer[0] = '0';
+        buffer[1] = '.';
+        std::memset(buffer + 2, '0', static_cast<size_t>(-decimal_point));
+        return buffer + (2 + (-decimal_point) + num_digits);
+    }
+}
+
+inline char* FormatExponential(char* buffer, int num_digits, int exponent, bool force_trailing_dot_zero)
+{
+    JSON_ASSERT(buffer != nullptr);
+    JSON_ASSERT(num_digits >= 1);
+
+    if (num_digits == 1)
+    {
+        // dE+123
+        // CC_ASSERT(buffer_capacity >= num_digits + 5);
+
+        buffer += 1;
+        if (force_trailing_dot_zero)
+        {
+            *buffer++ = '.';
+            *buffer++ = '0';
+        }
+    }
+    else
+    {
+        // d.igitsE+123
+        // CC_ASSERT(buffer_capacity >= num_digits + 1 + 5);
+
+        std::memmove(buffer + 2, buffer + 1, static_cast<size_t>(num_digits - 1));
+        buffer[1] = '.';
+        buffer += 1 + num_digits;
+    }
+
+    buffer[0] = 'e';
+    buffer = ExponentToString(buffer + 1, exponent);
+
+    return buffer;
+}
+
+inline char* InternalDoubleToString(char* buffer, double value, bool force_trailing_dot_zero = false)
+{
+    auto const res = charconv_ryu::DoubleToDecimal(value);
+
+    int const num_digits = DecimalLengthDouble(res.digits);
+    PrintDecimalDigitsDouble(buffer, res.digits, num_digits);
+
+    int const decimal_point = num_digits + res.exponent;
+    int const exponent = decimal_point - 1;
+
+    // C/C++:      [-4,17)
+    // Java:       [-3,7)
+    // JavaScript: [-6,21)
+    constexpr int const kMinExp = -6;
+    constexpr int const kMaxExp = 21;
+
+    return (kMinExp <= exponent && exponent < kMaxExp)
+        ? FormatFixed(buffer, num_digits, decimal_point, force_trailing_dot_zero)
+        : FormatExponential(buffer, num_digits, exponent, /*force_trailing_dot_zero*/ false);
+}
+
+} // namespace impl
+} // namespace json
+
+namespace json {
 namespace numbers {
 
 // Convert the double-precision number `value` to a decimal floating-point
@@ -100,8 +355,8 @@ inline char* NumberToString(char* buffer, int buffer_length, double value, bool 
             // Reuse PrintDecimalDigits.
             // This routine assumes that 'i' has at most 17 decimal digits.
             // We only get here if 'i' has at most 16 decimal digits.
-            int const num_digits = charconv_ryu::DecimalLengthDouble(digits);
-            return buffer + charconv_ryu::PrintDecimalDigitsDouble(buffer, digits, num_digits);
+            int const num_digits = json::impl::DecimalLengthDouble(digits);
+            return buffer + json::impl::PrintDecimalDigitsDouble(buffer, digits, num_digits);
         }
     }
 
@@ -111,7 +366,7 @@ inline char* NumberToString(char* buffer, int buffer_length, double value, bool 
         *buffer++ = '-';
     }
 
-    return charconv_ryu::PositiveDoubleToString(buffer, value, force_trailing_dot_zero);
+    return json::impl::InternalDoubleToString(buffer, value, force_trailing_dot_zero);
 }
 
 } // namespace numbers
