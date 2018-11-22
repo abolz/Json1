@@ -1685,6 +1685,7 @@ inline void AssignU64(DiyInt& x, uint64_t value)
 // x := A * x + B
 inline void MulAddU32(DiyInt& x, uint32_t A, uint32_t B = 0)
 {
+    CC_ASSERT(x.size >= 0);
     CC_ASSERT(B == 0 || x.exponent == 0);
 
     if (A == 1 && B == 0)
@@ -1740,6 +1741,7 @@ inline void AssignDecimalDigits(DiyInt& x, char const* digits, int num_digits)
 
 inline void MulPow2(DiyInt& x, int exp) // aka left-shift
 {
+    CC_ASSERT(x.size >= 0);
     CC_ASSERT(exp >= 0);
 
     if (x.size == 0)
