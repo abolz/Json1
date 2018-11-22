@@ -20,21 +20,14 @@
 
 #pragma once
 
-#include <cassert>
-#include <cstdint>
-#include <cstdio>
-#include <cstring>
-#include <limits>
+#include "__charconv_common.h"
 
 #if defined(_MSC_VER)
 #include <intrin.h>
 #endif
 
-#ifndef CC_ASSERT
-#define CC_ASSERT(X) assert(X)
-#endif
-
-namespace charconv_bellerophon {
+namespace charconv {
+namespace bellerophon {
 
 //==================================================================================================
 // IEEE double-/single-precision inspection
@@ -2016,4 +2009,5 @@ inline double DigitsToDouble(char const* digits, int num_digits, int exponent, b
     return v.NextValue();
 }
 
-} // namespace charconv_bellerophon
+} // namespace bellerophon
+} // namespace charconv

@@ -53,14 +53,14 @@ static double Ldexp(uint64_t f, int e)
     return DoubleFromBits((f & SignificandMask) | (biased_exponent << PhysicalSignificandSize));
 }
 
-static charconv_ryu::DoubleToDecimalResult NonNegativeDoubleToDecimal(double value)
+static charconv::ryu::DoubleToDecimalResult NonNegativeDoubleToDecimal(double value)
 {
-    return charconv_ryu::DoubleToDecimal(value);
+    return charconv::ryu::DoubleToDecimal(value);
 }
 
 TEST_CASE("Ryu_Regression")
 {
-    charconv_ryu::DoubleToDecimalResult res;
+    charconv::ryu::DoubleToDecimalResult res;
 
     res = NonNegativeDoubleToDecimal(0.0); // +0
     CHECK_EQ(0ull, res.digits);
@@ -108,7 +108,7 @@ TEST_CASE("Ryu_Regression")
 
 TEST_CASE("Ryu_Paxson_Kahan")
 {
-    charconv_ryu::DoubleToDecimalResult res;
+    charconv::ryu::DoubleToDecimalResult res;
 
     //
     // V. Paxson and W. Kahan, "A Program for Testing IEEE Binary-Decimal Conversion", manuscript, May 1991,
@@ -266,7 +266,7 @@ TEST_CASE("Ryu_Paxson_Kahan")
 
 TEST_CASE("D2s_LotsOfTrailingZeros")
 {
-    charconv_ryu::DoubleToDecimalResult res;
+    charconv::ryu::DoubleToDecimalResult res;
 
     res = NonNegativeDoubleToDecimal(2.98023223876953125E-8);
     CHECK_EQ(29802322387695312ull, res.digits);
@@ -275,7 +275,7 @@ TEST_CASE("D2s_LotsOfTrailingZeros")
 
 TEST_CASE("D2s_Regression")
 {
-    charconv_ryu::DoubleToDecimalResult res;
+    charconv::ryu::DoubleToDecimalResult res;
 
     res = NonNegativeDoubleToDecimal(2.109808898695963E16);
     CHECK_EQ(2109808898695963ull, res.digits);
@@ -308,7 +308,7 @@ TEST_CASE("D2s_Regression")
 
 TEST_CASE("D2s_LooksLikePow5")
 {
-    charconv_ryu::DoubleToDecimalResult res;
+    charconv::ryu::DoubleToDecimalResult res;
 
     // These numbers have a mantissa that is a multiple of the largest power of 5 that fits,
     // and an exponent that causes the computation for q to result in 22, which is a corner
@@ -327,7 +327,7 @@ TEST_CASE("D2s_LooksLikePow5")
 
 TEST_CASE("D2s_Q22")
 {
-    charconv_ryu::DoubleToDecimalResult res;
+    charconv::ryu::DoubleToDecimalResult res;
 
     // These numbers have a mantissa that is a multiple of the largest power of 5 that fits,
     // and an exponent that causes the computation for q to result in 22, which is a corner

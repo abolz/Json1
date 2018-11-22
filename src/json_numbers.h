@@ -22,11 +22,11 @@
 
 #include "json_parser.h" // NumberClass, Options
 
-#include <climits>
-#include <limits>
-
 #include "__charconv_bellerophon.h"
 #include "__charconv_ryu.h"
+
+#include <climits>
+#include <limits>
 
 //==================================================================================================
 // NumberToString
@@ -197,7 +197,7 @@ inline char* FormatFixed(char* buffer, int num_digits, int decimal_point, bool f
     if (num_digits <= decimal_point)
     {
         // digits[000]
-        // CC_ASSERT(buffer_capacity >= decimal_point + (force_trailing_dot_zero ? 2 : 0));
+        // JSON_ASSERT(buffer_capacity >= decimal_point + (force_trailing_dot_zero ? 2 : 0));
 
         std::memset(buffer + num_digits, '0', static_cast<size_t>(decimal_point - num_digits));
         buffer += decimal_point;
@@ -211,7 +211,7 @@ inline char* FormatFixed(char* buffer, int num_digits, int decimal_point, bool f
     else if (0 < decimal_point)
     {
         // dig.its
-        // CC_ASSERT(buffer_capacity >= length + 1);
+        // JSON_ASSERT(buffer_capacity >= length + 1);
 
         std::memmove(buffer + (decimal_point + 1), buffer + decimal_point, static_cast<size_t>(num_digits - decimal_point));
         buffer[decimal_point] = '.';
@@ -220,7 +220,7 @@ inline char* FormatFixed(char* buffer, int num_digits, int decimal_point, bool f
     else // decimal_point <= 0
     {
         // 0.[000]digits
-        // CC_ASSERT(buffer_capacity >= 2 + (-decimal_point) + length);
+        // JSON_ASSERT(buffer_capacity >= 2 + (-decimal_point) + length);
 
         std::memmove(buffer + (2 + -decimal_point), buffer, static_cast<size_t>(num_digits));
         buffer[0] = '0';
@@ -238,7 +238,7 @@ inline char* FormatExponential(char* buffer, int num_digits, int exponent, bool 
     if (num_digits == 1)
     {
         // dE+123
-        // CC_ASSERT(buffer_capacity >= num_digits + 5);
+        // JSON_ASSERT(buffer_capacity >= num_digits + 5);
 
         buffer += 1;
         if (force_trailing_dot_zero)
@@ -250,7 +250,7 @@ inline char* FormatExponential(char* buffer, int num_digits, int exponent, bool 
     else
     {
         // d.igitsE+123
-        // CC_ASSERT(buffer_capacity >= num_digits + 1 + 5);
+        // JSON_ASSERT(buffer_capacity >= num_digits + 1 + 5);
 
         std::memmove(buffer + 2, buffer + 1, static_cast<size_t>(num_digits - 1));
         buffer[1] = '.';
@@ -265,7 +265,7 @@ inline char* FormatExponential(char* buffer, int num_digits, int exponent, bool 
 
 inline char* InternalDoubleToString(char* buffer, double value, bool force_trailing_dot_zero = false)
 {
-    auto const res = charconv_ryu::DoubleToDecimal(value);
+    auto const res = charconv::ryu::DoubleToDecimal(value);
 
     int const num_digits = DecimalLengthDouble(res.digits);
     PrintDecimalDigitsDouble(buffer, res.digits, num_digits);
@@ -306,7 +306,7 @@ inline char* NumberToString(char* buffer, int buffer_length, double value, bool 
     constexpr double kMinInteger = -9007199254740992.0; // -2^53
     constexpr double kMaxInteger =  9007199254740992.0; //  2^53
 
-    charconv_ryu::Double const v(value);
+    charconv::Double const v(value);
 
     if (!v.IsFinite())
     {
@@ -385,7 +385,7 @@ constexpr int const kMaxStringToDoubleLen = 99999999; // < INT_MAX / 4
 
 inline double InternalStringToDouble(char const* next, char const* last, NumberClass nc)
 {
-    using namespace charconv_bellerophon;
+    using namespace charconv::bellerophon;
 
     char        buffer[kMaxSignificantDigits];
     char const* digits     = nullptr;

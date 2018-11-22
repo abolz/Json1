@@ -8,7 +8,7 @@
 
 static inline double Strtod(std::string const& digits, int exponent)
 {
-    return charconv_bellerophon::DigitsToDouble(digits.data(), static_cast<int>(digits.size()), exponent, /*nonzero_tail*/ false);
+    return charconv::bellerophon::DigitsToDouble(digits.data(), static_cast<int>(digits.size()), exponent, /*nonzero_tail*/ false);
 }
 
 TEST_CASE("Strtod - double_conversion")
