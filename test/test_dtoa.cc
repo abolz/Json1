@@ -7,6 +7,53 @@
 #define CHECK_EQ(EXPECTED, ACTUAL) CHECK(EXPECTED == ACTUAL)
 #define CHECK_TRUE(EXPECTED) CHECK(EXPECTED == true)
 
+TEST_CASE("Ryu bit length")
+{
+    using namespace charconv::ryu;
+
+    // (We subtract 2 so that the bounds computation has 2 additional bits.)
+    constexpr int kMinExp = charconv::Double::MinExponent - 2;
+    constexpr int kMaxExp = charconv::Double::MaxExponent - 2;
+
+    for (int e2 = kMinExp; e2 <= kMaxExp; ++e2)
+    {
+        if (e2 >= 0)
+        {
+            CAPTURE(e2);
+            int const q = ComputeQForNonNegativeExponent(e2); // table index
+            CHECK(q >= 0);
+            CHECK(q < kPow5InvDoubleTableSize);
+            int const k = kPow5InvDoubleBitLength + Pow5BitLength(q) - 1;
+            int const j = -e2 + q + k;
+            CHECK(j >= 115);
+
+            auto const mul = kPow5InvDouble[q];
+            CHECK(mul.hi != 0);
+            // Bit length of the result (mul * m) / 2^j must be <= 64.
+            // It is actually <= 63, which is nice for languages which only have signed 64-bit integers.
+            CHECK((BitLength(mul.hi) + 55) - j <= 63);
+        }
+        else
+        {
+            CAPTURE(e2);
+            int const q = ComputeQForNegativeExponent(-e2);
+            CHECK(q >= 0);
+            int const i = -e2 - q; // table index
+            CHECK(i >= 0);
+            CHECK(i < kPow5DoubleTableSize);
+            int const k = Pow5BitLength(i) - kPow5DoubleBitLength;
+            int const j = q - k;
+            CHECK(j >= 114);
+
+            auto const mul = kPow5Double[i];
+            CHECK(mul.hi != 0);
+            // Bit length of the result (mul * m) / 2^j must be <= 64.
+            // It is actually <= 63, which is nice for languages which only have signed 64-bit integers.
+            CHECK((BitLength(mul.hi) + 55) - j <= 63);
+        }
+    }
+}
+
 static double DoubleFromBits(uint64_t ieeeBits)
 {
     double value;
@@ -411,3 +458,4 @@ TEST_CASE("Dtoa")
     CHECK_EQ("1.1e+308", Dtoa(1.1e+308));
     CHECK_EQ("1.1e-308", Dtoa(1.1e-308));
 }
+

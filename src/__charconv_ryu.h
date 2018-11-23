@@ -834,7 +834,6 @@ inline uint64_t ShiftRight128(Uint64x2 x, int dist)
 inline uint64_t MulShift(uint64_t m, Uint64x2 const* mul, int j)
 {
     CC_ASSERT((m >> 55) == 0); // m is maximum 55 bits
-    CC_ASSERT((mul->hi >> (123 - 64)) == 0); // mul has at most 123 bits
 
 #if 1 && CC_HAS_UINT128
     __extension__ using uint128_t = unsigned __int128;
@@ -865,7 +864,6 @@ inline void MulShiftAll(uint64_t mv, uint64_t mp, uint64_t mm, Uint64x2 const* m
 inline void MulShiftAll(uint64_t mv, uint64_t /*mp*/, uint64_t mm, Uint64x2 const* mul, int j, uint64_t* vr, uint64_t* vp, uint64_t* vm)
 {
     CC_ASSERT((mv >> 55) == 0); // m2 is maximum 55 bits
-    CC_ASSERT((mul->hi >> (123 - 64)) == 0); // mul has at most 123 bits
 
     uint64_t const m2 = mv / 2;
     uint32_t const mmShift = static_cast<uint32_t>(mv - mm - 1);
@@ -938,6 +936,15 @@ inline uint64_t Div100_000_000(const uint64_t x)
 }
 
 #endif // CC_32_BIT_PLATFORM
+
+inline int BitLength(uint64_t x) // DEBUG only
+{
+    int n = 0;
+    for ( ; x != 0; x >>= 1, ++n)
+    {
+    }
+    return n;
+}
 
 // e == 0 ? 1 : ceil(log_2(5^e))
 inline int Pow5BitLength(int e)
@@ -1080,15 +1087,18 @@ inline DoubleToDecimalResult DoubleToDecimal(double value)
     if (e2 >= 0)
     {
         // I tried special-casing q == 0, but there was no effect on performance.
-        int const q = ComputeQForNonNegativeExponent(e2);
+        int const q = ComputeQForNonNegativeExponent(e2); // table index
         CC_ASSERT(q >= 0);
         int const k = kPow5InvDoubleBitLength + Pow5BitLength(q) - 1;
-        int const j = -e2 + q + k;
-        CC_ASSERT(j >= 114);
+        int const j = -e2 + q + k; // shift
+        CC_ASSERT(j >= 115);
 
         e10 = q;
 
         CC_ASSERT(q < kPow5InvDoubleTableSize);
+        CC_ASSERT(kPow5InvDouble[q].hi != 0);
+        CC_ASSERT((BitLength(kPow5InvDouble[q].hi) + 55) - j <= 64);
+
         MulShiftAll(mv, mp, mm, kPow5InvDouble + q, j, &vr, &vp, &vm);
 
         // 22 = floor(log_5(2^53))
@@ -1124,14 +1134,18 @@ inline DoubleToDecimalResult DoubleToDecimal(double value)
     {
         int const q = ComputeQForNegativeExponent(-e2);
         CC_ASSERT(q >= 0);
-        int const i = -e2 - q;
+        int const i = -e2 - q; // table index
         int const k = Pow5BitLength(i) - kPow5DoubleBitLength;
-        int const j = q - k;
+        int const j = q - k; // shift
         CC_ASSERT(j >= 114);
 
         e10 = e2 + q;
 
+        CC_ASSERT(i >= 0);
         CC_ASSERT(i < kPow5DoubleTableSize);
+        CC_ASSERT(kPow5Double[i].hi != 0);
+        CC_ASSERT((BitLength(kPow5Double[i].hi) + 55) - j <= 64);
+
         MulShiftAll(mv, mp, mm, kPow5Double + i, j, &vr, &vp, &vm);
 
         if (q <= 1)
