@@ -230,7 +230,7 @@ inline char* FormatFixed(char* buffer, int num_digits, int decimal_point, bool f
     }
 }
 
-inline char* FormatExponential(char* buffer, int num_digits, int exponent, bool force_trailing_dot_zero)
+inline char* FormatScientific(char* buffer, int num_digits, int exponent, bool force_trailing_dot_zero)
 {
     JSON_ASSERT(buffer != nullptr);
     JSON_ASSERT(num_digits >= 1);
@@ -263,15 +263,10 @@ inline char* FormatExponential(char* buffer, int num_digits, int exponent, bool 
     return buffer;
 }
 
-inline char* InternalDoubleToString(char* buffer, double value, bool force_trailing_dot_zero = false)
+inline char* FormatGeneral(char* buffer, int num_digits, int decimal_exponent, bool force_trailing_dot_zero = false)
 {
-    auto const res = charconv::ryu::DoubleToDecimal(value);
-
-    int const num_digits = DecimalLengthDouble(res.digits);
-    PrintDecimalDigitsDouble(buffer, res.digits, num_digits);
-
-    int const decimal_point = num_digits + res.exponent;
-    int const exponent = decimal_point - 1;
+    int const decimal_point = num_digits + decimal_exponent;
+    int const scientific_exponent = decimal_point - 1;
 
     // C/C++:      [-4,17)
     // Java:       [-3,7)
@@ -279,9 +274,19 @@ inline char* InternalDoubleToString(char* buffer, double value, bool force_trail
     constexpr int const kMinExp = -6;
     constexpr int const kMaxExp = 21;
 
-    return (kMinExp <= exponent && exponent < kMaxExp)
+    return (kMinExp <= scientific_exponent && scientific_exponent < kMaxExp)
         ? FormatFixed(buffer, num_digits, decimal_point, force_trailing_dot_zero)
-        : FormatExponential(buffer, num_digits, exponent, /*force_trailing_dot_zero*/ false);
+        : FormatScientific(buffer, num_digits, scientific_exponent, /*force_trailing_dot_zero*/ false);
+}
+
+inline char* InternalDoubleToString(char* buffer, double value, bool force_trailing_dot_zero = false)
+{
+    auto const res = charconv::ryu::DoubleToDecimal(value);
+
+    int const num_digits = DecimalLengthDouble(res.digits);
+    PrintDecimalDigitsDouble(buffer, res.digits, num_digits);
+
+    return FormatGeneral(buffer, num_digits, res.exponent, force_trailing_dot_zero);
 }
 
 } // namespace impl
