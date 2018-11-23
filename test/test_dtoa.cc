@@ -7,7 +7,11 @@
 #define CHECK_EQ(EXPECTED, ACTUAL) CHECK(EXPECTED == ACTUAL)
 #define CHECK_TRUE(EXPECTED) CHECK(EXPECTED == true)
 
-TEST_CASE("Ryu bit length")
+//==================================================================================================
+// IEEE double-precision implementation
+//==================================================================================================
+
+TEST_CASE("Ryu bit length - double")
 {
     using namespace charconv::ryu;
 
@@ -20,14 +24,15 @@ TEST_CASE("Ryu bit length")
         if (e2 >= 0)
         {
             CAPTURE(e2);
-            int const q = ComputeQForNonNegativeExponent(e2); // table index
+
+            int const q = Log10Pow2(e2) - (e2 > 3); // table index
             CHECK(q >= 0);
-            CHECK(q < kPow5InvDoubleTableSize);
-            int const k = kPow5InvDoubleBitLength + Pow5BitLength(q) - 1;
+            CHECK(q < kDoublePow5InvTableSize);
+            int const k = kDoublePow5InvBitLength + Pow5BitLength(q) - 1;
             int const j = -e2 + q + k;
             CHECK(j >= 115);
 
-            auto const mul = kPow5InvDouble[q];
+            auto const mul = kDoublePow5Inv[q];
             CHECK(mul.hi != 0);
             // Bit length of the result (mul * m) / 2^j must be <= 64.
             // It is actually <= 63, which is nice for languages which only have signed 64-bit integers.
@@ -36,16 +41,17 @@ TEST_CASE("Ryu bit length")
         else
         {
             CAPTURE(e2);
-            int const q = ComputeQForNegativeExponent(-e2);
+
+            int const q = Log10Pow5(-e2) - (-e2 > 1);
             CHECK(q >= 0);
             int const i = -e2 - q; // table index
             CHECK(i >= 0);
-            CHECK(i < kPow5DoubleTableSize);
-            int const k = Pow5BitLength(i) - kPow5DoubleBitLength;
+            CHECK(i < kDoublePow5TableSize);
+            int const k = Pow5BitLength(i) - kDoublePow5BitLength;
             int const j = q - k;
             CHECK(j >= 114);
 
-            auto const mul = kPow5Double[i];
+            auto const mul = kDoublePow5[i];
             CHECK(mul.hi != 0);
             // Bit length of the result (mul * m) / 2^j must be <= 64.
             // It is actually <= 63, which is nice for languages which only have signed 64-bit integers.
@@ -105,7 +111,7 @@ static charconv::ryu::DoubleToDecimalResult NonNegativeDoubleToDecimal(double va
     return charconv::ryu::DoubleToDecimal(value);
 }
 
-TEST_CASE("Ryu_Regression")
+TEST_CASE("Ryu - double")
 {
     charconv::ryu::DoubleToDecimalResult res;
 
@@ -153,7 +159,7 @@ TEST_CASE("Ryu_Regression")
     CHECK_EQ(292, res.exponent);
 }
 
-TEST_CASE("Ryu_Paxson_Kahan")
+TEST_CASE("Ryu - Paxson,Kahan")
 {
     charconv::ryu::DoubleToDecimalResult res;
 
@@ -311,7 +317,7 @@ TEST_CASE("Ryu_Paxson_Kahan")
 // The D2s_X tests taken from:
 // https://github.com/ulfjack/ryu/blob/master/ryu/tests/d2s_test.cc
 
-TEST_CASE("D2s_LotsOfTrailingZeros")
+TEST_CASE("D2s - LotsOfTrailingZeros")
 {
     charconv::ryu::DoubleToDecimalResult res;
 
@@ -320,7 +326,7 @@ TEST_CASE("D2s_LotsOfTrailingZeros")
     CHECK_EQ(-8-16, res.exponent);
 }
 
-TEST_CASE("D2s_Regression")
+TEST_CASE("D2s - Regression")
 {
     charconv::ryu::DoubleToDecimalResult res;
 
@@ -353,7 +359,7 @@ TEST_CASE("D2s_Regression")
     CHECK_EQ(0-7, res.exponent);
 }
 
-TEST_CASE("D2s_LooksLikePow5")
+TEST_CASE("D2s - LooksLikePow5")
 {
     charconv::ryu::DoubleToDecimalResult res;
 
@@ -372,7 +378,7 @@ TEST_CASE("D2s_LooksLikePow5")
     CHECK_EQ(40-15, res.exponent);
 }
 
-TEST_CASE("D2s_Q22")
+TEST_CASE("D2s - Q22")
 {
     charconv::ryu::DoubleToDecimalResult res;
 

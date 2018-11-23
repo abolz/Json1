@@ -58,6 +58,23 @@ inline int DecimalLengthDouble(uint64_t v)
     return 1;
 }
 
+#if CC_SINGLE_PRECISION
+inline int DecimalLengthSingle(uint32_t v)
+{
+    CC_ASSERT(v < 1000000000u);
+
+    if (v >= 100000000u) { return 9; }
+    if (v >= 10000000u) { return 8; }
+    if (v >= 1000000u) { return 7; }
+    if (v >= 100000u) { return 6; }
+    if (v >= 10000u) { return 5; }
+    if (v >= 1000u) { return 4; }
+    if (v >= 100u) { return 3; }
+    if (v >= 10u) { return 2; }
+    return 1;
+}
+#endif
+
 inline char* Utoa_2Digits(char* buf, uint32_t digits)
 {
     static constexpr char const* kDigits100 =
@@ -149,6 +166,44 @@ inline int PrintDecimalDigitsDouble(char* buf, uint64_t output, int output_lengt
 
     return output_length;
 }
+
+#if CC_SINGLE_PRECISION
+inline int PrintDecimalDigitsSingle(char* buf, uint32_t output, int output_length)
+{
+    int i = output_length;
+
+    while (output >= 10000)
+    {
+        JSON_ASSERT(i > 4);
+        uint32_t const r = output % 10000;
+        output /= 10000;
+        i -= 4;
+        Utoa_4Digits(buf + i, r);
+    }
+
+    if (output >= 100)
+    {
+        JSON_ASSERT(i > 2);
+        uint32_t const r = output % 100;
+        output /= 100;
+        i -= 2;
+        Utoa_2Digits(buf + i, r);
+    }
+
+    if (output >= 10)
+    {
+        JSON_ASSERT(i == 2);
+        Utoa_2Digits(buf, output);
+    }
+    else
+    {
+        JSON_ASSERT(i == 1);
+        buf[0] = static_cast<char>('0' + output);
+    }
+
+    return output_length;
+}
+#endif
 
 inline char* ExponentToString(char* buffer, int value)
 {
@@ -289,6 +344,18 @@ inline char* InternalDoubleToString(char* buffer, double value, bool force_trail
     return FormatGeneral(buffer, num_digits, res.exponent, force_trailing_dot_zero);
 }
 
+#if CC_SINGLE_PRECISION
+inline char* InternalSingleToString(char* buffer, float value, bool force_trailing_dot_zero = false)
+{
+    auto const res = charconv::ryu::SingleToDecimal(value);
+
+    int const num_digits = DecimalLengthSingle(res.digits);
+    PrintDecimalDigitsSingle(buffer, res.digits, num_digits);
+
+    return FormatGeneral(buffer, num_digits, res.exponent, force_trailing_dot_zero);
+}
+#endif
+
 } // namespace impl
 } // namespace json
 
@@ -373,6 +440,87 @@ inline char* NumberToString(char* buffer, int buffer_length, double value, bool 
 
     return json::impl::InternalDoubleToString(buffer, value, force_trailing_dot_zero);
 }
+
+// Convert the single-precision number `value` to a decimal floating-point
+// number.
+// The buffer must be large enough! (size >= 32 is sufficient.)
+#if CC_SINGLE_PRECISION
+inline char* NumberToString(char* buffer, int buffer_length, float value, bool force_trailing_dot_zero = true)
+{
+    JSON_ASSERT(buffer_length >= 32);
+    static_cast<void>(buffer_length);
+
+    // Integers in the range [-2^24, +2^24] are exactly repesentable as 'float'.
+    // Print these numbers without a trailing ".0".
+    // However, always print -0 as "-0.0" to increase compatibility with other
+    // libraries, regardless of the value of 'force_trailing_dot_zero'.
+
+    constexpr float kMinInteger = -16777216.0; // -2^24
+    constexpr float kMaxInteger =  16777216.0; //  2^24
+
+    charconv::Single const v(value);
+
+    if (!v.IsFinite())
+    {
+        if (v.IsNaN()) {
+            std::memcpy(buffer, "NaN", 3);
+            return buffer + 3;
+        }
+
+        if (v.SignBit())
+            *buffer++ = '-';
+
+        std::memcpy(buffer, "Infinity", 8);
+        return buffer + 8;
+    }
+
+    if (v.IsZero())
+    {
+        if (v.SignBit())
+        {
+            *buffer++ = '-';
+            *buffer++ = '0';
+            *buffer++ = '.';
+            *buffer++ = '0';
+        }
+        else
+        {
+            *buffer++ = '0';
+        }
+
+        return buffer;
+    }
+
+    if (kMinInteger <= value && value <= kMaxInteger)
+    {
+        int32_t i = static_cast<int32_t>(value);
+        if (static_cast<float>(i) == value)
+        {
+            if (i < 0)
+            {
+                *buffer++ = '-';
+                i = -i;
+            }
+
+            uint32_t const digits = static_cast<uint32_t>(i);
+
+            // Reuse PrintDecimalDigits.
+            // This routine assumes that 'i' has at most 9 decimal digits.
+            // We only get here if 'i' has at most 8 decimal digits.
+            int const num_digits = json::impl::DecimalLengthSingle(digits);
+            return buffer + json::impl::PrintDecimalDigitsSingle(buffer, digits, num_digits);
+        }
+    }
+
+    if (v.SignBit())
+    {
+        value = v.AbsValue();
+        *buffer++ = '-';
+    }
+
+    return json::impl::InternalSingleToString(buffer, value, force_trailing_dot_zero);
+}
+#endif
 
 } // namespace numbers
 } // namespace json

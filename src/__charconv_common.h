@@ -29,6 +29,10 @@
 #define CC_ASSERT(X) assert(X)
 #endif
 
+#ifndef CC_SINGLE_PRECISION
+#define CC_SINGLE_PRECISION 0
+#endif
+
 namespace charconv {
 
 //==================================================================================================
@@ -113,6 +117,8 @@ struct IEEEFloatingPoint
 };
 
 using Double = IEEEFloatingPoint<double, uint64_t>;
+#if CC_SINGLE_PRECISION
 using Single = IEEEFloatingPoint<float, uint32_t>;
+#endif
 
 } // namespace charconv

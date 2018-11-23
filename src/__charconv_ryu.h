@@ -28,8 +28,6 @@
 
 #if defined(_M_IX86) || defined(_M_ARM) || defined(__i386__) || defined(__arm__)
 #define CC_32_BIT_PLATFORM 1
-#else
-// Assume 64-bit platform
 #endif
 
 #if defined(__GNUC__) && defined(__SIZEOF_INT128__)
@@ -87,6 +85,43 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 */
 
+inline int BitLength(uint64_t x) // DEBUG only
+{
+    int n = 0;
+    for ( ; x != 0; x >>= 1, ++n)
+    {
+    }
+    return n;
+}
+
+// e == 0 ? 1 : ceil(log_2(5^e))
+inline int Pow5BitLength(int e)
+{
+    CC_ASSERT(e >= 0);
+    CC_ASSERT(e <= 1500); // Only tested for e <= 1500
+    return static_cast<int>((static_cast<uint32_t>(e) * 1217359) >> 19) + 1;
+}
+
+// floor(log_10(2^e))
+inline int Log10Pow2(int e)
+{
+    CC_ASSERT(e >= 0);
+    CC_ASSERT(e <= 1500); // Only tested for e <= 1500
+    return static_cast<int>((static_cast<uint32_t>(e) * 78913) >> 18);
+}
+
+// floor(log_10(5^e))
+inline int Log10Pow5(int e)
+{
+    CC_ASSERT(e >= 0);
+    CC_ASSERT(e <= 1500); // Only tested for e <= 1500
+    return static_cast<int>((static_cast<uint32_t>(e) * 732923) >> 20);
+}
+
+//==================================================================================================
+// IEEE double-precision implementation
+//==================================================================================================
+
 // sizeof(tables) = 9888 bytes
 
 struct Uint64x2 {
@@ -94,12 +129,10 @@ struct Uint64x2 {
     uint64_t hi;
 };
 
-constexpr int kPow5InvDoubleBitLength = 122;
-constexpr int kPow5DoubleBitLength = 121;
-constexpr int kPow5InvDoubleTableSize = 292;
-constexpr int kPow5DoubleTableSize = 326;
+constexpr int kDoublePow5InvBitLength = 122;
+constexpr int kDoublePow5InvTableSize = 292;
 
-static constexpr Uint64x2 kPow5InvDouble[kPow5InvDoubleTableSize] = { // 4672 bytes
+static constexpr Uint64x2 kDoublePow5Inv[kDoublePow5InvTableSize] = { // 4672 bytes
     {0x0000000000000001, 0x0400000000000000},
     {0x3333333333333334, 0x0333333333333333},
     {0x28F5C28F5C28F5C3, 0x028F5C28F5C28F5C},
@@ -394,7 +427,10 @@ static constexpr Uint64x2 kPow5InvDouble[kPow5InvDoubleTableSize] = { // 4672 by
     {0xC5DEC645863153A7, 0x027EAB3CF7DCD826},
 };
 
-static constexpr Uint64x2 kPow5Double[kPow5DoubleTableSize] = { // 5216 bytes
+constexpr int kDoublePow5BitLength = 121;
+constexpr int kDoublePow5TableSize = 326;
+
+static constexpr Uint64x2 kDoublePow5[kDoublePow5TableSize] = { // 5216 bytes
     {0x0000000000000000, 0x0100000000000000},
     {0x0000000000000000, 0x0140000000000000},
     {0x0000000000000000, 0x0190000000000000},
@@ -937,49 +973,6 @@ inline uint64_t Div100_000_000(const uint64_t x)
 
 #endif // CC_32_BIT_PLATFORM
 
-inline int BitLength(uint64_t x) // DEBUG only
-{
-    int n = 0;
-    for ( ; x != 0; x >>= 1, ++n)
-    {
-    }
-    return n;
-}
-
-// e == 0 ? 1 : ceil(log_2(5^e))
-inline int Pow5BitLength(int e)
-{
-    CC_ASSERT(e >= 0);
-    CC_ASSERT(e <= 1500); // Only tested for e <= 1500
-    return static_cast<int>((static_cast<uint32_t>(e) * 1217359) >> 19) + 1;
-}
-
-// floor(log_10(2^e))
-inline int Log10Pow2(int e)
-{
-    CC_ASSERT(e >= 0);
-    CC_ASSERT(e <= 1500); // Only tested for e <= 1500
-    return static_cast<int>((static_cast<uint32_t>(e) * 78913) >> 18);
-}
-
-// floor(log_10(5^e))
-inline int Log10Pow5(int e)
-{
-    CC_ASSERT(e >= 0);
-    CC_ASSERT(e <= 1500); // Only tested for e <= 1500
-    return static_cast<int>((static_cast<uint32_t>(e) * 732923) >> 20);
-}
-
-inline int ComputeQForNonNegativeExponent(int e)
-{
-    return Log10Pow2(e) - (e > 3);
-}
-
-inline int ComputeQForNegativeExponent(int e)
-{
-    return Log10Pow5(e) - (e > 1);
-}
-
 inline int Pow5Factor(uint64_t value)
 {
     // For 64-bit integers: result <= 27
@@ -1087,19 +1080,19 @@ inline DoubleToDecimalResult DoubleToDecimal(double value)
     if (e2 >= 0)
     {
         // I tried special-casing q == 0, but there was no effect on performance.
-        int const q = ComputeQForNonNegativeExponent(e2); // table index
+        // q = max(0, log_10(2^e2))
+        int const q = Log10Pow2(e2) - (e2 > 3); // table index
         CC_ASSERT(q >= 0);
-        int const k = kPow5InvDoubleBitLength + Pow5BitLength(q) - 1;
+        CC_ASSERT(q < kDoublePow5InvTableSize);
+        int const k = kDoublePow5InvBitLength + Pow5BitLength(q) - 1;
         int const j = -e2 + q + k; // shift
         CC_ASSERT(j >= 115);
 
         e10 = q;
 
-        CC_ASSERT(q < kPow5InvDoubleTableSize);
-        CC_ASSERT(kPow5InvDouble[q].hi != 0);
-        CC_ASSERT((BitLength(kPow5InvDouble[q].hi) + 55) - j <= 64);
+        CC_ASSERT((BitLength(kDoublePow5Inv[q].hi) + 55) - j <= 64);
 
-        MulShiftAll(mv, mp, mm, kPow5InvDouble + q, j, &vr, &vp, &vm);
+        MulShiftAll(mv, mp, mm, kDoublePow5Inv + q, j, &vr, &vp, &vm);
 
         // 22 = floor(log_5(2^53))
         // 23 = floor(log_5(2^(53+2)))
@@ -1132,21 +1125,21 @@ inline DoubleToDecimalResult DoubleToDecimal(double value)
     }
     else
     {
-        int const q = ComputeQForNegativeExponent(-e2);
+        // q = max(0, log_10(5^-e2))
+        int const q = Log10Pow5(-e2) - (-e2 > 1);
         CC_ASSERT(q >= 0);
         int const i = -e2 - q; // table index
-        int const k = Pow5BitLength(i) - kPow5DoubleBitLength;
+        CC_ASSERT(i >= 0);
+        CC_ASSERT(i < kDoublePow5TableSize);
+        int const k = Pow5BitLength(i) - kDoublePow5BitLength;
         int const j = q - k; // shift
         CC_ASSERT(j >= 114);
 
         e10 = e2 + q;
 
-        CC_ASSERT(i >= 0);
-        CC_ASSERT(i < kPow5DoubleTableSize);
-        CC_ASSERT(kPow5Double[i].hi != 0);
-        CC_ASSERT((BitLength(kPow5Double[i].hi) + 55) - j <= 64);
+        CC_ASSERT((BitLength(kDoublePow5[i].hi) + 55) - j <= 64);
 
-        MulShiftAll(mv, mp, mm, kPow5Double + i, j, &vr, &vp, &vm);
+        MulShiftAll(mv, mp, mm, kDoublePow5 + i, j, &vr, &vp, &vm);
 
         if (q <= 1)
         {
@@ -1174,7 +1167,6 @@ inline DoubleToDecimalResult DoubleToDecimal(double value)
             // <=> ntz(mv) >= q-1
             // <=> mv & ((1 << (q-1)) - 1) == 0
             // We also need to make sure that the left shift does not overflow.
-            CC_ASSERT(q >= 1);
             vrIsTrailingZeros = MultipleOfPow2(mv, q - 1);
         }
     }
