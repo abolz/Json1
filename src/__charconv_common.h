@@ -45,35 +45,36 @@ inline Dest ReinterpretBits(Source source)
     return dest;
 }
 
-struct Double
+template <typename FloatType, typename BitsType>
+struct IEEEFloatingPoint
 {
-    static_assert(std::numeric_limits<double>::is_iec559
-                  && std::numeric_limits<double>::digits == 53
-                  && std::numeric_limits<double>::max_exponent == 1024,
-        "IEEE-754 double-precision implementation required");
+    static_assert(std::numeric_limits<FloatType>::is_iec559
+                  && ((std::numeric_limits<FloatType>::digits == 53 && std::numeric_limits<FloatType>::max_exponent == 1024) ||
+                      (std::numeric_limits<FloatType>::digits == 24 && std::numeric_limits<FloatType>::max_exponent == 128)),
+        "IEEE-754 double- or single-precision implementation required");
 
-    static constexpr int      SignificandSize         = std::numeric_limits<double>::digits;    // = p   (includes the hidden bit)
+    static constexpr int      SignificandSize         = std::numeric_limits<FloatType>::digits; // = p   (includes the hidden bit)
     static constexpr int      PhysicalSignificandSize = SignificandSize - 1;                    // = p-1 (excludes the hidden bit)
     static constexpr int      UnbiasedMinExponent     = 1;
-    static constexpr int      UnbiasedMaxExponent     = 2 * std::numeric_limits<double>::max_exponent - 1 - 1;
-    static constexpr int      ExponentBias            = 2 * std::numeric_limits<double>::max_exponent / 2 - 1 + (SignificandSize - 1);
+    static constexpr int      UnbiasedMaxExponent     = 2 * std::numeric_limits<FloatType>::max_exponent - 1 - 1;
+    static constexpr int      ExponentBias            = 2 * std::numeric_limits<FloatType>::max_exponent / 2 - 1 + (SignificandSize - 1);
     static constexpr int      MinExponent             = UnbiasedMinExponent - ExponentBias;
     static constexpr int      MaxExponent             = UnbiasedMaxExponent - ExponentBias;
-    static constexpr uint64_t HiddenBit               = uint64_t{1} << (SignificandSize - 1);   // = 2^(p-1)
-    static constexpr uint64_t SignificandMask         = HiddenBit - 1;                          // = 2^(p-1) - 1
-    static constexpr uint64_t ExponentMask            = uint64_t{2 * std::numeric_limits<double>::max_exponent - 1} << PhysicalSignificandSize;
-    static constexpr uint64_t SignMask                = ~(~uint64_t{0} >> 1);
+    static constexpr BitsType HiddenBit               = BitsType{1} << (SignificandSize - 1);   // = 2^(p-1)
+    static constexpr BitsType SignificandMask         = HiddenBit - 1;                          // = 2^(p-1) - 1
+    static constexpr BitsType ExponentMask            = BitsType{2 * std::numeric_limits<FloatType>::max_exponent - 1} << PhysicalSignificandSize;
+    static constexpr BitsType SignMask                = ~(~BitsType{0} >> 1);
 
-    uint64_t /*const*/ bits;
+    BitsType /*const*/ bits;
 
-    explicit Double(uint64_t bits_) : bits(bits_) {}
-    explicit Double(double value) : bits(ReinterpretBits<uint64_t>(value)) {}
+    explicit IEEEFloatingPoint(BitsType bits_) : bits(bits_) {}
+    explicit IEEEFloatingPoint(FloatType value) : bits(ReinterpretBits<BitsType>(value)) {}
 
-    uint64_t PhysicalSignificand() const {
+    BitsType PhysicalSignificand() const {
         return bits & SignificandMask;
     }
 
-    uint64_t PhysicalExponent() const {
+    BitsType PhysicalExponent() const {
         return (bits & ExponentMask) >> PhysicalSignificandSize;
     }
 
@@ -97,18 +98,21 @@ struct Double
         return (bits & SignMask) != 0;
     }
 
-    double Value() const {
-        return ReinterpretBits<double>(bits);
+    FloatType Value() const {
+        return ReinterpretBits<FloatType>(bits);
     }
 
-    double AbsValue() const {
-        return ReinterpretBits<double>(bits & ~SignMask);
+    FloatType AbsValue() const {
+        return ReinterpretBits<FloatType>(bits & ~SignMask);
     }
 
-    double NextValue() const {
+    FloatType NextValue() const {
         CC_ASSERT(!SignBit());
-        return ReinterpretBits<double>(IsInf() ? bits : bits + 1);
+        return ReinterpretBits<FloatType>(IsInf() ? bits : bits + 1);
     }
 };
+
+using Double = IEEEFloatingPoint<double, uint64_t>;
+using Single = IEEEFloatingPoint<float, uint32_t>;
 
 } // namespace charconv
