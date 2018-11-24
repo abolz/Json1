@@ -35,6 +35,67 @@
 namespace json {
 namespace impl {
 
+// Returns whether x is an integer and in the range [1, 2^53]
+// and stores the integral value of x in i.
+// PRE: x > 0
+inline bool ToInteger(double x, uint64_t& value)
+{
+    JSON_ASSERT(charconv::Double(x).IsFinite());
+    JSON_ASSERT(x > 0);
+
+    charconv::Double d(x);
+
+    const auto F = d.PhysicalSignificand();
+    const auto E = d.PhysicalExponent();
+
+    constexpr int p = charconv::Double::SignificandSize;
+    // F < 2^p
+    // e = E - bias
+    // x = (1 + F/2^(p-1)) * 2^e
+    //   = (2^(p-1) + F) * 2^(e - (p-1))
+    //   = (2^(p-1) + F) * 2^k
+    //   = I * 2^k
+    //   = I / 2^-k
+    // 2^(p-1) <= I < 2^p
+    const auto I = charconv::Double::HiddenBit | F;
+    const auto k = static_cast<int>(E) - charconv::Double::ExponentBias;
+
+    if (k > 1)
+    {
+        // x > 2^p (and x is an integer).
+        // Includes NaN and infinity.
+        return false;
+    }
+    else if (k == 1) // x >= 2^p
+    {
+        if (F != 0) // x > 2^p
+            return false;
+
+        value = uint64_t{1} << p;
+        return true;
+    }
+    else if (k <= -p)
+    {
+        // x < 1.0
+        // Includes denormals and 0.0
+        return false;
+    }
+    else
+    {
+        // 1 <= x < 2^p
+
+        JSON_ASSERT(-k >= 0);
+        JSON_ASSERT(-k < p);
+        const uint64_t v = I >> -k;
+
+        if ((v << -k) != I) // fractional part is non-zero, i.e. x is not an integer
+            return false;
+
+        value = v;
+        return true;
+    }
+}
+
 inline int DecimalLengthDouble(uint64_t v)
 {
     CC_ASSERT(v < 100000000000000000ull);
@@ -370,15 +431,8 @@ inline char* NumberToString(char* buffer, int buffer_length, double value, bool 
     JSON_ASSERT(buffer_length >= 32);
     static_cast<void>(buffer_length);
 
-    // Integers in the range [-2^53, +2^53] are exactly repesentable as 'double'.
-    // Print these numbers without a trailing ".0".
-    // However, always print -0 as "-0.0" to increase compatibility with other
-    // libraries, regardless of the value of 'force_trailing_dot_zero'.
-
-    constexpr double kMinInteger = -9007199254740992.0; // -2^53
-    constexpr double kMaxInteger =  9007199254740992.0; //  2^53
-
-    charconv::Double const v(value);
+    const charconv::Double v(value);
+    const bool is_neg = v.SignBit();
 
     if (!v.IsFinite())
     {
@@ -387,21 +441,24 @@ inline char* NumberToString(char* buffer, int buffer_length, double value, bool 
             return buffer + 3;
         }
 
-        if (v.SignBit())
+        if (is_neg)
             *buffer++ = '-';
 
         std::memcpy(buffer, "Infinity", 8);
         return buffer + 8;
     }
 
+    // Integers in the range [-2^53, +2^53] are exactly repesentable as 'double'.
+    // Print these numbers without a trailing ".0".
+    // However, always print -0 as "-0.0" to increase compatibility with other
+    // libraries, regardless of the value of 'force_trailing_dot_zero'.
+
     if (v.IsZero())
     {
-        if (v.SignBit())
+        if (is_neg)
         {
-            *buffer++ = '-';
-            *buffer++ = '0';
-            *buffer++ = '.';
-            *buffer++ = '0';
+            std::memcpy(buffer, "-0.0", 4);
+            buffer += 4;
         }
         else
         {
@@ -411,34 +468,41 @@ inline char* NumberToString(char* buffer, int buffer_length, double value, bool 
         return buffer;
     }
 
-    if (kMinInteger <= value && value <= kMaxInteger)
+    if (is_neg)
     {
-        int64_t i = static_cast<int64_t>(value);
-        if (static_cast<double>(i) == value)
-        {
-            if (i < 0)
-            {
-                *buffer++ = '-';
-                i = -i;
-            }
-
-            uint64_t const digits = static_cast<uint64_t>(i);
-
-            // Reuse PrintDecimalDigits.
-            // This routine assumes that 'i' has at most 17 decimal digits.
-            // We only get here if 'i' has at most 16 decimal digits.
-            int const num_digits = json::impl::DecimalLengthDouble(digits);
-            return buffer + json::impl::PrintDecimalDigitsDouble(buffer, digits, num_digits);
-        }
-    }
-
-    if (v.SignBit())
-    {
-        value = v.AbsValue();
+        value = -value;
         *buffer++ = '-';
     }
 
-    return json::impl::InternalDoubleToString(buffer, value, force_trailing_dot_zero);
+    uint64_t digits;
+    int decimal_exponent = 0;
+
+    const bool is_int = json::impl::ToInteger(value, digits);
+    if (!is_int)
+    {
+        // value is not an integer in the range [1, 2^53].
+        // Use Ryu to convert value to decimal.
+        auto const res = charconv::ryu::DoubleToDecimal(value);
+
+        digits = res.digits;
+        decimal_exponent = res.exponent;
+    }
+
+    // Convert the digits to decimal.
+    const int num_digits = json::impl::DecimalLengthDouble(digits);
+    json::impl::PrintDecimalDigitsDouble(buffer, digits, num_digits);
+
+    if (!is_int)
+    {
+        // Reformat the buffer similar to printf("%g").
+        return json::impl::FormatGeneral(buffer, num_digits, decimal_exponent, force_trailing_dot_zero);
+    }
+    else
+    {
+        // Done.
+        // Never append a trailing ".0" in this case.
+        return buffer + num_digits;
+    }
 }
 
 // Convert the single-precision number `value` to a decimal floating-point
