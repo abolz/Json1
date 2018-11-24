@@ -60,27 +60,7 @@ inline bool ToInteger(double x, uint64_t& value)
     const auto I = charconv::Double::HiddenBit | F;
     const auto k = static_cast<int>(E) - charconv::Double::ExponentBias;
 
-    if (k > 1)
-    {
-        // x > 2^p (and x is an integer).
-        // Includes NaN and infinity.
-        return false;
-    }
-    else if (k == 1) // x >= 2^p
-    {
-        if (F != 0) // x > 2^p
-            return false;
-
-        value = uint64_t{1} << p;
-        return true;
-    }
-    else if (k <= -p)
-    {
-        // x < 1.0
-        // Includes denormals and 0.0
-        return false;
-    }
-    else
+    if (-p < k && k <= 0)
     {
         // 1 <= x < 2^p
 
@@ -94,6 +74,15 @@ inline bool ToInteger(double x, uint64_t& value)
         value = v;
         return true;
     }
+    else if (k == 1 && F == 0)
+    {
+        // x = 2^p
+
+        value = uint64_t{1} << p;
+        return true;
+    }
+
+    return false;
 }
 
 inline int DecimalLengthDouble(uint64_t v)
