@@ -164,8 +164,9 @@ inline char* Utoa_8Digits(char* buf, uint32_t digits)
     return buf + 8;
 }
 
-inline int PrintDecimalDigitsDouble(char* buf, uint64_t output, int output_length)
+inline int PrintDecimalDigitsDouble(char* buf, uint64_t output)
 {
+    int const output_length = DecimalLengthDouble(output);
     int i = output_length;
 
     // We prefer 32-bit operations, even on 64-bit platforms.
@@ -456,8 +457,7 @@ inline char* NumberToString(char* buffer, int buffer_length, double value, bool 
     }
 
     // Convert the digits to decimal.
-    const int num_digits = json::impl::DecimalLengthDouble(digits);
-    json::impl::PrintDecimalDigitsDouble(buffer, digits, num_digits);
+    const int num_digits = json::impl::PrintDecimalDigitsDouble(buffer, digits);
 
     if (!is_int)
     {
