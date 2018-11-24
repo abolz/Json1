@@ -395,28 +395,6 @@ inline char* FormatGeneral(char* buffer, int num_digits, int decimal_exponent, b
         : FormatScientific(buffer, num_digits, scientific_exponent, /*force_trailing_dot_zero*/ false);
 }
 
-inline char* InternalDoubleToString(char* buffer, double value, bool force_trailing_dot_zero = false)
-{
-    auto const res = charconv::ryu::DoubleToDecimal(value);
-
-    int const num_digits = DecimalLengthDouble(res.digits);
-    PrintDecimalDigitsDouble(buffer, res.digits, num_digits);
-
-    return FormatGeneral(buffer, num_digits, res.exponent, force_trailing_dot_zero);
-}
-
-#if CC_SINGLE_PRECISION
-inline char* InternalSingleToString(char* buffer, float value, bool force_trailing_dot_zero = false)
-{
-    auto const res = charconv::ryu::SingleToDecimal(value);
-
-    int const num_digits = DecimalLengthSingle(res.digits);
-    PrintDecimalDigitsSingle(buffer, res.digits, num_digits);
-
-    return FormatGeneral(buffer, num_digits, res.exponent, force_trailing_dot_zero);
-}
-#endif
-
 } // namespace impl
 } // namespace json
 
