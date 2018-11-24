@@ -40,10 +40,10 @@ namespace impl {
 // PRE: x > 0
 inline bool ToInteger(double x, uint64_t& value)
 {
-    JSON_ASSERT(charconv::Double(x).IsFinite());
-    JSON_ASSERT(x > 0);
-
     charconv::Double d(x);
+
+    JSON_ASSERT(d.IsFinite());
+    JSON_ASSERT(x > 0);
 
     const auto F = d.PhysicalSignificand();
     const auto E = d.PhysicalExponent();
