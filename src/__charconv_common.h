@@ -25,6 +25,7 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include <type_traits>
 
 #ifndef CC_ASSERT
 #define CC_ASSERT(X) assert(X)
@@ -50,7 +51,7 @@ inline Dest ReinterpretBits(Source source)
     return dest;
 }
 
-template <typename FloatType, typename BitsType>
+template <typename FloatType>
 struct IEEEFloatingPoint
 {
     static_assert(std::numeric_limits<FloatType>::is_iec559
@@ -58,28 +59,31 @@ struct IEEEFloatingPoint
                       (std::numeric_limits<FloatType>::digits == 24 && std::numeric_limits<FloatType>::max_exponent == 128)),
         "IEEE-754 double- or single-precision implementation required");
 
-    static constexpr int      SignificandSize         = std::numeric_limits<FloatType>::digits; // = p   (includes the hidden bit)
-    static constexpr int      PhysicalSignificandSize = SignificandSize - 1;                    // = p-1 (excludes the hidden bit)
-    static constexpr int      UnbiasedMinExponent     = 1;
-    static constexpr int      UnbiasedMaxExponent     = 2 * std::numeric_limits<FloatType>::max_exponent - 1 - 1;
-    static constexpr int      ExponentBias            = 2 * std::numeric_limits<FloatType>::max_exponent / 2 - 1 + (SignificandSize - 1);
-    static constexpr int      MinExponent             = UnbiasedMinExponent - ExponentBias;
-    static constexpr int      MaxExponent             = UnbiasedMaxExponent - ExponentBias;
-    static constexpr BitsType HiddenBit               = BitsType{1} << (SignificandSize - 1);   // = 2^(p-1)
-    static constexpr BitsType SignificandMask         = HiddenBit - 1;                          // = 2^(p-1) - 1
-    static constexpr BitsType ExponentMask            = BitsType{2 * std::numeric_limits<FloatType>::max_exponent - 1} << PhysicalSignificandSize;
-    static constexpr BitsType SignMask                = ~(~BitsType{0} >> 1);
+    using value_type = FloatType;
+    using bits_type = std::conditional_t<sizeof(FloatType) * CHAR_BIT == 32, uint32_t, uint64_t>;
 
-    BitsType /*const*/ bits;
+    static constexpr int       SignificandSize         = std::numeric_limits<value_type>::digits; // = p   (includes the hidden bit)
+    static constexpr int       PhysicalSignificandSize = SignificandSize - 1;                     // = p-1 (excludes the hidden bit)
+    static constexpr int       UnbiasedMinExponent     = 1;
+    static constexpr int       UnbiasedMaxExponent     = 2 * std::numeric_limits<value_type>::max_exponent - 1 - 1;
+    static constexpr int       ExponentBias            = 2 * std::numeric_limits<value_type>::max_exponent / 2 - 1 + (SignificandSize - 1);
+    static constexpr int       MinExponent             = UnbiasedMinExponent - ExponentBias;
+    static constexpr int       MaxExponent             = UnbiasedMaxExponent - ExponentBias;
+    static constexpr bits_type HiddenBit               = bits_type{1} << (SignificandSize - 1);   // = 2^(p-1)
+    static constexpr bits_type SignificandMask         = HiddenBit - 1;                           // = 2^(p-1) - 1
+    static constexpr bits_type ExponentMask            = bits_type{2 * std::numeric_limits<value_type>::max_exponent - 1} << PhysicalSignificandSize;
+    static constexpr bits_type SignMask                = ~(~bits_type{0} >> 1);
 
-    explicit IEEEFloatingPoint(BitsType bits_) : bits(bits_) {}
-    explicit IEEEFloatingPoint(FloatType value) : bits(ReinterpretBits<BitsType>(value)) {}
+    bits_type /*const*/ bits;
 
-    BitsType PhysicalSignificand() const {
+    explicit IEEEFloatingPoint(bits_type bits_) : bits(bits_) {}
+    explicit IEEEFloatingPoint(value_type value) : bits(ReinterpretBits<bits_type>(value)) {}
+
+    bits_type PhysicalSignificand() const {
         return bits & SignificandMask;
     }
 
-    BitsType PhysicalExponent() const {
+    bits_type PhysicalExponent() const {
         return (bits & ExponentMask) >> PhysicalSignificandSize;
     }
 
@@ -103,23 +107,23 @@ struct IEEEFloatingPoint
         return (bits & SignMask) != 0;
     }
 
-    FloatType Value() const {
-        return ReinterpretBits<FloatType>(bits);
+    value_type Value() const {
+        return ReinterpretBits<value_type>(bits);
     }
 
-    FloatType AbsValue() const {
-        return ReinterpretBits<FloatType>(bits & ~SignMask);
+    value_type AbsValue() const {
+        return ReinterpretBits<value_type>(bits & ~SignMask);
     }
 
-    FloatType NextValue() const {
+    value_type NextValue() const {
         CC_ASSERT(!SignBit());
-        return ReinterpretBits<FloatType>(IsInf() ? bits : bits + 1);
+        return ReinterpretBits<value_type>(IsInf() ? bits : bits + 1);
     }
 };
 
-using Double = IEEEFloatingPoint<double, uint64_t>;
+using Double = IEEEFloatingPoint<double>;
 #if CC_SINGLE_PRECISION
-using Single = IEEEFloatingPoint<float, uint32_t>;
+using Single = IEEEFloatingPoint<float>;
 #endif
 
 } // namespace charconv
