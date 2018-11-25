@@ -1466,6 +1466,7 @@ inline int Pow5Factor(uint32_t value)
     int factor = 0;
     for (;;) {
         CC_ASSERT(value != 0);
+        CC_ASSERT(factor <= 13);
 
         if (value % 5 != 0) {
             return factor;
@@ -1584,7 +1585,7 @@ inline SingleToDecimalResult SingleToDecimal(float value)
             CC_ASSERT(q1 < kFloatPow5InvTableSize);
             int const k1 = kFloatPow5InvBitLength + Pow5BitLength(q1) - 1;
             int const j1 = -e2 + q1 + k1; // shift
-            CC_ASSERT(j1 >= 55);
+            CC_ASSERT(j1 >= 54);
 
             CC_ASSERT((BitLength(kFloatPow5Inv[q1]) + 26) - j1 <= 32);
 
@@ -1648,7 +1649,7 @@ inline SingleToDecimalResult SingleToDecimal(float value)
             CC_ASSERT(i1 < kFloatPow5TableSize);
             int const k1 = Pow5BitLength(i1) - kFloatPow5BitLength;
             int const j1 = q1 - k1; // shift
-            CC_ASSERT(j1 >= 57);
+            CC_ASSERT(j1 >= 56);
 
             CC_ASSERT((BitLength(kFloatPow5[i1]) + 26) - j1 <= 32);
 
