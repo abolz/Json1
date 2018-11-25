@@ -11,6 +11,7 @@
 // IEEE double-precision implementation
 //==================================================================================================
 
+#if !CC_DTOA_OPTIMIZE_SIZE
 TEST_CASE("Ryu bit length - double")
 {
     using namespace charconv::ryu;
@@ -59,6 +60,7 @@ TEST_CASE("Ryu bit length - double")
         }
     }
 }
+#endif
 
 static double DoubleFromBits(uint64_t ieeeBits)
 {

@@ -26,6 +26,12 @@
 #include <intrin.h>
 #endif
 
+// If enabled, save 9132 bytes of constant data.
+// Requires an additional multiplication, though.
+#ifndef CC_DTOA_OPTIMIZE_SIZE
+#define CC_DTOA_OPTIMIZE_SIZE 0
+#endif
+
 #if defined(_M_IX86) || defined(_M_ARM) || defined(__i386__) || defined(__arm__)
 #define CC_32_BIT_PLATFORM 1
 #endif
@@ -122,16 +128,247 @@ inline int Log10Pow5(int e)
 // IEEE double-precision implementation
 //==================================================================================================
 
-// sizeof(tables) = 9888 bytes
+constexpr int kDoublePow5InvBitLength = 122;
+constexpr int kDoublePow5BitLength = 121;
 
 struct Uint64x2 {
     uint64_t lo;
     uint64_t hi;
 };
 
-constexpr int kDoublePow5InvBitLength = 122;
-constexpr int kDoublePow5InvTableSize = 292;
+inline Uint64x2 Mul128(uint64_t a, uint64_t b)
+{
+#if CC_HAS_UINT128
+    __extension__ using uint128_t = unsigned __int128;
 
+    uint128_t const product = uint128_t{a} * b;
+
+    uint64_t const lo = static_cast<uint64_t>(product);
+    uint64_t const hi = static_cast<uint64_t>(product >> 64);
+
+    return {lo, hi};
+#elif CC_HAS_64_BIT_INTRINSICS
+    uint64_t hi;
+    uint64_t lo = _umul128(a, b, &hi);
+    return {lo, hi};
+#else
+    uint32_t const aLo = static_cast<uint32_t>(a);
+    uint32_t const aHi = static_cast<uint32_t>(a >> 32);
+    uint32_t const bLo = static_cast<uint32_t>(b);
+    uint32_t const bHi = static_cast<uint32_t>(b >> 32);
+
+    uint64_t const b00 = uint64_t{aLo} * bLo;
+    uint64_t const b01 = uint64_t{aLo} * bHi;
+    uint64_t const b10 = uint64_t{aHi} * bLo;
+    uint64_t const b11 = uint64_t{aHi} * bHi;
+
+    uint32_t const b00Lo = static_cast<uint32_t>(b00);
+    uint32_t const b00Hi = static_cast<uint32_t>(b00 >> 32);
+
+    uint64_t const mid1 = b10 + b00Hi;
+    uint32_t const mid1Lo = static_cast<uint32_t>(mid1);
+    uint32_t const mid1Hi = static_cast<uint32_t>(mid1 >> 32);
+
+    uint64_t const mid2 = b01 + mid1Lo;
+    uint32_t const mid2Lo = static_cast<uint32_t>(mid2);
+    uint32_t const mid2Hi = static_cast<uint32_t>(mid2 >> 32);
+
+    uint64_t const hi = b11 + mid1Hi + mid2Hi;
+    uint64_t const lo = (uint64_t{mid2Lo} << 32) + b00Lo;
+    return {lo, hi};
+#endif
+}
+
+inline uint64_t ShiftRight128(Uint64x2 x, int dist)
+{
+    // For the __shiftright128 intrinsic, the shift value is always modulo 64.
+    // In the current implementation of the double-precision version of Ryu, the
+    // shift value is always < 64.
+    // The shift value actually is in the range [49, 58].
+    // Check this here in case a future change requires larger shift values. In
+    // this case this function needs to be adjusted.
+#if CC_DTOA_OPTIMIZE_SIZE
+    CC_ASSERT(dist >= 0);
+    CC_ASSERT(dist <= 59);
+#else
+    CC_ASSERT(dist >= 49);
+    CC_ASSERT(dist <= 58);
+#endif
+    unsigned char const amt = static_cast<unsigned char>(dist);
+
+#if 0 && CC_HAS_UINT128
+    __extension__ using uint128_t = unsigned __int128;
+    return static_cast<uint64_t>(((uint128_t{x.hi} << 64) | x.lo) >> (amt/* % 64*/));
+#elif CC_HAS_64_BIT_INTRINSICS
+    return __shiftright128(x.lo, x.hi, amt);
+#else
+#if CC_32_BIT_PLATFORM && !CC_DTOA_OPTIMIZE_SIZE
+    // Avoid a 64-bit shift by taking advantage of the range of shift values.
+    return (x.hi << (64 - amt)) | (static_cast<uint32_t>(x.lo >> 32) >> (amt - 32));
+#else
+    return (x.hi << (64 - amt)) | (x.lo >> amt);
+#endif
+#endif
+}
+
+#if CC_DTOA_OPTIMIZE_SIZE
+
+// sizeof(tables) = 756 bytes
+
+constexpr int kSmallPow5Size = 26;
+static constexpr uint64_t kSmallPow5[26] = { // 208 bytes
+    1,
+    5,
+    25,
+    125,
+    625,
+    3125,
+    15625,
+    78125,
+    390625,
+    1953125,
+    9765625,
+    48828125,
+    244140625,
+    1220703125,
+    6103515625,
+    30517578125,
+    152587890625,
+    762939453125,
+    3814697265625,
+    19073486328125,
+    95367431640625,
+    476837158203125,
+    2384185791015625,
+    11920928955078125,
+    59604644775390625,
+    298023223876953125, // 5^25
+};
+
+static constexpr Uint64x2 kDoublePow5[13] = { // 208 bytes
+    {0x0000000000000000, 0x0100000000000000},
+    {0x9000000000000000, 0x014ADF4B7320334B},
+    {0xD0E549208B31ADB1, 0x01ABA4714957D300},
+    {0x56DC6AD264D8F086, 0x01145B7E285BF98F},
+    {0xCEB1DBD923D8596C, 0x01652EFDC6018A1F},
+    {0x3B4C1B80B22AE923, 0x01CDA62055B2D9D8},
+    {0x65BB28B4E8F7E4C3, 0x012A5568B9F52F41},
+    {0xFF08AED437682D4F, 0x01819651531F9E78},
+    {0x8B4EE134AD99BF15, 0x01F25C186A6F04C2},
+    {0x616499ECB70C25F0, 0x01420EB449C8842E},
+    {0x585A56EAD360865B, 0x01A03FDE214CAF08},
+    {0x8093DB1D57999890, 0x010CFEB353A97DAD},
+    {0xECF38BB735E3F36A, 0x015BAAF44FA52673},
+};
+
+// Unfortunately, the results are sometimes off by one. We use an additional
+// lookup table to store those cases and adjust the result.
+static constexpr uint32_t kDoublePow5Adjust[13] = { // 52 bytes
+    0x00000000, 0x00000000, 0x00000000, 0x033C55BE, 0x03DB77D8,
+    0x0265FFB2, 0x00000800, 0x01A8FF56, 0x00000000, 0x0037A200,
+    0x00004000, 0x03FFFFFC, 0x00003FFE,
+};
+
+// Computes 5^i in the form required by Ryu.
+inline Uint64x2 ComputePow5(int i)
+{
+    CC_ASSERT(i >= 0);
+
+    int const base = static_cast<int>(static_cast<uint32_t>(i) / kSmallPow5Size);
+    int const base2 = static_cast<int>(static_cast<uint32_t>(base) * kSmallPow5Size);
+    int const offset = i - base2;
+
+    CC_ASSERT(base < 13);
+    Uint64x2 p = kDoublePow5[base];
+    if (offset != 0)
+    {
+        int const delta = Pow5BitLength(i) - Pow5BitLength(base2);
+        CC_ASSERT(delta > 0);
+        CC_ASSERT(delta < 64);
+
+        CC_ASSERT(offset < kSmallPow5Size);
+        uint64_t const m = kSmallPow5[offset];
+
+        auto b0 = Mul128(m, p.lo);
+        auto b2 = Mul128(m, p.hi);
+        b2.lo += b0.hi;
+        b2.hi += (b2.lo < b0.hi);
+
+        CC_ASSERT(base < 13);
+        uint32_t const adjust = (kDoublePow5Adjust[base] >> offset) & 1;
+
+        p.lo = ShiftRight128({b0.lo, b2.lo}, delta) + adjust;
+        p.hi = ShiftRight128(b2, delta);
+    }
+
+    return p;
+}
+
+static constexpr Uint64x2 kDoublePow5Inv[13] = { // 208 bytes
+    {0x0000000000000001, 0x0400000000000000},
+    {0x6A54D92BF80CAA07, 0x0318481895D96277},
+    {0xAF951AA00E3BF901, 0x0264FF8B1B41EDFE},
+    {0x4CA4048FA6AAC8EE, 0x03B4919C8D1CF8E0},
+    {0x2C2739BAED005CDE, 0x02DDEB68185F8EEF},
+    {0x3F2A34FFE87BD190, 0x0237D7BEAF165E72},
+    {0x0F7D17DD1ADD2AFD, 0x036EB1B091F58A96},
+    {0xF17A7F3D3334847E, 0x02A7DB4C280E3476},
+    {0x81091F2E7967DC7A, 0x020E037AA4F692F1},
+    {0xA2A650BD773DF7F5, 0x032DF7737689B689},
+    {0xD5BDDCFF0D80F6D3, 0x0275C6B23EB69B26},
+    {0x29AD0D49D5E30445, 0x03CE8809E7B55B52},
+    {0xF3181420DC13D7B4, 0x02F201D49FB4F84A},
+};
+
+static constexpr uint32_t kDoublePow5InvAdjust[20] = { // 80 bytes
+    0x51505404, 0x55054514, 0x45555545, 0x05511411, 0x00505010,
+    0x00000004, 0x00000000, 0x00000000, 0x55555040, 0x00505051,
+    0x00050040, 0x55554000, 0x51659559, 0x00001000, 0x15000010,
+    0x55455555, 0x41404051, 0x00001010, 0x00000014, 0x00000000,
+};
+
+// Computes 5^-i in the form required by Ryu.
+inline Uint64x2 ComputePow5Inv(int i)
+{
+    CC_ASSERT(i >= 0);
+
+    int const base = static_cast<int>((static_cast<uint32_t>(i) + (kSmallPow5Size - 1)) / kSmallPow5Size);
+    int const base2 = static_cast<int>(static_cast<uint32_t>(base) * kSmallPow5Size);
+    int const offset = base2 - i;
+
+    CC_ASSERT(base < 13);
+    Uint64x2 p = kDoublePow5Inv[base]; // 1/5^base2
+    if (offset != 0)
+    {
+        int const delta = Pow5BitLength(base2) - Pow5BitLength(i);
+        CC_ASSERT(delta > 0);
+        CC_ASSERT(delta < 64);
+
+        // 1/5^base2 * 5^offset = 1/5^(base2-offset) = 1/5^i
+
+        CC_ASSERT(offset < kSmallPow5Size);
+        uint64_t const m = kSmallPow5[offset];
+
+        auto b0 = Mul128(m, p.lo - 1);
+        auto b2 = Mul128(m, p.hi);
+        b2.lo += b0.hi;
+        b2.hi += (b2.lo < b0.hi);
+
+        CC_ASSERT(i / 16 < 20);
+        uint32_t const adjust = 1 + ((kDoublePow5InvAdjust[static_cast<uint32_t>(i) / 16] >> ((static_cast<uint32_t>(i) % 16) << 1)) & 3);
+
+        p.lo = ShiftRight128({b0.lo, b2.lo}, delta) + adjust;
+        p.hi = ShiftRight128(b2, delta);
+    }
+
+    return p;
+}
+
+#else // CC_DTOA_OPTIMIZE_SIZE
+
+// sizeof(tables) = 9888 bytes
+
+constexpr int kDoublePow5InvTableSize = 292;
 static constexpr Uint64x2 kDoublePow5Inv[kDoublePow5InvTableSize] = { // 4672 bytes
     {0x0000000000000001, 0x0400000000000000},
     {0x3333333333333334, 0x0333333333333333},
@@ -427,9 +664,7 @@ static constexpr Uint64x2 kDoublePow5Inv[kDoublePow5InvTableSize] = { // 4672 by
     {0xC5DEC645863153A7, 0x027EAB3CF7DCD826},
 };
 
-constexpr int kDoublePow5BitLength = 121;
 constexpr int kDoublePow5TableSize = 326;
-
 static constexpr Uint64x2 kDoublePow5[kDoublePow5TableSize] = { // 5216 bytes
     {0x0000000000000000, 0x0100000000000000},
     {0x0000000000000000, 0x0140000000000000},
@@ -759,75 +994,7 @@ static constexpr Uint64x2 kDoublePow5[kDoublePow5TableSize] = { // 5216 bytes
     {0x278E1316E60A4831, 0x018B40A4EEC437C5},
 };
 
-inline Uint64x2 Mul128(uint64_t a, uint64_t b)
-{
-#if CC_HAS_UINT128
-    __extension__ using uint128_t = unsigned __int128;
-
-    uint128_t const product = uint128_t{a} * b;
-
-    uint64_t const lo = static_cast<uint64_t>(product);
-    uint64_t const hi = static_cast<uint64_t>(product >> 64);
-
-    return {lo, hi};
-#elif CC_HAS_64_BIT_INTRINSICS
-    uint64_t hi;
-    uint64_t lo = _umul128(a, b, &hi);
-    return {lo, hi};
-#else
-    uint32_t const aLo = static_cast<uint32_t>(a);
-    uint32_t const aHi = static_cast<uint32_t>(a >> 32);
-    uint32_t const bLo = static_cast<uint32_t>(b);
-    uint32_t const bHi = static_cast<uint32_t>(b >> 32);
-
-    uint64_t const b00 = uint64_t{aLo} * bLo;
-    uint64_t const b01 = uint64_t{aLo} * bHi;
-    uint64_t const b10 = uint64_t{aHi} * bLo;
-    uint64_t const b11 = uint64_t{aHi} * bHi;
-
-    uint32_t const b00Lo = static_cast<uint32_t>(b00);
-    uint32_t const b00Hi = static_cast<uint32_t>(b00 >> 32);
-
-    uint64_t const mid1 = b10 + b00Hi;
-    uint32_t const mid1Lo = static_cast<uint32_t>(mid1);
-    uint32_t const mid1Hi = static_cast<uint32_t>(mid1 >> 32);
-
-    uint64_t const mid2 = b01 + mid1Lo;
-    uint32_t const mid2Lo = static_cast<uint32_t>(mid2);
-    uint32_t const mid2Hi = static_cast<uint32_t>(mid2 >> 32);
-
-    uint64_t const hi = b11 + mid1Hi + mid2Hi;
-    uint64_t const lo = (uint64_t{mid2Lo} << 32) + b00Lo;
-    return {lo, hi};
-#endif
-}
-
-inline uint64_t ShiftRight128(Uint64x2 x, int dist)
-{
-    // For the __shiftright128 intrinsic, the shift value is always modulo 64.
-    // In the current implementation of the double-precision version of Ryu, the
-    // shift value is always < 64.
-    // The shift value actually is in the range [49, 58].
-    // Check this here in case a future change requires larger shift values. In
-    // this case this function needs to be adjusted.
-    CC_ASSERT(dist >= 49);
-    CC_ASSERT(dist <= 58);
-    unsigned char const amt = static_cast<unsigned char>(dist);
-
-#if 0 && CC_HAS_UINT128
-    __extension__ using uint128_t = unsigned __int128;
-    return static_cast<uint64_t>(((uint128_t{x.hi} << 64) | x.lo) >> (amt/* % 64*/));
-#elif CC_HAS_64_BIT_INTRINSICS
-    return __shiftright128(x.lo, x.hi, amt);
-#else
-#if CC_32_BIT_PLATFORM
-    // Avoid a 64-bit shift by taking advantage of the range of shift values.
-    return (x.hi << (64 - amt)) | (static_cast<uint32_t>(x.lo >> 32) >> (amt - 32));
-#else
-    return (x.hi << (64 - amt)) | (x.lo >> amt);
-#endif
-#endif
-}
+#endif // !CC_DTOA_OPTIMIZE_SIZE
 
 // We need a 64x128-bit multiplication and a subsequent 128-bit shift.
 // Multiplication:
@@ -1083,16 +1250,23 @@ inline DoubleToDecimalResult DoubleToDecimal(double value)
         // q = max(0, log_10(2^e2))
         int const q = Log10Pow2(e2) - (e2 > 3); // table index
         CC_ASSERT(q >= 0);
-        CC_ASSERT(q < kDoublePow5InvTableSize);
         int const k = kDoublePow5InvBitLength + Pow5BitLength(q) - 1;
         int const j = -e2 + q + k; // shift
         CC_ASSERT(j >= 115);
 
         e10 = q;
 
+#if CC_DTOA_OPTIMIZE_SIZE
+        auto const pow5 = ComputePow5Inv(q);
+        CC_ASSERT((BitLength(pow5.hi) + 64 + 55) - j <= 64);
+
+        MulShiftAll(mv, mp, mm, &pow5, j, &vr, &vp, &vm);
+#else
+        CC_ASSERT(q < kDoublePow5InvTableSize);
         CC_ASSERT((BitLength(kDoublePow5Inv[q].hi) + 64 + 55) - j <= 64);
 
         MulShiftAll(mv, mp, mm, kDoublePow5Inv + q, j, &vr, &vp, &vm);
+#endif
 
         // 22 = floor(log_5(2^53))
         // 23 = floor(log_5(2^(53+2)))
@@ -1130,16 +1304,23 @@ inline DoubleToDecimalResult DoubleToDecimal(double value)
         CC_ASSERT(q >= 0);
         int const i = -e2 - q; // table index
         CC_ASSERT(i >= 0);
-        CC_ASSERT(i < kDoublePow5TableSize);
         int const k = Pow5BitLength(i) - kDoublePow5BitLength;
         int const j = q - k; // shift
         CC_ASSERT(j >= 114);
 
         e10 = e2 + q;
 
+#if CC_DTOA_OPTIMIZE_SIZE
+        auto const pow5 = ComputePow5(i);
+        CC_ASSERT((BitLength(pow5.hi) + 64 + 55) - j <= 64);
+
+        MulShiftAll(mv, mp, mm, &pow5, j, &vr, &vp, &vm);
+#else
+        CC_ASSERT(i < kDoublePow5TableSize);
         CC_ASSERT((BitLength(kDoublePow5[i].hi) + 64 + 55) - j <= 64);
 
         MulShiftAll(mv, mp, mm, kDoublePow5 + i, j, &vr, &vp, &vm);
+#endif
 
         if (q <= 1)
         {
