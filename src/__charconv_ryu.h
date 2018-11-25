@@ -1090,7 +1090,7 @@ inline DoubleToDecimalResult DoubleToDecimal(double value)
 
         e10 = q;
 
-        CC_ASSERT((BitLength(kDoublePow5Inv[q].hi) + 55) - j <= 64);
+        CC_ASSERT((BitLength(kDoublePow5Inv[q].hi) + 64 + 55) - j <= 64);
 
         MulShiftAll(mv, mp, mm, kDoublePow5Inv + q, j, &vr, &vp, &vm);
 
@@ -1137,7 +1137,7 @@ inline DoubleToDecimalResult DoubleToDecimal(double value)
 
         e10 = e2 + q;
 
-        CC_ASSERT((BitLength(kDoublePow5[i].hi) + 55) - j <= 64);
+        CC_ASSERT((BitLength(kDoublePow5[i].hi) + 64 + 55) - j <= 64);
 
         MulShiftAll(mv, mp, mm, kDoublePow5 + i, j, &vr, &vp, &vm);
 

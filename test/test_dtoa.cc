@@ -36,7 +36,7 @@ TEST_CASE("Ryu bit length - double")
             CHECK(mul.hi != 0);
             // Bit length of the result (mul * m) / 2^j must be <= 64.
             // It is actually <= 63, which is nice for languages which only have signed 64-bit integers.
-            CHECK((BitLength(mul.hi) + 55) - j <= 63);
+            CHECK((BitLength(mul.hi) + 64 + 55) - j <= 63);
         }
         else
         {
@@ -55,7 +55,7 @@ TEST_CASE("Ryu bit length - double")
             CHECK(mul.hi != 0);
             // Bit length of the result (mul * m) / 2^j must be <= 64.
             // It is actually <= 63, which is nice for languages which only have signed 64-bit integers.
-            CHECK((BitLength(mul.hi) + 55) - j <= 63);
+            CHECK((BitLength(mul.hi) + 64 + 55) - j <= 63);
         }
     }
 }
