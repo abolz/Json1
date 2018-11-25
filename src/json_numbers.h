@@ -40,7 +40,9 @@ namespace impl {
 // PRE: x > 0
 inline bool ToInteger(double x, uint64_t& result)
 {
-    charconv::Double d(x);
+    using Flt = charconv::Double;
+
+    const Flt d(x);
 
     JSON_ASSERT(d.IsFinite());
     JSON_ASSERT(x > 0);
@@ -48,7 +50,7 @@ inline bool ToInteger(double x, uint64_t& result)
     const auto F = d.PhysicalSignificand();
     const auto E = d.PhysicalExponent();
 
-    constexpr int p = charconv::Double::SignificandSize;
+    constexpr int p = Flt::SignificandSize;
     // F < 2^p
     // e = E - bias
     // x = (1 + F/2^(p-1)) * 2^e
@@ -57,8 +59,8 @@ inline bool ToInteger(double x, uint64_t& result)
     //   = I * 2^k
     //   = I / 2^-k
     // 2^(p-1) <= I < 2^p
-    const auto I = charconv::Double::HiddenBit | F;
-    const auto k = static_cast<int>(E) - charconv::Double::ExponentBias;
+    const auto I = Flt::HiddenBit | F;
+    const auto k = static_cast<int>(E) - Flt::ExponentBias;
 
     uint64_t value;
     if (0 <= -k && -k < p)
