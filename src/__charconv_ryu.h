@@ -1451,7 +1451,7 @@ inline uint32_t MulShift(uint32_t m, uint64_t mul, int j)
     uint32_t bits1Hi = static_cast<uint32_t>(bits1 >> 32);
     bits1Lo += bits0Hi;
     bits1Hi += (bits1Lo < bits0Hi);
-    int const s = shift - 32;
+    int const s = j - 32;
     return (bits1Hi << (32 - s)) | (bits1Lo >> s);
 #else
     uint64_t const sum = (bits0 >> 32) + bits1;
