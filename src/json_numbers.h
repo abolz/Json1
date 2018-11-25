@@ -36,9 +36,9 @@ namespace json {
 namespace impl {
 
 // Returns whether x is an integer and in the range [1, 2^53]
-// and stores the integral value of x in i.
+// and stores the integral value of x in result.
 // PRE: x > 0
-inline bool ToInteger(double x, uint64_t& value)
+inline bool ToInteger(double x, uint64_t& result)
 {
     charconv::Double d(x);
 
@@ -60,26 +60,29 @@ inline bool ToInteger(double x, uint64_t& value)
     const auto I = charconv::Double::HiddenBit | F;
     const auto k = static_cast<int>(E) - charconv::Double::ExponentBias;
 
-    if (-p < k && k <= 0)
+    uint64_t value;
+    if (0 <= -k && -k < p)
     {
         // 1 <= x < 2^p
 
         const uint64_t v = I >> -k;
         if ((v << -k) != I) // fractional part is non-zero, i.e. x is not an integer
             return false;
-
         value = v;
-        return true;
     }
     else if (k == 1 && F == 0)
     {
         // x = 2^p
 
         value = uint64_t{1} << p;
-        return true;
+    }
+    else
+    {
+        return false;
     }
 
-    return false;
+    result = value;
+    return true;
 }
 
 inline int DecimalLengthDouble(uint64_t v)
