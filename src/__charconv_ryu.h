@@ -1440,8 +1440,8 @@ inline uint32_t MulShift(uint32_t m, uint64_t mul, int j)
     // The casts here help MSVC to avoid calls to the __allmul library function.
     uint32_t const mulLo = static_cast<uint32_t>(mul);
     uint32_t const mulHi = static_cast<uint32_t>(mul >> 32);
-    uint64_t const bits0 = static_cast<uint64_t>(m) * mulLo;
-    uint64_t const bits1 = static_cast<uint64_t>(m) * mulHi;
+    uint64_t const bits0 = uint64_t{m} * mulLo;
+    uint64_t const bits1 = uint64_t{m} * mulHi;
 
 #ifdef CC_32_BIT_PLATFORM
     // On 32-bit platforms we can avoid a 64-bit shift-right since we only
