@@ -87,6 +87,60 @@ inline bool ToInteger(double x, uint64_t& result)
     return true;
 }
 
+#if CC_SINGLE_PRECISION
+// Returns whether x is an integer and in the range [1, 2^24]
+// and stores the integral value of x in result.
+// PRE: x > 0
+inline bool ToInteger(float x, uint32_t& result)
+{
+    using Flt = charconv::Single;
+
+    const Flt d(x);
+
+    JSON_ASSERT(d.IsFinite());
+    JSON_ASSERT(x > 0);
+
+    const auto F = d.PhysicalSignificand();
+    const auto E = d.PhysicalExponent();
+
+    constexpr int p = Flt::SignificandSize;
+    // F < 2^p
+    // e = E - bias
+    // x = (1 + F/2^(p-1)) * 2^e
+    //   = (2^(p-1) + F) * 2^(e - (p-1))
+    //   = (2^(p-1) + F) * 2^k
+    //   = I * 2^k
+    //   = I / 2^-k
+    // 2^(p-1) <= I < 2^p
+    const auto I = Flt::HiddenBit | F;
+    const auto k = static_cast<int>(E) - Flt::ExponentBias;
+
+    uint32_t value;
+    if (0 <= -k && -k < p)
+    {
+        // 1 <= x < 2^p
+
+        const uint32_t v = I >> -k;
+        if ((v << -k) != I) // fractional part is non-zero, i.e. x is not an integer
+            return false;
+        value = v;
+    }
+    else if (k == 1 && F == 0)
+    {
+        // x = 2^p
+
+        value = uint32_t{1} << p;
+    }
+    else
+    {
+        return false;
+    }
+
+    result = value;
+    return true;
+}
+#endif
+
 inline int DecimalLengthDouble(uint64_t v)
 {
     CC_ASSERT(v < 100000000000000000ull);
@@ -226,8 +280,9 @@ inline int PrintDecimalDigitsDouble(char* buf, uint64_t output)
 }
 
 #if CC_SINGLE_PRECISION
-inline int PrintDecimalDigitsSingle(char* buf, uint32_t output, int output_length)
+inline int PrintDecimalDigitsSingle(char* buf, uint32_t output)
 {
+    int const output_length = DecimalLengthSingle(output);
     int i = output_length;
 
     while (output >= 10000)
@@ -488,15 +543,8 @@ inline char* NumberToString(char* buffer, int buffer_length, float value, bool f
     JSON_ASSERT(buffer_length >= 32);
     static_cast<void>(buffer_length);
 
-    // Integers in the range [-2^24, +2^24] are exactly repesentable as 'float'.
-    // Print these numbers without a trailing ".0".
-    // However, always print -0 as "-0.0" to increase compatibility with other
-    // libraries, regardless of the value of 'force_trailing_dot_zero'.
-
-    constexpr float kMinInteger = -16777216.0; // -2^24
-    constexpr float kMaxInteger =  16777216.0; //  2^24
-
-    charconv::Single const v(value);
+    const charconv::Single v(value);
+    const bool is_neg = v.SignBit();
 
     if (!v.IsFinite())
     {
@@ -505,21 +553,24 @@ inline char* NumberToString(char* buffer, int buffer_length, float value, bool f
             return buffer + 3;
         }
 
-        if (v.SignBit())
+        if (is_neg)
             *buffer++ = '-';
 
         std::memcpy(buffer, "Infinity", 8);
         return buffer + 8;
     }
 
+    // Integers in the range [-2^24, +2^24] are exactly repesentable as 'float'.
+    // Print these numbers without a trailing ".0".
+    // However, always print -0 as "-0.0" to increase compatibility with other
+    // libraries, regardless of the value of 'force_trailing_dot_zero'.
+
     if (v.IsZero())
     {
-        if (v.SignBit())
+        if (is_neg)
         {
-            *buffer++ = '-';
-            *buffer++ = '0';
-            *buffer++ = '.';
-            *buffer++ = '0';
+            std::memcpy(buffer, "-0.0", 4);
+            buffer += 4;
         }
         else
         {
@@ -529,34 +580,40 @@ inline char* NumberToString(char* buffer, int buffer_length, float value, bool f
         return buffer;
     }
 
-    if (kMinInteger <= value && value <= kMaxInteger)
+    if (is_neg)
     {
-        int32_t i = static_cast<int32_t>(value);
-        if (static_cast<float>(i) == value)
-        {
-            if (i < 0)
-            {
-                *buffer++ = '-';
-                i = -i;
-            }
-
-            uint32_t const digits = static_cast<uint32_t>(i);
-
-            // Reuse PrintDecimalDigits.
-            // This routine assumes that 'i' has at most 9 decimal digits.
-            // We only get here if 'i' has at most 8 decimal digits.
-            int const num_digits = json::impl::DecimalLengthSingle(digits);
-            return buffer + json::impl::PrintDecimalDigitsSingle(buffer, digits, num_digits);
-        }
-    }
-
-    if (v.SignBit())
-    {
-        value = v.AbsValue();
+        value = -value;
         *buffer++ = '-';
     }
 
-    return json::impl::InternalSingleToString(buffer, value, force_trailing_dot_zero);
+    uint32_t digits;
+    int decimal_exponent = 0;
+
+    const bool is_int = json::impl::ToInteger(value, digits);
+    if (!is_int)
+    {
+        // value is not an integer in the range [1, 2^24].
+        // Use Ryu to convert value to decimal.
+        auto const res = charconv::ryu::SingleToDecimal(value);
+
+        digits = res.digits;
+        decimal_exponent = res.exponent;
+    }
+
+    // Convert the digits to decimal.
+    const int num_digits = json::impl::PrintDecimalDigitsSingle(buffer, digits);
+
+    if (!is_int)
+    {
+        // Reformat the buffer similar to printf("%g").
+        return json::impl::FormatGeneral(buffer, num_digits, decimal_exponent, force_trailing_dot_zero);
+    }
+    else
+    {
+        // Done.
+        // Never append a trailing ".0" in this case.
+        return buffer + num_digits;
+    }
 }
 #endif
 
