@@ -64,10 +64,7 @@ inline bool ToInteger(double x, uint64_t& value)
     {
         // 1 <= x < 2^p
 
-        JSON_ASSERT(-k >= 0);
-        JSON_ASSERT(-k < p);
         const uint64_t v = I >> -k;
-
         if ((v << -k) != I) // fractional part is non-zero, i.e. x is not an integer
             return false;
 
