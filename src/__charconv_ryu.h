@@ -1565,7 +1565,7 @@ inline SingleToDecimalResult SingleToDecimal(float value)
         int const j = -e2 + q + k; // shift
         CC_ASSERT(j >= 55);
 
-        e10 = e2;
+        e10 = q;
 
         uint64_t const mul = kFloatPow5Inv[q];
         CC_ASSERT((BitLength(mul) + 26) - j <= 32);
