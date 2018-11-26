@@ -1906,17 +1906,17 @@ inline SingleToDecimalResult SingleToDecimal(float value)
     {
         // Specialized for the common case (~96.0%).
 
-        bool roundUp = false;
-
         while (vm / 10 < vp / 10)
         {
-            roundUp = static_cast<uint32_t>(vr % 10) >= 5;
+            lastRemovedDigit = vr % 10;
 
             vm /= 10;
             vr /= 10;
             vp /= 10;
             ++e10;
         }
+
+        bool const roundUp = lastRemovedDigit >= 5;
 
         // We need to take vr+1 if vr is outside bounds...
         // or we need to round up.
