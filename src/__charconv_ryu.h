@@ -182,7 +182,7 @@ inline uint64_t ShiftRight128(Uint64x2 x, int dist)
     // Check this here in case a future change requires larger shift values. In
     // this case this function needs to be adjusted.
 #if CC_OPTIMIZE_SIZE
-    CC_ASSERT(dist >= 0);
+    CC_ASSERT(dist >= 2);
     CC_ASSERT(dist <= 59);
 #else
     CC_ASSERT(dist >= 49);
