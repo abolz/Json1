@@ -11,57 +11,6 @@
 // IEEE double-precision implementation
 //==================================================================================================
 
-#if !CC_DTOA_OPTIMIZE_SIZE
-TEST_CASE("Ryu bit length - double")
-{
-    using namespace charconv::ryu;
-
-    // (We subtract 2 so that the bounds computation has 2 additional bits.)
-    constexpr int kMinExp = charconv::Double::MinExponent - 2;
-    constexpr int kMaxExp = charconv::Double::MaxExponent - 2;
-
-    for (int e2 = kMinExp; e2 <= kMaxExp; ++e2)
-    {
-        if (e2 >= 0)
-        {
-            CAPTURE(e2);
-
-            int const q = Log10Pow2(e2) - (e2 > 3); // table index
-            CHECK(q >= 0);
-            CHECK(q < kDoublePow5InvTableSize);
-            int const k = kDoublePow5InvBitLength + Pow5BitLength(q) - 1;
-            int const j = -e2 + q + k;
-            CHECK(j >= 115);
-
-            auto const mul = kDoublePow5Inv[q];
-            CHECK(mul.hi != 0);
-            // Bit length of the result (mul * m) / 2^j must be <= 64.
-            // It is actually <= 63, which is nice for languages which only have signed 64-bit integers.
-            CHECK((BitLength(mul.hi) + 64 + 55) - j <= 63);
-        }
-        else
-        {
-            CAPTURE(e2);
-
-            int const q = Log10Pow5(-e2) - (-e2 > 1);
-            CHECK(q >= 0);
-            int const i = -e2 - q; // table index
-            CHECK(i >= 0);
-            CHECK(i < kDoublePow5TableSize);
-            int const k = Pow5BitLength(i) - kDoublePow5BitLength;
-            int const j = q - k;
-            CHECK(j >= 114);
-
-            auto const mul = kDoublePow5[i];
-            CHECK(mul.hi != 0);
-            // Bit length of the result (mul * m) / 2^j must be <= 64.
-            // It is actually <= 63, which is nice for languages which only have signed 64-bit integers.
-            CHECK((BitLength(mul.hi) + 64 + 55) - j <= 63);
-        }
-    }
-}
-#endif
-
 static double DoubleFromBits(uint64_t ieeeBits)
 {
     double value;
