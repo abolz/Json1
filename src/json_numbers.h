@@ -141,46 +141,6 @@ inline bool ToInteger(float x, uint32_t& result)
 }
 #endif
 
-inline int DecimalLengthDouble(uint64_t v)
-{
-    CC_ASSERT(v < 100000000000000000ull);
-
-    if (v >= 10000000000000000ull) { return 17; }
-    if (v >= 1000000000000000ull) { return 16; }
-    if (v >= 100000000000000ull) { return 15; }
-    if (v >= 10000000000000ull) { return 14; }
-    if (v >= 1000000000000ull) { return 13; }
-    if (v >= 100000000000ull) { return 12; }
-    if (v >= 10000000000ull) { return 11; }
-    if (v >= 1000000000ull) { return 10; }
-    if (v >= 100000000ull) { return 9; }
-    if (v >= 10000000ull) { return 8; }
-    if (v >= 1000000ull) { return 7; }
-    if (v >= 100000ull) { return 6; }
-    if (v >= 10000ull) { return 5; }
-    if (v >= 1000ull) { return 4; }
-    if (v >= 100ull) { return 3; }
-    if (v >= 10ull) { return 2; }
-    return 1;
-}
-
-#if CC_SINGLE_PRECISION
-inline int DecimalLengthSingle(uint32_t v)
-{
-    CC_ASSERT(v < 1000000000u);
-
-    if (v >= 100000000u) { return 9; }
-    if (v >= 10000000u) { return 8; }
-    if (v >= 1000000u) { return 7; }
-    if (v >= 100000u) { return 6; }
-    if (v >= 10000u) { return 5; }
-    if (v >= 1000u) { return 4; }
-    if (v >= 100u) { return 3; }
-    if (v >= 10u) { return 2; }
-    return 1;
-}
-#endif
-
 inline char* Utoa_2Digits(char* buf, uint32_t digits)
 {
     static constexpr char const* kDigits100 =
@@ -220,9 +180,32 @@ inline char* Utoa_8Digits(char* buf, uint32_t digits)
     return buf + 8;
 }
 
-inline int PrintDecimalDigitsDouble(char* buf, uint64_t output)
+inline int DecimalLength(uint64_t v)
 {
-    int const output_length = DecimalLengthDouble(output);
+    CC_ASSERT(v < 100000000000000000ull);
+
+    if (v >= 10000000000000000ull) { return 17; }
+    if (v >= 1000000000000000ull) { return 16; }
+    if (v >= 100000000000000ull) { return 15; }
+    if (v >= 10000000000000ull) { return 14; }
+    if (v >= 1000000000000ull) { return 13; }
+    if (v >= 100000000000ull) { return 12; }
+    if (v >= 10000000000ull) { return 11; }
+    if (v >= 1000000000ull) { return 10; }
+    if (v >= 100000000ull) { return 9; }
+    if (v >= 10000000ull) { return 8; }
+    if (v >= 1000000ull) { return 7; }
+    if (v >= 100000ull) { return 6; }
+    if (v >= 10000ull) { return 5; }
+    if (v >= 1000ull) { return 4; }
+    if (v >= 100ull) { return 3; }
+    if (v >= 10ull) { return 2; }
+    return 1;
+}
+
+inline int PrintDecimalDigits(char* buf, uint64_t output)
+{
+    int const output_length = DecimalLength(output);
     int i = output_length;
 
     // We prefer 32-bit operations, even on 64-bit platforms.
@@ -280,9 +263,24 @@ inline int PrintDecimalDigitsDouble(char* buf, uint64_t output)
 }
 
 #if CC_SINGLE_PRECISION
-inline int PrintDecimalDigitsSingle(char* buf, uint32_t output)
+inline int DecimalLength(uint32_t v)
 {
-    int const output_length = DecimalLengthSingle(output);
+    CC_ASSERT(v < 1000000000u);
+
+    if (v >= 100000000u) { return 9; }
+    if (v >= 10000000u) { return 8; }
+    if (v >= 1000000u) { return 7; }
+    if (v >= 100000u) { return 6; }
+    if (v >= 10000u) { return 5; }
+    if (v >= 1000u) { return 4; }
+    if (v >= 100u) { return 3; }
+    if (v >= 10u) { return 2; }
+    return 1;
+}
+
+inline int PrintDecimalDigits(char* buf, uint32_t output)
+{
+    int const output_length = DecimalLength(output);
     int i = output_length;
 
     while (output >= 10000)
@@ -458,11 +456,13 @@ namespace numbers {
 // The buffer must be large enough! (size >= 32 is sufficient.)
 inline char* NumberToString(char* buffer, int buffer_length, double value, bool force_trailing_dot_zero = true)
 {
+    using Flt = charconv::Double;
+
     JSON_ASSERT(buffer_length >= 32);
     static_cast<void>(buffer_length);
 
-    const charconv::Double v(value);
-    const bool is_neg = v.SignBit();
+    Flt const v(value);
+    bool const is_neg = v.SignBit();
 
     if (!v.IsFinite())
     {
@@ -507,19 +507,19 @@ inline char* NumberToString(char* buffer, int buffer_length, double value, bool 
     uint64_t digits;
     int decimal_exponent = 0;
 
-    const bool is_int = json::impl::ToInteger(value, digits);
+    bool const is_int = json::impl::ToInteger(value, digits);
     if (!is_int)
     {
         // value is not an integer in the range [1, 2^53].
         // Use Ryu to convert value to decimal.
-        auto const res = charconv::ryu::DoubleToDecimal(value);
+        auto const res = charconv::ryu::ToDecimal(value);
 
         digits = res.digits;
         decimal_exponent = res.exponent;
     }
 
     // Convert the digits to decimal.
-    const int num_digits = json::impl::PrintDecimalDigitsDouble(buffer, digits);
+    int const num_digits = json::impl::PrintDecimalDigits(buffer, digits);
 
     if (!is_int)
     {
@@ -540,11 +540,13 @@ inline char* NumberToString(char* buffer, int buffer_length, double value, bool 
 #if CC_SINGLE_PRECISION
 inline char* NumberToString(char* buffer, int buffer_length, float value, bool force_trailing_dot_zero = true)
 {
+    using Flt = charconv::Single;
+
     JSON_ASSERT(buffer_length >= 32);
     static_cast<void>(buffer_length);
 
-    const charconv::Single v(value);
-    const bool is_neg = v.SignBit();
+    Flt const v(value);
+    bool const is_neg = v.SignBit();
 
     if (!v.IsFinite())
     {
@@ -589,19 +591,19 @@ inline char* NumberToString(char* buffer, int buffer_length, float value, bool f
     uint32_t digits;
     int decimal_exponent = 0;
 
-    const bool is_int = json::impl::ToInteger(value, digits);
+    bool const is_int = json::impl::ToInteger(value, digits);
     if (!is_int)
     {
         // value is not an integer in the range [1, 2^24].
         // Use Ryu to convert value to decimal.
-        auto const res = charconv::ryu::SingleToDecimal(value);
+        auto const res = charconv::ryu::ToDecimal(value);
 
         digits = res.digits;
         decimal_exponent = res.exponent;
     }
 
     // Convert the digits to decimal.
-    const int num_digits = json::impl::PrintDecimalDigitsSingle(buffer, digits);
+    int const num_digits = json::impl::PrintDecimalDigits(buffer, digits);
 
     if (!is_int)
     {
