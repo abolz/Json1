@@ -1959,5 +1959,19 @@ inline SingleToDecimalResult SingleToDecimal(float value)
 
 #endif // CC_SINGLE_PRECISION
 
+//==================================================================================================
+//
+//==================================================================================================
+
+inline DoubleToDecimalResult ToDecimal(double value)
+{
+    return charconv::ryu::DoubleToDecimal(value);
+}
+
+inline SingleToDecimalResult ToDecimal(float value)
+{
+    return charconv::ryu::SingleToDecimal(value);
+}
+
 } // namespace ryu
 } // namespace charconv
