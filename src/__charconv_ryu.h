@@ -178,7 +178,6 @@ inline uint64_t ShiftRight128(Uint64x2 x, int dist)
     // For the __shiftright128 intrinsic, the shift value is always modulo 64.
     // In the current implementation of the double-precision version of Ryu, the
     // shift value is always < 64.
-    // The shift value actually is in the range [49, 58].
     // Check this here in case a future change requires larger shift values. In
     // this case this function needs to be adjusted.
 #if CC_OPTIMIZE_SIZE
@@ -188,19 +187,18 @@ inline uint64_t ShiftRight128(Uint64x2 x, int dist)
     CC_ASSERT(dist >= 49);
     CC_ASSERT(dist <= 58);
 #endif
-    unsigned char const amt = static_cast<unsigned char>(dist);
 
-#if 0 && CC_HAS_UINT128
+#if CC_HAS_UINT128
     __extension__ using uint128_t = unsigned __int128;
-    return static_cast<uint64_t>(((uint128_t{x.hi} << 64) | x.lo) >> (amt/* % 64*/));
+    return static_cast<uint64_t>(((uint128_t{x.hi} << 64) | x.lo) >> dist);
 #elif CC_HAS_64_BIT_INTRINSICS
-    return __shiftright128(x.lo, x.hi, amt);
+    return __shiftright128(x.lo, x.hi, static_cast<unsigned char>(dist));
 #else
 #if CC_32_BIT_PLATFORM && !CC_OPTIMIZE_SIZE
     // Avoid a 64-bit shift by taking advantage of the range of shift values.
-    return (x.hi << (64 - amt)) | (static_cast<uint32_t>(x.lo >> 32) >> (amt - 32));
+    return (x.hi << (64 - dist)) | (static_cast<uint32_t>(x.lo >> 32) >> (dist - 32));
 #else
-    return (x.hi << (64 - amt)) | (x.lo >> amt);
+    return (x.hi << (64 - dist)) | (x.lo >> dist);
 #endif
 #endif
 }
@@ -1051,7 +1049,7 @@ inline uint64_t MulShift(uint64_t m, Uint64x2 const* mul, int j)
 {
     CC_ASSERT((m >> 55) == 0); // m is maximum 55 bits
 
-#if 1 && CC_HAS_UINT128
+#if CC_HAS_UINT128
     __extension__ using uint128_t = unsigned __int128;
 
     uint128_t const b0 = uint128_t{m} * mul->lo;
@@ -1069,7 +1067,7 @@ inline uint64_t MulShift(uint64_t m, Uint64x2 const* mul, int j)
 #endif
 }
 
-#if 1 && (CC_HAS_UINT128 || CC_HAS_64_BIT_INTRINSICS)
+#if CC_HAS_UINT128 || CC_HAS_64_BIT_INTRINSICS
 inline void MulShiftAll(uint64_t mv, uint64_t mp, uint64_t mm, Uint64x2 const* mul, int j, uint64_t* vr, uint64_t* vp, uint64_t* vm)
 {
     *vr = MulShift(mv, mul, j);
@@ -1806,7 +1804,7 @@ inline SingleToDecimalResult SingleToDecimal(float value)
 
             int const q1 = q - 1;
             CC_ASSERT(q1 >= 0);
-            int const i1 = i + 1; // table index
+            int const i1 = i + 1; // = -e2 - q = table index
             CC_ASSERT(i1 >= 0);
             int const k1 = Pow5BitLength(i1) - kFloatPow5BitLength;
             int const j1 = q1 - k1; // shift
