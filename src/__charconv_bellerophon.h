@@ -26,8 +26,6 @@ namespace charconv {
 namespace bellerophon {
 
 //==================================================================================================
-// DigitsToDouble
-//
 // Derived from the double-conversion library:
 // https://github.com/google/double-conversion
 //
@@ -75,7 +73,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // doubles (that could have up to 768 digits) the result must be rounded to the
 // bigger one unless the tail consists of zeros, so we don't need to preserve
 // all the digits.
-constexpr int kMaxSignificantDigits = 767 + 1;
+constexpr int kDoubleMaxSignificantDigits = 767 + 1;
 
 inline constexpr int Min(int x, int y) { return y < x ? y : x; }
 inline constexpr int Max(int x, int y) { return y < x ? x : y; }
@@ -148,15 +146,15 @@ inline int DigitValue(char ch)
 // Any integer with at most 15 decimal digits will hence fit into a double
 // (which has a 53-bit significand) without loss of precision.
 constexpr int kMaxExactDoubleIntegerDecimalDigits = 15;
-constexpr int kMaxExactPowerOfTen = 22;
+constexpr int kMaxExactDoublePowerOfTen = 22;
 
 inline bool UseFastPath(int num_digits, int exponent)
 {
     if (num_digits > kMaxExactDoubleIntegerDecimalDigits)
         return false;
-    if (exponent < -kMaxExactPowerOfTen)
+    if (exponent < -kMaxExactDoublePowerOfTen)
         return false;
-    if (exponent > (kMaxExactDoubleIntegerDecimalDigits - num_digits) + kMaxExactPowerOfTen)
+    if (exponent > (kMaxExactDoubleIntegerDecimalDigits - num_digits) + kMaxExactDoublePowerOfTen)
         return false;
 
     return true;
@@ -190,7 +188,6 @@ inline double FastPath(uint64_t digits, int num_digits, int exponent)
         1.0e+20, // 10^20 = 6103515625000000 * 2^14 = (10^6  * 5^14) * 2^14
         1.0e+21, // 10^21 = 7629394531250000 * 2^17 = (10^4  * 5^17) * 2^17
         1.0e+22, // 10^22 = 4768371582031250 * 2^21 = (10^1  * 5^21) * 2^21
-//      1.0e+23,
     };
 
     // The significand fits into a double.
@@ -208,7 +205,7 @@ inline double FastPath(uint64_t digits, int num_digits, int exponent)
     {
         d /= kExactPowersOfTen[-exponent];
     }
-    else if (exponent <= kMaxExactPowerOfTen)
+    else if (exponent <= kMaxExactDoublePowerOfTen)
     {
         d *= kExactPowersOfTen[exponent];
     }
@@ -417,7 +414,7 @@ inline T ReadInt(char const* str, int len)
 
     for (int i = 0; i < len; ++i)
     {
-        value = static_cast<unsigned char>(str[i] - '0') + 10 * value;
+        value = 10 * value + static_cast<unsigned char>(str[i] - '0');
     }
 
     return value;
@@ -508,7 +505,7 @@ inline CachedPower GetCachedPowerForIndex(int index)
 
 // Returns 10^k as an exact DiyFp.
 // PRE: 1 <= k < kCachedPowersDecExpStep
-inline DiyFp GetExactCachedPowerForDecimalExponent(int k)
+inline DiyFp GetExactPow10(int k)
 {
     static_assert(kCachedPowersDecExpStep <= 16, "internal error");
     static constexpr uint64_t kSignificands[16] = { // 128 bytes
@@ -1255,13 +1252,13 @@ inline CachedPower GetCachedPowerForDecimalExponent(int e)
 
 // Max double: 1.7976931348623157 * 10^308, which has 309 digits.
 // Any x >= 10^309 is interpreted as +infinity.
-constexpr int kMaxDecimalPower = 309;
+constexpr int kDoubleMaxDecimalPower = 309;
 
 // Min non-zero double: 4.9406564584124654 * 10^-324
 // Any x <= 10^-324 is interpreted as 0.
 // Note that 2.5e-324 (despite being smaller than the min double) will be read
 // as non-zero (equal to the min non-zero double).
-constexpr int kMinDecimalPower = -324;
+constexpr int kDoubleMinDecimalPower = -324;
 
 // Returns the significand size for a given order of magnitude.
 //
@@ -1272,12 +1269,13 @@ constexpr int kMinDecimalPower = -324;
 // once it's encoded into a 'double'. In almost all cases this is equal to
 // Double::SignificandSize. The only exceptions are subnormals. They start with
 // leading zeroes and their effective significand-size is hence smaller.
+template <typename Flt>
 inline int EffectiveSignificandSize(int order)
 {
-    int const s = order - Double::MinExponent;
+    int const s = order - Flt::MinExponent;
 
-    if (s > Double::SignificandSize)
-        return Double::SignificandSize;
+    if (s > Flt::SignificandSize)
+        return Flt::SignificandSize;
     if (s < 0)
         return 0;
 
@@ -1315,8 +1313,8 @@ struct StrtodApproxResult {
 // Otherwise 'result' is either the correct double or the double that is just
 // below the correct double.
 //
-// PRE: num_digits + exponent <= kMaxDecimalPower
-// PRE: num_digits + exponent >  kMinDecimalPower
+// PRE: num_digits + exponent <= kDoubleMaxDecimalPower
+// PRE: num_digits + exponent >  kDoubleMinDecimalPower
 inline StrtodApproxResult StrtodApprox(char const* digits, int num_digits, int exponent)
 {
     static_assert(DiyFp::SignificandSize == 64,
@@ -1325,8 +1323,8 @@ inline StrtodApproxResult StrtodApprox(char const* digits, int num_digits, int e
     CC_ASSERT(num_digits > 0);
     CC_ASSERT(DigitValue(digits[0]) > 0);
 //  CC_ASSERT(DigitValue(digits[num_digits - 1]) > 0);
-    CC_ASSERT(num_digits + exponent <= kMaxDecimalPower);
-    CC_ASSERT(num_digits + exponent >  kMinDecimalPower);
+    CC_ASSERT(num_digits + exponent <= kDoubleMaxDecimalPower);
+    CC_ASSERT(num_digits + exponent >  kDoubleMinDecimalPower);
 
     // Compute an approximation 'input' for B = digits * 10^exponent using DiyFp's.
     // And keep track of the error.
@@ -1416,7 +1414,7 @@ inline StrtodApproxResult StrtodApprox(char const* digits, int num_digits, int e
     if (cached.k != exponent)
     {
         auto const adjustment_exponent = exponent - cached.k;
-        auto const adjustment_power = GetExactCachedPowerForDecimalExponent(adjustment_exponent);
+        auto const adjustment_power = GetExactPow10(adjustment_exponent);
 
         CC_ASSERT(IsNormalized(input.x));
         CC_ASSERT(IsNormalized(adjustment_power));
@@ -1490,7 +1488,7 @@ inline StrtodApproxResult StrtodApprox(char const* digits, int num_digits, int e
     // double-precision number, we need to drop some 'excess_bits' bits of
     // precision.
 
-    int const prec = EffectiveSignificandSize(DiyFp::SignificandSize + input.x.e);
+    int const prec = EffectiveSignificandSize<charconv::Double>(DiyFp::SignificandSize + input.x.e);
     CC_ASSERT(prec >= 0);
     CC_ASSERT(prec <= 53);
 
@@ -1545,15 +1543,18 @@ inline StrtodApproxResult StrtodApprox(char const* digits, int num_digits, int e
     // comparisons below.
 
     bool success;
-#if 1
-    // p2 * U >= half * U + error
-    // <=> p2 * U >= half * U + (error_hi * U + error_lo)
-    // <=> p2 * U >= (half + error_hi) * U + error_lo
-    // <=> p2 >= (half + error_hi) + error_lo / U
+
+    // We need to check whether:
+    //  p2 * U >= half * U + error
+    //      <=> p2 * U >= half * U + (error_hi * U + error_lo)
+    //      <=> p2 * U >= (half + error_hi) * U + error_lo
+    //      <=> p2 >= (half + error_hi) + error_lo / U
+    //
+    // But half * U might overflow.
+    //
+    // Since error_lo / U < 1, we test for p2 > half + error_hi
+    // and use the slow path in a few more cases.
     if (p2 > half + error_hi)
-#else
-    if (p2 * ULP >= half * ULP + input.error)
-#endif
     {
         // Round up.
         success = true;
@@ -1572,16 +1573,9 @@ inline StrtodApproxResult StrtodApprox(char const* digits, int num_digits, int e
             input.x.e  += 1;
         }
     }
-#if 1
-    // p2 * U <= half * U - error
-    // <=> half * U >= p2 * U + error
-    // <=> half * U >= p2 * U + (error_hi * U + error_lo)
-    // <=> half * U >= (p2 + error_hi) * U + error_lo
-    // <=> half >= (p2 + error_hi) + error_lo / U
+    // Likewise for:
+    //  p2 * U <= half * U - error <=> half >= (p2 + error_hi) + error_lo / U
     else if (half > p2 + error_hi)
-#else
-    else if (p2 * ULP <= half * ULP - input.error)
-#endif
     {
         // Round down.
         success = true;
@@ -1600,19 +1594,19 @@ inline StrtodApproxResult StrtodApprox(char const* digits, int num_digits, int e
 inline StrtodApproxResult ComputeGuess(char const* digits, int num_digits, int exponent)
 {
     CC_ASSERT(num_digits > 0);
-    CC_ASSERT(num_digits <= kMaxSignificantDigits);
+    CC_ASSERT(num_digits <= kDoubleMaxSignificantDigits);
     CC_ASSERT(DigitValue(digits[0]) > 0);
 //  CC_ASSERT(DigitValue(digits[num_digits - 1]) > 0);
 
     // Any v >= 10^309 is interpreted as +Infinity.
-    if (num_digits + exponent > kMaxDecimalPower)
+    if (num_digits + exponent > kDoubleMaxDecimalPower)
     {
         // Overflow.
         return {std::numeric_limits<double>::infinity(), true};
     }
 
     // Any v <= 10^-324 is interpreted as 0.
-    if (num_digits + exponent <= kMinDecimalPower)
+    if (num_digits + exponent <= kDoubleMinDecimalPower)
     {
         // Underflow.
         return {0.0, true};
@@ -1699,7 +1693,7 @@ inline void MulAddU32(DiyInt& x, uint32_t A, uint32_t B = 0)
     }
 }
 
-inline void AssignDecimalDigits(DiyInt& x, char const* digits, int num_digits)
+inline void AssignDecimalInteger(DiyInt& x, char const* digits, int num_digits)
 {
     static constexpr uint32_t kPow10_32[] = {
         1, // (unused)
@@ -1816,20 +1810,20 @@ inline int Compare(DiyInt const& lhs, DiyInt const& rhs)
 
 // Compare digits * 10^exponent with v = f * 2^e.
 //
-// PRE: num_digits + exponent <= kMaxDecimalPower
-// PRE: num_digits + exponent >  kMinDecimalPower
-// PRE: num_digits            <= kMaxSignificantDigits
+// PRE: num_digits + exponent <= kDoubleMaxDecimalPower
+// PRE: num_digits + exponent >  kDoubleMinDecimalPower
+// PRE: num_digits            <= kDoubleMaxSignificantDigits
 inline int CompareBufferWithDiyFp(char const* digits, int num_digits, int exponent, bool nonzero_tail, DiyFp v)
 {
     CC_ASSERT(num_digits > 0);
-    CC_ASSERT(num_digits + exponent <= kMaxDecimalPower);
-    CC_ASSERT(num_digits + exponent >  kMinDecimalPower);
-    CC_ASSERT(num_digits            <= kMaxSignificantDigits);
+    CC_ASSERT(num_digits + exponent <= kDoubleMaxDecimalPower);
+    CC_ASSERT(num_digits + exponent >  kDoubleMinDecimalPower);
+    CC_ASSERT(num_digits            <= kDoubleMaxSignificantDigits);
 
     DiyInt lhs;
     DiyInt rhs;
 
-    AssignDecimalDigits(lhs, digits, num_digits);
+    AssignDecimalInteger(lhs, digits, num_digits);
     if (nonzero_tail)
     {
         MulAddU32(lhs, 10, 1);
@@ -1875,7 +1869,7 @@ inline int CompareBufferWithDiyFp(char const* digits, int num_digits, int expone
     {
         MulPow5(lhs, lhs_exp5);
 
-        // num_digits + exponent <= kMaxDecimalPower + 1
+        // num_digits + exponent <= kDoubleMaxDecimalPower + 1
         CC_ASSERT(lhs.size <= (1030 + 31) / 32);  // 1030 = log_2(10^(309 + 1)))
         CC_ASSERT(rhs.size <= (  64 + 31) / 32);
     }
@@ -1883,9 +1877,9 @@ inline int CompareBufferWithDiyFp(char const* digits, int num_digits, int expone
     {
         MulPow5(rhs, rhs_exp5);
 
-        // kMinDecimalPower + 1 <= num_digits + exponent <= kMaxDecimalPower + 1
-        // rhs_exp5 = -exponent <= -kMinDecimalPower - 1 + num_digits = 324 - 1 + num_digits <= 324 - 1 + 769
-        // rhs_exp5 = -exponent >= -kMaxDecimalPower - 1 + num_digits
+        // kDoubleMinDecimalPower + 1 <= num_digits + exponent <= kDoubleMaxDecimalPower + 1
+        // rhs_exp5 = -exponent <= -kDoubleMinDecimalPower - 1 + num_digits = 324 - 1 + num_digits <= 324 - 1 + 769
+        // rhs_exp5 = -exponent >= -kDoubleMaxDecimalPower - 1 + num_digits
         CC_ASSERT(lhs.size <= (2555        + 31) / 32);
         CC_ASSERT(rhs.size <= (  64 + 2536 + 31) / 32); // 2536 = log_2(5^(324 - 1 + 769)) ---- XXX: 2504
     }
@@ -1956,7 +1950,7 @@ inline double DigitsToDouble(char const* digits, int num_digits, int exponent, b
         }
     }
 
-    if (num_digits > kMaxSignificantDigits)
+    if (num_digits > kDoubleMaxSignificantDigits)
     {
         // Since trailing zeros have been trimmed above:
         CC_ASSERT(nonzero_tail || DigitValue(digits[num_digits - 1]) > 0);
@@ -1964,8 +1958,8 @@ inline double DigitsToDouble(char const* digits, int num_digits, int exponent, b
         nonzero_tail = true;
 
         // Discard insignificant digits.
-        exponent += num_digits - kMaxSignificantDigits;
-        num_digits = kMaxSignificantDigits;
+        exponent += num_digits - kDoubleMaxSignificantDigits;
+        num_digits = kDoubleMaxSignificantDigits;
     }
 
     if (num_digits == 0)

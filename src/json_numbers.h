@@ -38,7 +38,7 @@ namespace impl {
 // Returns whether x is an integer and in the range [1, 2^53]
 // and stores the integral value of x in result.
 // PRE: x > 0
-inline bool ToInteger(double x, uint64_t& result)
+inline bool DoubleToInteger(double x, uint64_t& result)
 {
     using Flt = charconv::Double;
 
@@ -91,7 +91,7 @@ inline bool ToInteger(double x, uint64_t& result)
 // Returns whether x is an integer and in the range [1, 2^24]
 // and stores the integral value of x in result.
 // PRE: x > 0
-inline bool ToInteger(float x, uint32_t& result)
+inline bool SingleToInteger(float x, uint32_t& result)
 {
     using Flt = charconv::Single;
 
@@ -434,7 +434,7 @@ inline char* FormatGeneral(char* buffer, int num_digits, int decimal_exponent, b
     int const decimal_point = num_digits + decimal_exponent;
     int const scientific_exponent = decimal_point - 1;
 
-    // C/C++:      [-4,17)
+    // C/C++:      [-4,P) (P = 6 if omitted)
     // Java:       [-3,7)
     // JavaScript: [-6,21)
     constexpr int const kMinExp = -6;
@@ -507,12 +507,12 @@ inline char* NumberToString(char* buffer, int buffer_length, double value, bool 
     uint64_t digits;
     int decimal_exponent = 0;
 
-    bool const is_int = json::impl::ToInteger(value, digits);
+    bool const is_int = json::impl::DoubleToInteger(value, digits);
     if (!is_int)
     {
         // value is not an integer in the range [1, 2^53].
         // Use Ryu to convert value to decimal.
-        auto const res = charconv::ryu::ToDecimal(value);
+        auto const res = charconv::ryu::DoubleToDecimal(value);
 
         digits = res.digits;
         decimal_exponent = res.exponent;
@@ -591,12 +591,12 @@ inline char* NumberToString(char* buffer, int buffer_length, float value, bool f
     uint32_t digits;
     int decimal_exponent = 0;
 
-    bool const is_int = json::impl::ToInteger(value, digits);
+    bool const is_int = json::impl::SingleToInteger(value, digits);
     if (!is_int)
     {
         // value is not an integer in the range [1, 2^24].
         // Use Ryu to convert value to decimal.
-        auto const res = charconv::ryu::ToDecimal(value);
+        auto const res = charconv::ryu::SingleToDecimal(value);
 
         digits = res.digits;
         decimal_exponent = res.exponent;
@@ -637,7 +637,7 @@ inline double InternalStringToDouble(char const* next, char const* last, NumberC
 {
     using namespace charconv::bellerophon;
 
-    char        buffer[kMaxSignificantDigits];
+    char        buffer[kDoubleMaxSignificantDigits];
     char const* digits     = nullptr;
     int         num_digits = 0;
     int         exponent   = 0;
@@ -699,7 +699,7 @@ inline double InternalStringToDouble(char const* next, char const* last, NumberC
         {
             for (;;)
             {
-                if (num_digits < kMaxSignificantDigits)
+                if (num_digits < kDoubleMaxSignificantDigits)
                 {
                     buffer[num_digits++] = *next;
                 }
@@ -741,7 +741,7 @@ inline double InternalStringToDouble(char const* next, char const* last, NumberC
 
             while (IsDigit(*next))
             {
-                if (num_digits < kMaxSignificantDigits)
+                if (num_digits < kDoubleMaxSignificantDigits)
                 {
                     buffer[num_digits++] = *next;
                     --exponent;
