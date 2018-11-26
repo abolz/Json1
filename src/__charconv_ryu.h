@@ -1968,10 +1968,12 @@ inline DoubleToDecimalResult ToDecimal(double value)
     return charconv::ryu::DoubleToDecimal(value);
 }
 
+#if CC_SINGLE_PRECISION
 inline SingleToDecimalResult ToDecimal(float value)
 {
     return charconv::ryu::SingleToDecimal(value);
 }
+#endif
 
 } // namespace ryu
 } // namespace charconv
