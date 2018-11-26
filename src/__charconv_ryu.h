@@ -22,20 +22,6 @@
 
 #include "__charconv_common.h"
 
-#if defined(_MSC_VER)
-#include <intrin.h>
-#endif
-
-#if defined(_M_IX86) || defined(_M_ARM) || defined(__i386__) || defined(__arm__)
-#define CC_32_BIT_PLATFORM 1
-#endif
-
-#if defined(__GNUC__) && defined(__SIZEOF_INT128__)
-#define CC_HAS_UINT128 1
-#elif defined(_MSC_VER) && defined(_M_X64)
-#define CC_HAS_64_BIT_INTRINSICS 1
-#endif
-
 namespace charconv {
 namespace ryu {
 
@@ -124,54 +110,6 @@ inline int Log10Pow5(int e)
 
 constexpr int kDoublePow5InvBitLength = 122;
 constexpr int kDoublePow5BitLength = 121;
-
-struct Uint64x2 {
-    uint64_t lo;
-    uint64_t hi;
-};
-
-inline Uint64x2 Mul128(uint64_t a, uint64_t b)
-{
-#if CC_HAS_UINT128
-    __extension__ using uint128_t = unsigned __int128;
-
-    uint128_t const product = uint128_t{a} * b;
-
-    uint64_t const lo = static_cast<uint64_t>(product);
-    uint64_t const hi = static_cast<uint64_t>(product >> 64);
-
-    return {lo, hi};
-#elif CC_HAS_64_BIT_INTRINSICS
-    uint64_t hi;
-    uint64_t lo = _umul128(a, b, &hi);
-    return {lo, hi};
-#else
-    uint32_t const aLo = static_cast<uint32_t>(a);
-    uint32_t const aHi = static_cast<uint32_t>(a >> 32);
-    uint32_t const bLo = static_cast<uint32_t>(b);
-    uint32_t const bHi = static_cast<uint32_t>(b >> 32);
-
-    uint64_t const b00 = uint64_t{aLo} * bLo;
-    uint64_t const b01 = uint64_t{aLo} * bHi;
-    uint64_t const b10 = uint64_t{aHi} * bLo;
-    uint64_t const b11 = uint64_t{aHi} * bHi;
-
-    uint32_t const b00Lo = static_cast<uint32_t>(b00);
-    uint32_t const b00Hi = static_cast<uint32_t>(b00 >> 32);
-
-    uint64_t const mid1 = b10 + b00Hi;
-    uint32_t const mid1Lo = static_cast<uint32_t>(mid1);
-    uint32_t const mid1Hi = static_cast<uint32_t>(mid1 >> 32);
-
-    uint64_t const mid2 = b01 + mid1Lo;
-    uint32_t const mid2Lo = static_cast<uint32_t>(mid2);
-    uint32_t const mid2Hi = static_cast<uint32_t>(mid2 >> 32);
-
-    uint64_t const hi = b11 + mid1Hi + mid2Hi;
-    uint64_t const lo = (uint64_t{mid2Lo} << 32) + b00Lo;
-    return {lo, hi};
-#endif
-}
 
 inline uint64_t ShiftRight128(Uint64x2 x, int dist)
 {

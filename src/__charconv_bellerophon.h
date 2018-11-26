@@ -22,10 +22,6 @@
 
 #include "__charconv_common.h"
 
-#if defined(_MSC_VER)
-#include <intrin.h>
-#endif
-
 namespace charconv {
 namespace bellerophon {
 
@@ -287,80 +283,10 @@ inline DiyFp Multiply(DiyFp x, DiyFp y)
     //  f = round((x.f * y.f) / 2^q)
     //  e = x.e + y.e + q
 
-#if defined(_MSC_VER) && defined(_M_X64)
-
-    uint64_t h = 0;
-    uint64_t l = _umul128(x.f, y.f, &h);
-    h += l >> 63; // round, ties up: [h, l] += 2^q / 2
+    auto const p = Mul128(x.f, y.f);
+    auto const h = p.hi + (p.lo >> 63); // round, ties up: [h, l] += 2^q / 2
 
     return DiyFp(h, x.e + y.e + 64);
-
-#elif defined(__GNUC__) && defined(__SIZEOF_INT128__)
-
-    __extension__ using Uint128 = unsigned __int128;
-
-    Uint128 const p = Uint128{x.f} * y.f + (uint64_t{1} << 63);
-    return DiyFp(static_cast<uint64_t>(p >> 64), x.e + y.e + 64);
-
-#else
-
-    // Emulate the 64-bit * 64-bit multiplication:
-    //
-    // p = u * v
-    //   = (u_lo + 2^32 u_hi) (v_lo + 2^32 v_hi)
-    //   = (u_lo v_lo         ) + 2^32 ((u_lo v_hi         ) + (u_hi v_lo         )) + 2^64 (u_hi v_hi         )
-    //   = (p0                ) + 2^32 ((p1                ) + (p2                )) + 2^64 (p3                )
-    //   = (p0_lo + 2^32 p0_hi) + 2^32 ((p1_lo + 2^32 p1_hi) + (p2_lo + 2^32 p2_hi)) + 2^64 (p3                )
-    //   = (p0_lo             ) + 2^32 (p0_hi + p1_lo + p2_lo                      ) + 2^64 (p1_hi + p2_hi + p3)
-    //   = (p0_lo             ) + 2^32 (Q                                          ) + 2^64 (H                 )
-    //   = (p0_lo             ) + 2^32 (Q_lo + 2^32 Q_hi                           ) + 2^64 (H                 )
-    //
-    // (Since Q might be larger than 2^32 - 1)
-    //
-    //   = (p0_lo + 2^32 Q_lo) + 2^64 (Q_hi + H)
-    //
-    // (Q_hi + H does not overflow a 64-bit int)
-    //
-    //   = p_lo + 2^64 p_hi
-
-    // Note:
-    // The 32/64-bit casts here help MSVC to avoid calls to the _allmul
-    // library function.
-
-    uint32_t const u_lo = static_cast<uint32_t>(x.f /*& 0xFFFFFFFF*/);
-    uint32_t const u_hi = static_cast<uint32_t>(x.f >> 32);
-    uint32_t const v_lo = static_cast<uint32_t>(y.f /*& 0xFFFFFFFF*/);
-    uint32_t const v_hi = static_cast<uint32_t>(y.f >> 32);
-
-    uint64_t const p0 = uint64_t{u_lo} * v_lo;
-    uint64_t const p1 = uint64_t{u_lo} * v_hi;
-    uint64_t const p2 = uint64_t{u_hi} * v_lo;
-    uint64_t const p3 = uint64_t{u_hi} * v_hi;
-
-    uint64_t const p0_hi = p0 >> 32;
-    uint64_t const p1_lo = p1 & 0xFFFFFFFF;
-    uint64_t const p1_hi = p1 >> 32;
-    uint64_t const p2_lo = p2 & 0xFFFFFFFF;
-    uint64_t const p2_hi = p2 >> 32;
-
-    uint64_t Q = p0_hi + p1_lo + p2_lo;
-
-    // The full product might now be computed as
-    //
-    // p_hi = p3 + p2_hi + p1_hi + (Q >> 32)
-    // p_lo = p0_lo + (Q << 32)
-    //
-    // But in this particular case here, the full p_lo is not required.
-    // Effectively we only need to add the highest bit in p_lo to p_hi (and
-    // Q_hi + 1 does not overflow).
-
-    Q += uint32_t{1} << (63 - 32); // round, ties up
-
-    uint64_t const h = p3 + p2_hi + p1_hi + (Q >> 32);
-
-    return DiyFp(h, x.e + y.e + 64);
-
-#endif
 }
 
 // Decomposes `value` into `f * 2^e`.
