@@ -26,12 +26,6 @@
 #include <intrin.h>
 #endif
 
-// If enabled, save 4916 bytes of constant data.
-// This requires an additional multiplication, though.
-#ifndef CC_STRTOD_OPTIMIZE_SIZE
-#define CC_STRTOD_OPTIMIZE_SIZE 0
-#endif
-
 namespace charconv {
 namespace bellerophon {
 
@@ -522,7 +516,7 @@ inline int BinaryExponentFromDecimalExponent(int k)
     return (k * 108853 - 63 * (1 << 15)) >> 15;
 }
 
-#if CC_STRTOD_OPTIMIZE_SIZE
+#if CC_OPTIMIZE_SIZE
 // sizeof(tables) = 340 + 128 = 468 bytes
 
 constexpr int kCachedPowersSize         =   43;
@@ -617,7 +611,7 @@ inline DiyFp GetExactCachedPowerForDecimalExponent(int k)
     return {kSignificands[k], e};
 }
 
-#else // CC_STRTOD_OPTIMIZE_SIZE
+#else // CC_OPTIMIZE_SIZE
 
 constexpr int kCachedPowersSize         =  673;
 constexpr int kCachedPowersMinDecExp    = -348;
@@ -1310,7 +1304,7 @@ inline CachedPower GetCachedPowerForIndex(int index)
     return {kSignificands[index], e, k};
 }
 
-#endif // !CC_STRTOD_OPTIMIZE_SIZE
+#endif // !CC_OPTIMIZE_SIZE
 
 // Returns a cached power of ten x ~= 10^k such that
 //  k <= e < k + kCachedPowersDecExpStep.
@@ -1488,7 +1482,7 @@ inline StrtodApproxResult StrtodApprox(char const* digits, int num_digits, int e
     auto const cached = GetCachedPowerForDecimalExponent(exponent);
     auto const cached_power = DiyFp(cached.f, cached.e);
 
-#if CC_STRTOD_OPTIMIZE_SIZE
+#if CC_OPTIMIZE_SIZE
     // Not all powers-of-ten are cached.
     // If cached.k != exponent we need to multiply 'x' by the difference first.
     // This may introduce an additional error.

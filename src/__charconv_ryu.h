@@ -26,12 +26,6 @@
 #include <intrin.h>
 #endif
 
-// If enabled, save 9132 bytes of constant data.
-// Requires an additional multiplication, though.
-#ifndef CC_DTOA_OPTIMIZE_SIZE
-#define CC_DTOA_OPTIMIZE_SIZE 0
-#endif
-
 #if defined(_M_IX86) || defined(_M_ARM) || defined(__i386__) || defined(__arm__)
 #define CC_32_BIT_PLATFORM 1
 #endif
@@ -187,7 +181,7 @@ inline uint64_t ShiftRight128(Uint64x2 x, int dist)
     // The shift value actually is in the range [49, 58].
     // Check this here in case a future change requires larger shift values. In
     // this case this function needs to be adjusted.
-#if CC_DTOA_OPTIMIZE_SIZE
+#if CC_OPTIMIZE_SIZE
     CC_ASSERT(dist >= 0);
     CC_ASSERT(dist <= 59);
 #else
@@ -202,7 +196,7 @@ inline uint64_t ShiftRight128(Uint64x2 x, int dist)
 #elif CC_HAS_64_BIT_INTRINSICS
     return __shiftright128(x.lo, x.hi, amt);
 #else
-#if CC_32_BIT_PLATFORM && !CC_DTOA_OPTIMIZE_SIZE
+#if CC_32_BIT_PLATFORM && !CC_OPTIMIZE_SIZE
     // Avoid a 64-bit shift by taking advantage of the range of shift values.
     return (x.hi << (64 - amt)) | (static_cast<uint32_t>(x.lo >> 32) >> (amt - 32));
 #else
@@ -211,7 +205,7 @@ inline uint64_t ShiftRight128(Uint64x2 x, int dist)
 #endif
 }
 
-#if CC_DTOA_OPTIMIZE_SIZE
+#if CC_OPTIMIZE_SIZE
 // sizeof(tables) = 756 bytes
 
 constexpr int kSmallPow5TableSize = 26;
@@ -369,7 +363,7 @@ inline Uint64x2 ComputePow5Double(int i)
     return p;
 }
 
-#else // CC_DTOA_OPTIMIZE_SIZE
+#else // CC_OPTIMIZE_SIZE
 // sizeof(tables) = 9888 bytes
 
 inline Uint64x2 ComputePow5InvDouble(int i)
@@ -1013,7 +1007,7 @@ inline Uint64x2 ComputePow5Double(int i)
     return kPow5[i];
 }
 
-#endif // !CC_DTOA_OPTIMIZE_SIZE
+#endif // !CC_OPTIMIZE_SIZE
 
 // We need a 64x128-bit multiplication and a subsequent 128-bit shift.
 // Multiplication:
