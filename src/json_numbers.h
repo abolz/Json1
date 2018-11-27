@@ -42,13 +42,13 @@ inline bool DoubleToInteger(double x, uint64_t& result)
 {
     using Flt = charconv::Double;
 
-    const Flt d(x);
+    Flt const d(x);
 
     JSON_ASSERT(d.IsFinite());
     JSON_ASSERT(x > 0);
 
-    const auto F = d.PhysicalSignificand();
-    const auto E = d.PhysicalExponent();
+    auto const F = d.PhysicalSignificand();
+    auto const E = d.PhysicalExponent();
 
     constexpr int p = Flt::SignificandSize;
     // F < 2^p
@@ -59,15 +59,15 @@ inline bool DoubleToInteger(double x, uint64_t& result)
     //   = I * 2^k
     //   = I / 2^-k
     // 2^(p-1) <= I < 2^p
-    const auto I = Flt::HiddenBit | F;
-    const auto k = static_cast<int>(E) - Flt::ExponentBias;
+    auto const I = Flt::HiddenBit | F;
+    auto const k = static_cast<int>(E) - Flt::ExponentBias;
 
     uint64_t value;
     if (0 <= -k && -k < p)
     {
         // 1 <= x < 2^p
 
-        const uint64_t v = I >> -k;
+        uint64_t const v = I >> -k;
         if ((v << -k) != I) // fractional part is non-zero, i.e. x is not an integer
             return false;
         value = v;
@@ -329,8 +329,8 @@ inline char* FormatGeneral(char* buffer, int num_digits, int decimal_exponent, b
     // C/C++:      [-4,P) (P = 6 if omitted)
     // Java:       [-3,7)
     // JavaScript: [-6,21)
-    constexpr int const kMinExp = -6;
-    constexpr int const kMaxExp = 21;
+    constexpr int kMinExp = -6;
+    constexpr int kMaxExp = 21;
 
     return (kMinExp <= scientific_exponent && scientific_exponent < kMaxExp)
         ? FormatFixed(buffer, num_digits, decimal_point, force_trailing_dot_zero)
