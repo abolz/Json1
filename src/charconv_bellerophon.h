@@ -107,30 +107,30 @@ inline int DigitValue(char ch)
 // compare the output of the division with the expected result. (Inlining must
 // be disabled.)
 #if !defined(CC_CORRECT_DOUBLE_OPERATIONS)
-#if defined(_M_X64)              || \
-    defined(_M_ARM)				 || \
-    defined(_M_ARM64)			 || \
-    defined(__x86_64__)          || \
-    defined(__ARMEL__)           || \
-    defined(__avr32__)           || \
-    defined(__hppa__)            || \
-    defined(__ia64__)            || \
-    defined(__mips__)            || \
-    defined(__powerpc__)         || \
-    defined(__ppc__)             || \
-    defined(__ppc64__)           || \
-    defined(_POWER)              || \
-    defined(_ARCH_PPC)           || \
-    defined(_ARCH_PPC64)         || \
-    defined(__sparc__)           || \
-    defined(__sparc)             || \
-    defined(__s390__)            || \
-    defined(__SH4__)             || \
-    defined(__alpha__)           || \
-    defined(_MIPS_ARCH_MIPS32R2) || \
-    defined(__AARCH64EL__)       || \
-    defined(__aarch64__)         || \
-    defined(__riscv)
+#if defined(__aarch64__)            \
+    || defined(__AARCH64EL__)       \
+    || defined(__alpha__)           \
+    || defined(__ARMEL__)           \
+    || defined(__avr32__)           \
+    || defined(__hppa__)            \
+    || defined(__ia64__)            \
+    || defined(__mips__)            \
+    || defined(__powerpc__)         \
+    || defined(__ppc__)             \
+    || defined(__ppc64__)           \
+    || defined(__riscv)             \
+    || defined(__s390__)            \
+    || defined(__SH4__)             \
+    || defined(__sparc__)           \
+    || defined(__sparc)             \
+    || defined(__x86_64__)          \
+    || defined(_ARCH_PPC)           \
+    || defined(_ARCH_PPC64)         \
+    || defined(_M_ARM)              \
+    || defined(_M_ARM64)            \
+    || defined(_M_X64)              \
+    || defined(_MIPS_ARCH_MIPS32R2) \
+    || defined(_POWER)
 #define CC_CORRECT_DOUBLE_OPERATIONS 1
 #elif defined(_M_IX86) || defined(__i386__) || defined(__i386)
 #ifdef _WIN32
