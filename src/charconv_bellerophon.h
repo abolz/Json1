@@ -1283,23 +1283,27 @@ inline int EffectiveSignificandSize(int order)
 }
 
 // Returns `f * 2^e`.
-// PRE: f <= 2^p - 1 = 2^53 - 1
-inline double LoadFloat(uint64_t f, int e)
+// PRE: f <= 2^p - 1
+template <typename Flt>
+inline typename Flt::value_type FloatFromDiyFp(DiyFp x)
 {
-    CC_ASSERT(f <= Double::HiddenBit + Double::SignificandMask);
-    CC_ASSERT(e <= Double::MinExponent || (f & Double::HiddenBit) != 0);
+    using value_type = typename Flt::value_type;
+    using bits_type = typename Flt::bits_type;
 
-    if (e < Double::MinExponent)
+    CC_ASSERT(x.f <= Flt::HiddenBit + Flt::SignificandMask);
+    CC_ASSERT(x.e <= Flt::MinExponent || (x.f & Flt::HiddenBit) != 0);
+
+    if (x.e < Flt::MinExponent)
         return 0;
-    if (e > Double::MaxExponent)
-        return std::numeric_limits<double>::infinity();
+    if (x.e > Flt::MaxExponent)
+        return std::numeric_limits<value_type>::infinity();
 
-    bool const is_subnormal = (e == Double::MinExponent && (f & Double::HiddenBit) == 0);
+    bool const is_subnormal = (x.e == Flt::MinExponent && (x.f & Flt::HiddenBit) == 0);
 
-    uint64_t const E = is_subnormal ? 0 : static_cast<uint64_t>(e + Double::ExponentBias);
-    uint64_t const F = f & Double::SignificandMask;
+    auto const E = is_subnormal ? 0 : static_cast<bits_type>(x.e + Flt::ExponentBias);
+    auto const F = static_cast<bits_type>(x.f & Flt::SignificandMask);
 
-    return Double((E << Double::PhysicalSignificandSize) | F).Value();
+    return Flt((E << Flt::PhysicalSignificandSize) | F).Value();
 }
 
 struct StrtodApproxResult {
@@ -1629,7 +1633,7 @@ inline StrtodApproxResult StrtodApprox(char const* digits, int num_digits, int e
         success = false;
     }
 
-    return {LoadFloat(result.f, result.e), success};
+    return {FloatFromDiyFp<charconv::Double>(result), success};
 }
 
 inline StrtodApproxResult ComputeGuess(char const* digits, int num_digits, int exponent)
