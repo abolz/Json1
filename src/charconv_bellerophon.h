@@ -74,6 +74,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // bigger one unless the tail consists of zeros, so we don't need to preserve
 // all the digits.
 constexpr int kDoubleMaxSignificantDigits = 767 + 1;
+constexpr int kSingleMaxSignificantDigits = 112 + 1;
 
 inline constexpr int Min(int x, int y) { return y < x ? y : x; }
 inline constexpr int Max(int x, int y) { return y < x ? x : y; }
@@ -1250,12 +1251,14 @@ inline CachedPower GetCachedPowerForDecimalExponent(int e)
 // Max double: 1.7976931348623157 * 10^308, which has 309 digits.
 // Any x >= 10^309 is interpreted as +infinity.
 constexpr int kDoubleMaxDecimalPower = 309;
+constexpr int kSingleMaxDecimalPower = 39; // Max single: 3.402823466 * 10^38
 
 // Min non-zero double: 4.9406564584124654 * 10^-324
 // Any x <= 10^-324 is interpreted as 0.
 // Note that 2.5e-324 (despite being smaller than the min double) will be read
 // as non-zero (equal to the min non-zero double).
 constexpr int kDoubleMinDecimalPower = -324;
+constexpr int kSingleMinDecimalPower = -46; // Min non-zero single: 1.401298464 * 10^-45
 
 // Returns the significand size for a given order of magnitude.
 //
