@@ -110,6 +110,8 @@ inline int DigitValue(char ch)
 #if defined(__aarch64__)            \
     || defined(__AARCH64EL__)       \
     || defined(__alpha__)           \
+    || defined(__arm__)             \
+    || defined(__arm64__)           \
     || defined(__ARMEL__)           \
     || defined(__avr32__)           \
     || defined(__hppa__)            \
