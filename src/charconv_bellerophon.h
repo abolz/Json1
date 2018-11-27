@@ -1296,11 +1296,10 @@ inline double LoadFloat(uint64_t f, int e)
 
     bool const is_subnormal = (e == Double::MinExponent && (f & Double::HiddenBit) == 0);
 
-    uint64_t const exponent = is_subnormal
-        ? 0
-        : static_cast<uint64_t>(e + Double::ExponentBias);
+    uint64_t const E = is_subnormal ? 0 : static_cast<uint64_t>(e + Double::ExponentBias);
+    uint64_t const F = f & Double::SignificandMask;
 
-    return Double((exponent << Double::PhysicalSignificandSize) | (f & Double::SignificandMask)).Value();
+    return Double((E << Double::PhysicalSignificandSize) | F).Value();
 }
 
 struct StrtodApproxResult {
