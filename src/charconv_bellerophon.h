@@ -74,7 +74,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // bigger one unless the tail consists of zeros, so we don't need to preserve
 // all the digits.
 constexpr int kDoubleMaxSignificantDigits = 767 + 1;
-constexpr int kSingleMaxSignificantDigits = 112 + 1;
 
 inline constexpr int Min(int x, int y) { return y < x ? y : x; }
 inline constexpr int Max(int x, int y) { return y < x ? x : y; }
@@ -1251,14 +1250,12 @@ inline CachedPower GetCachedPowerForDecimalExponent(int e)
 // Max double: 1.7976931348623157 * 10^308, which has 309 digits.
 // Any x >= 10^309 is interpreted as +infinity.
 constexpr int kDoubleMaxDecimalPower = 309;
-constexpr int kSingleMaxDecimalPower = 39; // Max single: 3.402823466 * 10^38
 
 // Min non-zero double: 4.9406564584124654 * 10^-324
 // Any x <= 10^-324 is interpreted as 0.
 // Note that 2.5e-324 (despite being smaller than the min double) will be read
 // as non-zero (equal to the min non-zero double).
 constexpr int kDoubleMinDecimalPower = -324;
-constexpr int kSingleMinDecimalPower = -46; // Min non-zero single: 1.401298464 * 10^-45
 
 // Returns the significand size for a given order of magnitude.
 //
@@ -1269,13 +1266,12 @@ constexpr int kSingleMinDecimalPower = -46; // Min non-zero single: 1.401298464 
 // once it's encoded into a 'double'. In almost all cases this is equal to
 // Double::SignificandSize. The only exceptions are subnormals. They start with
 // leading zeroes and their effective significand-size is hence smaller.
-template <typename Flt>
 inline int EffectiveSignificandSize(int order)
 {
-    int const s = order - Flt::MinExponent;
+    int const s = order - Double::MinExponent;
 
-    if (s > Flt::SignificandSize)
-        return Flt::SignificandSize;
+    if (s > Double::SignificandSize)
+        return Double::SignificandSize;
     if (s < 0)
         return 0;
 
@@ -1284,26 +1280,22 @@ inline int EffectiveSignificandSize(int order)
 
 // Returns `f * 2^e`.
 // PRE: f <= 2^p - 1
-template <typename Flt>
-inline typename Flt::value_type FloatFromDiyFp(DiyFp x)
+inline double DoubleFromDiyFp(DiyFp x)
 {
-    using value_type = typename Flt::value_type;
-    using bits_type = typename Flt::bits_type;
+    CC_ASSERT(x.f <= Double::HiddenBit + Double::SignificandMask);
+    CC_ASSERT(x.e <= Double::MinExponent || (x.f & Double::HiddenBit) != 0);
 
-    CC_ASSERT(x.f <= Flt::HiddenBit + Flt::SignificandMask);
-    CC_ASSERT(x.e <= Flt::MinExponent || (x.f & Flt::HiddenBit) != 0);
-
-    if (x.e < Flt::MinExponent)
+    if (x.e < Double::MinExponent)
         return 0;
-    if (x.e > Flt::MaxExponent)
-        return std::numeric_limits<value_type>::infinity();
+    if (x.e > Double::MaxExponent)
+        return std::numeric_limits<double>::infinity();
 
-    bool const is_subnormal = (x.e == Flt::MinExponent && (x.f & Flt::HiddenBit) == 0);
+    bool const is_subnormal = (x.e == Double::MinExponent && (x.f & Double::HiddenBit) == 0);
 
-    auto const E = is_subnormal ? 0 : static_cast<bits_type>(x.e + Flt::ExponentBias);
-    auto const F = static_cast<bits_type>(x.f & Flt::SignificandMask);
+    uint64_t const E = is_subnormal ? 0 : static_cast<uint64_t>(x.e + Double::ExponentBias);
+    uint64_t const F = x.f & Double::SignificandMask;
 
-    return Flt((E << Flt::PhysicalSignificandSize) | F).Value();
+    return Double((E << Double::PhysicalSignificandSize) | F).Value();
 }
 
 struct StrtodApproxResult {
@@ -1497,7 +1489,7 @@ inline StrtodApproxResult StrtodApprox(char const* digits, int num_digits, int e
     // double-precision number, we need to drop some 'excess_bits' bits of
     // precision.
 
-    int const prec = EffectiveSignificandSize<charconv::Double>(DiyFp::SignificandSize + input.x.e);
+    int const prec = EffectiveSignificandSize(DiyFp::SignificandSize + input.x.e);
     CC_ASSERT(prec >= 0);
     CC_ASSERT(prec <= 53);
 
@@ -1633,7 +1625,7 @@ inline StrtodApproxResult StrtodApprox(char const* digits, int num_digits, int e
         success = false;
     }
 
-    return {FloatFromDiyFp<charconv::Double>(result), success};
+    return {DoubleFromDiyFp(result), success};
 }
 
 inline StrtodApproxResult ComputeGuess(char const* digits, int num_digits, int exponent)

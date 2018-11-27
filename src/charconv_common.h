@@ -52,14 +52,10 @@
 #define CC_OPTIMIZE_SIZE 0
 #endif
 
-#ifndef CC_SINGLE_PRECISION
-#define CC_SINGLE_PRECISION 0
-#endif
-
 namespace charconv {
 
 //==================================================================================================
-// IEEE double-/single-precision inspection
+// IEEE double-precision inspection
 //==================================================================================================
 
 template <typename Dest, typename Source>
@@ -72,16 +68,14 @@ inline Dest ReinterpretBits(Source source)
     return dest;
 }
 
-template <typename FloatType>
-struct IEEEFloatingPoint
+struct Double
 {
-    static_assert(std::numeric_limits<FloatType>::is_iec559
-                  && ((std::numeric_limits<FloatType>::digits == 53 && std::numeric_limits<FloatType>::max_exponent == 1024) ||
-                      (std::numeric_limits<FloatType>::digits == 24 && std::numeric_limits<FloatType>::max_exponent == 128)),
-        "IEEE-754 double- or single-precision implementation required");
+    static_assert(std::numeric_limits<double>::is_iec559
+                  && (std::numeric_limits<double>::digits == 53 && std::numeric_limits<double>::max_exponent == 1024),
+        "IEEE-754 double-precision implementation required");
 
-    using value_type = FloatType;
-    using bits_type = std::conditional_t<sizeof(FloatType) * CHAR_BIT == 32, uint32_t, uint64_t>;
+    using value_type = double;
+    using bits_type = uint64_t;
 
     static constexpr int       SignificandSize         = std::numeric_limits<value_type>::digits; // = p   (includes the hidden bit)
     static constexpr int       PhysicalSignificandSize = SignificandSize - 1;                     // = p-1 (excludes the hidden bit)
@@ -97,8 +91,8 @@ struct IEEEFloatingPoint
 
     bits_type /*const*/ bits;
 
-    explicit IEEEFloatingPoint(bits_type bits_) : bits(bits_) {}
-    explicit IEEEFloatingPoint(value_type value) : bits(ReinterpretBits<bits_type>(value)) {}
+    explicit Double(bits_type bits_) : bits(bits_) {}
+    explicit Double(value_type value) : bits(ReinterpretBits<bits_type>(value)) {}
 
     bits_type PhysicalSignificand() const {
         return bits & SignificandMask;
@@ -141,11 +135,6 @@ struct IEEEFloatingPoint
         return ReinterpretBits<value_type>(IsInf() ? bits : bits + 1);
     }
 };
-
-using Double = IEEEFloatingPoint<double>;
-#if CC_SINGLE_PRECISION
-using Single = IEEEFloatingPoint<float>;
-#endif
 
 //==================================================================================================
 //
