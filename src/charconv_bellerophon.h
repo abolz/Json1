@@ -343,11 +343,6 @@ inline DiyFp UpperBoundary(Double value)
 
 struct DiyFpWithError // value = (x.f + delta) * 2^x.e, where |delta| <= error
 {
-    // We don't want to deal with fractions and therefore work with a common
-    // denominator.
-    static constexpr int DenominatorLog = 1;
-    static constexpr int Denominator = 1 << DenominatorLog;
-
     DiyFp x;
     uint32_t error = 0;
 
@@ -1285,6 +1280,7 @@ inline int EffectiveSignificandSize(int order)
 }
 
 // Returns `f * 2^e`.
+// PRE: f <= 2^p - 1 = 2^53 - 1
 inline double LoadFloat(uint64_t f, int e)
 {
     CC_ASSERT(f <= Double::HiddenBit + Double::SignificandMask);
@@ -1350,7 +1346,8 @@ inline StrtodApproxResult StrtodApprox(char const* digits, int num_digits, int e
         return {FastPath(input.x.f, num_digits, exponent), true};
     }
 
-    constexpr uint32_t ULP = DiyFpWithError::Denominator;
+    // We don't want to deal with fractions and therefore work with a common denominator.
+    constexpr uint32_t ULP = 2;
 
     if (read_digits < num_digits)
     {
@@ -1460,12 +1457,16 @@ inline StrtodApproxResult StrtodApprox(char const* digits, int num_digits, int e
     // Adjust the error.
     // Since all cached powers have an error of less than 1/2 ulp, err_y = 1/2,
     // and the error is therefore less than 1/2 + (err_x + err_y).
-
 #if 1
+    // If 10^exponent is exact, the additional error is at most ULP/2.
+    // This makes the error analysis slightly harder (see below).
     input.error += ULP / 2 + (0 <= exponent && exponent <= 27 ? 0 : ULP / 2);
 #else
+    // Use a safe error bound.
+    // This implies error_hi >= 1 (see below).
     input.error += ULP / 2 + ULP / 2;
 #endif
+
     CC_ASSERT(input.error <= 36 * (ULP / 2));
 
     // The result of the multiplication might not be normalized.
@@ -1521,24 +1522,57 @@ inline StrtodApproxResult StrtodApprox(char const* digits, int num_digits, int e
     CC_ASSERT(excess_bits >= 11);
     CC_ASSERT(excess_bits <= 64);
 
-    uint64_t const p2 = (excess_bits < 64) ? (input.x.f & ((uint64_t{1} << excess_bits) - 1)) : input.x.f;
     uint64_t const half = uint64_t{1} << (excess_bits - 1);
-
-    // Truncate the significand to p = q - n bits and move the discarded bits
-    // into the (binary) exponent.
-    // (Right shift of >= bit-width is undefined.)
-    input.x.f = (excess_bits < 64) ? (input.x.f >> excess_bits) : 0;
-    input.x.e += excess_bits;
 
     // Split up error into high (integral) and low (fractional) parts,
     // since half * kULP might overflow.
     uint32_t const error_hi = input.error / ULP;
     uint32_t const error_lo = input.error % ULP;
+    static_cast<void>(error_lo);
 
     CC_ASSERT(input.error > 0);
-    CC_ASSERT(half >= error_hi && half - error_hi <= UINT64_MAX / ULP && (half - error_hi) * ULP >= error_lo);
+
+    // half + error_hi must not overflow.
+    // Guaranteed since error_hi <= 36 and half <= 2^63.
     CC_ASSERT(half <= UINT64_MAX - error_hi);
-    static_cast<void>(error_lo);
+
+    // We need to verify:
+    //
+    //  half >= error / ULP
+    //      <=> half >= (error_hi * ULP + error_lo) / ULP
+    //      <=> half >= error_hi + error_lo / ULP
+    //      <=> half >= error_hi && half - error_hi >= error_lo / ULP
+    //      <=> half >= error_hi && ULP * (half - error_hi) >= error_lo
+    //
+    // to make sure, that the *only* correct values are
+    // either p1 * 2^(e + n) or (p1 + 1) * 2^(e + n).
+    CC_ASSERT(half >= error_hi);
+    // Additionally we need to make sure that (half - error_hi) * ULP does not overflow
+    // in the computation below.
+    //
+    // Since ULP = 2, this can only fail if half = 2^63 and error_hi = 0.
+    //
+    // But the latter conditions can never be true at the same time:
+    //  - error_hi = 0 implies input is exact and 0 <= exponent <= 27.
+    //  - half = 2^63 implies excess_bits = 64, which in turn implies prec = 0, which
+    //    implies exponent < -1075 - 64.
+    CC_ASSERT((half - error_hi) <= UINT64_MAX / ULP);
+    CC_ASSERT((half - error_hi) * ULP >= error_lo);
+
+#if 0
+    // Note: right shift of >= bit-width is undefined.
+    uint64_t const p2 = input.x.f & (0xFFFFFFFFFFFFFFFF >> (64 - excess_bits));
+#else
+    uint64_t const p2 = (excess_bits < 64) ? (input.x.f & ((uint64_t{1} << excess_bits) - 1)) : input.x.f;
+#endif
+
+    // Truncate the significand to p = q - n bits and move the discarded bits
+    // into the (binary) exponent.
+    //
+    // Note: right shift of >= bit-width is undefined.
+    DiyFp result;
+    result.f = (excess_bits < 64) ? (input.x.f >> excess_bits) : 0;
+    result.e = input.x.e + excess_bits;
 
     // Note:
     // Since error is non-zero, we can safely use '<=' and '>=' in the
@@ -1547,40 +1581,43 @@ inline StrtodApproxResult StrtodApprox(char const* digits, int num_digits, int e
     bool success;
 
     // We need to check whether:
-    //  p2 * U >= half * U + error
-    //      <=> p2 * U >= half * U + (error_hi * U + error_lo)
-    //      <=> p2 * U >= (half + error_hi) * U + error_lo
-    //      <=> p2 >= (half + error_hi) + error_lo / U
     //
-    // But half * U might overflow.
+    //  p2 * ULP >= half * ULP + error
+    //      <=> p2 * ULP >= half * ULP + (error_hi * ULP + error_lo)
+    //      <=> p2 * ULP >= (half + error_hi) * ULP + error_lo
+    //      <=> p2 >= (half + error_hi) + error_lo / ULP
     //
-    // Since error_lo / U < 1, we test for p2 > half + error_hi
+    // But half * ULP might overflow, in case half = 2^63.
+    //
+    // Since error_lo / ULP < 1, we test for p2 > half + error_hi
     // and use the slow path in a few more cases.
     if (p2 > half + error_hi)
     {
-        // Round up.
         success = true;
 
-        ++input.x.f;
+        // Round up.
+        ++result.f;
 
         // Rounding up may overflow the p-bit significand.
         // But in this case the significand is 2^53 and we don't loose any
         // bits by normalizing 'input' (we just move a factor of 2 into the
         // binary exponent).
-        if (input.x.f > Double::HiddenBit + Double::SignificandMask)
+        if (result.f > Double::HiddenBit + Double::SignificandMask)
         {
-            CC_ASSERT(input.x.f == (Double::HiddenBit << 1));
+            CC_ASSERT(result.f == (Double::HiddenBit << 1));
 
-            input.x.f >>= 1;
-            input.x.e  += 1;
+            result.f >>= 1;
+            result.e  += 1;
         }
     }
     // Likewise for:
-    //  p2 * U <= half * U - error <=> half >= (p2 + error_hi) + error_lo / U
+    //  p2 * ULP <= half * ULP - error <=> half >= (p2 + error_hi) + error_lo / ULP
     else if (half > p2 + error_hi)
     {
-        // Round down.
         success = true;
+
+        // Round down,
+        // ie. do nothing.
     }
     else
     {
@@ -1590,7 +1627,7 @@ inline StrtodApproxResult StrtodApprox(char const* digits, int num_digits, int e
         success = false;
     }
 
-    return {LoadFloat(input.x.f, input.x.e), success};
+    return {LoadFloat(result.f, result.e), success};
 }
 
 inline StrtodApproxResult ComputeGuess(char const* digits, int num_digits, int exponent)
