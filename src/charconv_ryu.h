@@ -302,7 +302,6 @@ inline Uint64x2 ComputePow5Double(int i)
 
 inline Uint64x2 ComputePow5InvDouble(int i)
 {
-	static constexpr int kPow5InvTableSize = 292;
     static constexpr Uint64x2 kPow5Inv[] = { // 4672 bytes
         {0x0000000000000001, 0x0400000000000000},
         {0x3333333333333334, 0x0333333333333333},
@@ -599,14 +598,13 @@ inline Uint64x2 ComputePow5InvDouble(int i)
     };
 
     CC_ASSERT(i >= 0);
-    CC_ASSERT(i < kPow5InvTableSize);
+    CC_ASSERT(i < 292);
     return kPow5Inv[i];
 }
 
 // Computes 5^-i in the form required by Ryu.
 inline Uint64x2 ComputePow5Double(int i)
 {
-    static constexpr int kPow5TableSize = 326;
     static constexpr Uint64x2 kPow5[] = { // 5216 bytes
         {0x0000000000000000, 0x0100000000000000},
         {0x0000000000000000, 0x0140000000000000},
@@ -937,7 +935,7 @@ inline Uint64x2 ComputePow5Double(int i)
     };
 
     CC_ASSERT(i >= 0);
-    CC_ASSERT(i < kPow5TableSize);
+    CC_ASSERT(i < 326);
     return kPow5[i];
 }
 
