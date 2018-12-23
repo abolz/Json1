@@ -745,7 +745,7 @@ struct Parser
     ParseStatus ParsePrimitive();
     ParseStatus ParseValue();
 
-    bool CheckEndStructured(TokenKind close);
+    bool IsEndStructured(TokenKind close);
 };
 
 template <typename ParseCallbacks>
@@ -941,7 +941,7 @@ L_end_member:
             if (Failed ec = cb.HandleEndMember(stack[stack_size - 1].count))
                 return ParseStatus(ec);
 
-            if (CheckEndStructured(TokenKind::r_brace))
+            if (IsEndStructured(TokenKind::r_brace))
                 break;
         }
 
@@ -1000,7 +1000,7 @@ L_end_element:
             if (Failed ec = cb.HandleEndElement(stack[stack_size - 1].count))
                 return ParseStatus(ec);
 
-            if (CheckEndStructured(TokenKind::r_square))
+            if (IsEndStructured(TokenKind::r_square))
                 break;
         }
 
@@ -1029,20 +1029,16 @@ L_end_structured:
 }
 
 template <typename ParseCallbacks>
-bool Parser<ParseCallbacks>::CheckEndStructured(TokenKind close)
+bool Parser<ParseCallbacks>::IsEndStructured(TokenKind close)
 {
-    if (token.kind == close)
-    {
-        return true;
-    }
-    else if (token.kind == TokenKind::comma)
+    if (token.kind == TokenKind::comma)
     {
         token = lexer.Lex(options); // skip ','
         return options.allow_trailing_commas && token.kind == close;
     }
     else
     {
-        return !options.ignore_missing_commas;
+        return !options.ignore_missing_commas || token.kind == close;
     }
 }
 
