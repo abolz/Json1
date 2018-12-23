@@ -899,11 +899,11 @@ L_begin_object:
     stack[stack_size] = {0, Structure::object};
     ++stack_size;
 
-    // skip '{'
-    token = lexer.Lex(options);
-
     if (Failed ec = cb.HandleBeginObject())
         return ParseStatus(ec);
+
+    // skip '{'
+    token = lexer.Lex(options);
 
     if (token.kind != TokenKind::r_brace)
     {
@@ -973,11 +973,11 @@ L_begin_array:
     stack[stack_size] = {0, Structure::array};
     ++stack_size;
 
-    // skip '['
-    token = lexer.Lex(options);
-
     if (Failed ec = cb.HandleBeginArray())
         return ParseStatus(ec);
+
+    // skip '['
+    token = lexer.Lex(options);
 
     if (token.kind != TokenKind::r_square)
     {
