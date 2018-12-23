@@ -29,6 +29,17 @@
 #define JSON_ASSERT(X) assert(X)
 #endif
 
+#if defined(__GNUC__) || defined(__clang__)
+#define JSON_FORCE_INLINE __attribute__((always_inline)) inline
+#define JSON_NEVER_INLINE __attribute__((noinline)) inline
+#elif defined(_MSC_VER)
+#define JSON_FORCE_INLINE __forceinline
+#define JSON_NEVER_INLINE __declspec(noinline) inline
+#else
+#define JSON_FORCE_INLINE inline
+#define JSON_NEVER_INLINE inline
+#endif
+
 namespace json {
 
 //==================================================================================================
@@ -387,7 +398,7 @@ inline void Lexer::SetInput(char const* first, char const* last, bool skip_bom)
     end = last;
 }
 
-inline Token Lexer::Lex(Options const& options)
+JSON_NEVER_INLINE Token Lexer::Lex(Options const& options)
 {
 L_again:
     ptr = SkipWhitespace(ptr, end);
