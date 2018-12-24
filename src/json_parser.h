@@ -354,8 +354,6 @@ private:
     char const* end = nullptr;
 
 public:
-    Lexer();
-
     void SetInput(char const* first, char const* last, bool skip_bom = true);
 
     Token Lex(Options const& options);
@@ -370,10 +368,6 @@ private:
 
     static char const* SkipWhitespace(char const* f, char const* l);
 };
-
-inline Lexer::Lexer()
-{
-}
 
 inline void Lexer::SetInput(char const* first, char const* last, bool skip_bom)
 {
