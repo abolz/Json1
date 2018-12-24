@@ -207,16 +207,11 @@ inline ScanNumberResult ScanNumber(char const* next, char const* last, Options c
     if (next == last)
         return {next, NumberClass::invalid};
 
-    bool is_neg = false;
-    bool has_decimal_point = false;
-    bool has_exponent = false;
-
 // [-]
 
-    if (*next == '-')
+    bool const is_neg = (*next == '-');
+    if (is_neg)
     {
-        is_neg = true;
-
         ++next;
         if (next == last)
             return {next, NumberClass::invalid};
@@ -258,10 +253,9 @@ inline ScanNumberResult ScanNumber(char const* next, char const* last, Options c
 
 // frac
 
-    if (*next == '.')
+    bool const has_decimal_point = (*next == '.');
+    if (has_decimal_point)
     {
-        has_decimal_point = true;
-
         ++next;
         if (next == last || !IsDigit(*next))
             return {next, NumberClass::invalid};
@@ -278,10 +272,9 @@ inline ScanNumberResult ScanNumber(char const* next, char const* last, Options c
 
 // exp
 
-    if (*next == 'e' || *next == 'E')
+    bool const has_exponent = (*next == 'e' || *next == 'E');
+    if (has_exponent)
     {
-        has_exponent = true;
-
         ++next;
         if (next == last)
             return {next, NumberClass::invalid};
