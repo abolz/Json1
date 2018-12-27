@@ -712,7 +712,7 @@ public:
     void SetInput(char const* next, char const* last);
 
     Token CurrToken() const;
-    Token NextToken();
+    Token Lex();
 
 private:
     ParseStatus ParsePrimitive();
@@ -745,7 +745,7 @@ Token Parser<ParseCallbacks>::CurrToken() const
 }
 
 template <typename ParseCallbacks>
-Token Parser<ParseCallbacks>::NextToken()
+Token Parser<ParseCallbacks>::Lex()
 {
     token = lexer.Lex(options);
     return token;
@@ -813,7 +813,7 @@ ParseStatus Parser<ParseCallbacks>::ParsePrimitive()
     if (ec == ParseStatus::success)
     {
         // Skip 'string', 'number', or 'identifier'
-        NextToken();
+        Lex();
     }
 
     return ec;
@@ -866,7 +866,7 @@ L_begin_object:
         return ParseStatus(ec);
 
     // skip '{'
-    NextToken();
+    Lex();
 
     if (token.kind != TokenKind::r_brace)
     {
@@ -879,13 +879,13 @@ L_begin_object:
                 return ParseStatus(ec);
 
             // skip 'key'
-            NextToken();
+            Lex();
 
             if (token.kind != TokenKind::colon)
                 return ParseStatus::expected_colon_after_key;
 
             // skip ':'
-            NextToken();
+            Lex();
 
             // parse 'value'
             if (token.kind == TokenKind::l_brace)
@@ -916,7 +916,7 @@ L_end_member:
         return ParseStatus(ec);
 
     // skip '}'
-    NextToken();
+    Lex();
     goto L_end_structured;
 
 L_begin_array:
@@ -940,7 +940,7 @@ L_begin_array:
         return ParseStatus(ec);
 
     // skip '['
-    NextToken();
+    Lex();
 
     if (token.kind != TokenKind::r_square)
     {
@@ -975,7 +975,7 @@ L_end_element:
         return ParseStatus(ec);
 
     // skip ']'
-    NextToken();
+    Lex();
     goto L_end_structured;
 
 L_end_structured:
@@ -996,7 +996,7 @@ bool Parser<ParseCallbacks>::AdvanceToNextValue(TokenKind close)
 {
     if (token.kind == TokenKind::comma)
     {
-        NextToken(); // skip ','
+        Lex(); // skip ','
         if (options.allow_trailing_commas)
             return token.kind != close;
         return true;
@@ -1050,7 +1050,7 @@ ParseResult ParseSAX(ParseCallbacks& cb, char const* next, char const* last, Opt
         {
             // Skip commas at end of value.
             // Allows to parse strings like "true,1,[1]"
-            last_read = parser.NextToken();
+            last_read = parser.Lex();
         }
 #endif
     }
