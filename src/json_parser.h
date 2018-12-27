@@ -813,7 +813,7 @@ ParseStatus Parser<ParseCallbacks>::ParsePrimitive()
     if (ec == ParseStatus::success)
     {
         // Skip 'string', 'number', or 'identifier'
-        token = lexer.Lex(options);
+        NextToken();
     }
 
     return ec;
@@ -866,7 +866,7 @@ L_begin_object:
         return ParseStatus(ec);
 
     // skip '{'
-    token = lexer.Lex(options);
+    NextToken();
 
     if (token.kind != TokenKind::r_brace)
     {
@@ -879,13 +879,13 @@ L_begin_object:
                 return ParseStatus(ec);
 
             // skip 'key'
-            token = lexer.Lex(options);
+            NextToken();
 
             if (token.kind != TokenKind::colon)
                 return ParseStatus::expected_colon_after_key;
 
             // skip ':'
-            token = lexer.Lex(options);
+            NextToken();
 
             // parse 'value'
             if (token.kind == TokenKind::l_brace)
@@ -916,7 +916,7 @@ L_end_member:
         return ParseStatus(ec);
 
     // skip '}'
-    token = lexer.Lex(options);
+    NextToken();
     goto L_end_structured;
 
 L_begin_array:
@@ -940,7 +940,7 @@ L_begin_array:
         return ParseStatus(ec);
 
     // skip '['
-    token = lexer.Lex(options);
+    NextToken();
 
     if (token.kind != TokenKind::r_square)
     {
@@ -975,7 +975,7 @@ L_end_element:
         return ParseStatus(ec);
 
     // skip ']'
-    token = lexer.Lex(options);
+    NextToken();
     goto L_end_structured;
 
 L_end_structured:
@@ -996,7 +996,7 @@ bool Parser<ParseCallbacks>::AdvanceToNextValue(TokenKind close)
 {
     if (token.kind == TokenKind::comma)
     {
-        token = lexer.Lex(options); // skip ','
+        NextToken(); // skip ','
         if (options.allow_trailing_commas)
             return token.kind != close;
         return true;
