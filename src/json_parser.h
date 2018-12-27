@@ -696,24 +696,8 @@ struct Failed
     explicit operator ParseStatus() const noexcept { return ec; }
 };
 
-//struct ParseCallbacks
-//{
-//    ParseStatus HandleNull();
-//    ParseStatus HandleTrue();
-//    ParseStatus HandleFalse();
-//    ParseStatus HandleNumber(char const* first, char const* last, NumberClass nc);
-//    ParseStatus HandleString(char const* first, char const* last, StringClass sc);
-//    ParseStatus HandleKey(char const* first, char const* last, StringClass sc);
-//    ParseStatus HandleBeginArray();
-//    ParseStatus HandleEndArray(size_t count);
-//    ParseStatus HandleEndElement(size_t& count);
-//    ParseStatus HandleBeginObject();
-//    ParseStatus HandleEndObject(size_t count);
-//    ParseStatus HandleEndMember(size_t& count);
-//};
-
 template <typename ParseCallbacks>
-struct Parser
+class Parser
 {
     static constexpr uint32_t kMaxDepth = 500;
 
@@ -722,16 +706,24 @@ struct Parser
     Lexer           lexer;
     Token           token; // The next token.
 
+public:
     Parser(ParseCallbacks& cb_, Options const& options_);
 
     void SetInput(char const* next, char const* last);
 
+    Token CurrToken() const;
+    Token NextToken();
+
+private:
     ParseStatus ParseString();
     ParseStatus ParseNumber();
     ParseStatus ParseIdentifier();
     ParseStatus ParsePrimitive();
+
+public:
     ParseStatus ParseValue();
 
+private:
     bool AdvanceToNextValue(TokenKind close);
 };
 
@@ -747,6 +739,19 @@ void Parser<ParseCallbacks>::SetInput(char const* next, char const* last)
 {
     lexer.SetInput(next, last, options.skip_bom);
     token = lexer.Lex(options); // Get the first token
+}
+
+template <typename ParseCallbacks>
+Token Parser<ParseCallbacks>::CurrToken() const
+{
+    return token;
+}
+
+template <typename ParseCallbacks>
+Token Parser<ParseCallbacks>::NextToken()
+{
+    token = lexer.Lex(options);
+    return token;
 }
 
 template <typename ParseCallbacks>
@@ -1057,18 +1062,20 @@ ParseResult ParseSAX(ParseCallbacks& cb, char const* next, char const* last, Opt
     parser.SetInput(next, last);
     ParseStatus ec = parser.ParseValue();
 
+    Token last_read = parser.CurrToken();
+
     if (ec == ParseStatus::success)
     {
-        if (!options.allow_trailing_characters && parser.token.kind != TokenKind::eof)
+        if (!options.allow_trailing_characters && last_read.kind != TokenKind::eof)
         {
             ec = ParseStatus::expected_eof;
         }
 #if 0
-        else if (options.allow_trailing_characters && parser.token.kind == TokenKind::comma)
+        else if (options.allow_trailing_characters && last_read.kind == TokenKind::comma)
         {
             // Skip commas at end of value.
             // Allows to parse strings like "true,1,[1]"
-            parser.token = parser.lexer.Lex(options);
+            last_read = parser.NextToken();
         }
 #endif
     }
@@ -1081,8 +1088,8 @@ ParseResult ParseSAX(ParseCallbacks& cb, char const* next, char const* last, Opt
     ParseResult res;
 
     res.ec = ec;
-    res.ptr = parser.token.ptr;
-    res.end = parser.token.end;
+    res.ptr = last_read.ptr;
+    res.end = last_read.end;
 
     return res;
 }
