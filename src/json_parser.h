@@ -361,7 +361,7 @@ public:
 private:
     Token LexString     (char const* p);
     Token LexNumber     (char const* p, Options const& options);
-    Token LexIdentifier (char const* p, Options const& options);
+    Token LexIdentifier (char const* p);
     Token LexComment    (char const* p);
 
     Token MakeToken(char const* p, TokenKind kind);
@@ -488,7 +488,7 @@ L_again:
     case 'x':
     case 'y':
     case 'z':
-        return LexIdentifier(p, options);
+        return LexIdentifier(p);
     case '/':
         {
             auto const tok = LexComment(p);
@@ -580,7 +580,7 @@ inline Token Lexer::LexNumber(char const* p, Options const& options)
     return tok;
 }
 
-inline Token Lexer::LexIdentifier(char const* p, Options const& /*options*/)
+inline Token Lexer::LexIdentifier(char const* p)
 {
     using json::charclass::IsIdentifierBody;
 
