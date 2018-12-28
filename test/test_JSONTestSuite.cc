@@ -540,7 +540,7 @@ TEST_CASE("JSONTestSuite")
             json::Value val;
             auto const res = json::parse(val, test.input.data(), test.input.data() + test.input.size());
             CHECK(res.ec != json::ParseStatus::success);
-#if 1
+#if 0
             printf("Test '%s'\n", test.name.c_str());
             printf("   Error: %s\n", ParseStatusDescr(res.ec));
             printf("   Found: %s |%s|\n", TokenKindDescr(res.token.kind), ToPrintableString(res.token.ptr, res.token.end).c_str());
