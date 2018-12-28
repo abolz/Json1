@@ -663,7 +663,6 @@ enum class ParseStatus : uint8_t {
     invalid_value,
     max_depth_reached,
     unexpected_eof,
-    unexpected_token,
     unknown,
     unrecognized_identifier,
 };
@@ -997,17 +996,9 @@ bool Parser<ParseCallbacks>::AdvanceToNextValue(TokenKind close)
 struct ParseResult
 {
     ParseStatus ec = ParseStatus::unknown;
-
-    // On return, KIND contains the kind of the last token read.
-    TokenKind kind = TokenKind::unknown;
-
-    // On return, PTR denotes the position after the parsed value, or if an
-    // error occurred, denotes the position of the invalid token.
-    char const* ptr = nullptr;
-
-    // If an error occurred, END denotes the position after the invalid token.
-    // This field is unused on success.
-    char const* end = nullptr;
+    // On return, TOKEN contains the last token which has been read by the parser.
+    // In case of an error, this contains the invalid token.
+    Token token;
 };
 
 template <typename ParseCallbacks>
@@ -1031,14 +1022,7 @@ ParseResult ParseSAX(ParseCallbacks& cb, char const* next, char const* last, Opt
         }
     }
 
-    ParseResult res;
-
-    res.ec = ec;
-    res.kind = last_read.kind;
-    res.ptr = last_read.ptr;
-    res.end = last_read.end;
-
-    return res;
+    return {ec, last_read};
 }
 
 } // namespace json

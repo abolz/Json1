@@ -74,35 +74,34 @@ inline char const* ParseStatusDescr(json::ParseStatus ec)
     case json::ParseStatus::duplicate_key:
         return "duplicate_key";
     case json::ParseStatus::expected_colon_after_key:
-        return "expected_colon_after_key";
+        return "expected ':' after key";
     case json::ParseStatus::expected_comma_or_closing_brace:
-        return "expected_comma_or_closing_brace";
+        return "expected ',' or '}'";
     case json::ParseStatus::expected_comma_or_closing_bracket:
-        return "expected_comma_or_closing_bracket";
+        return "expected ',' or ']'";
     case json::ParseStatus::expected_eof:
-        return "expected_eof";
+        return "expected EOF";
     case json::ParseStatus::expected_key:
-        return "expected_key";
+        return "expected key";
     case json::ParseStatus::expected_value:
-        return "expected_value";
+        return "expected value";
     case json::ParseStatus::invalid_key:
-        return "invalid_key";
+        return "invalid key";
     case json::ParseStatus::invalid_number:
-        return "invalid_number";
+        return "invalid number";
     case json::ParseStatus::invalid_string:
-        return "invalid_string";
+        return "invalid string";
     case json::ParseStatus::invalid_value:
-        return "invalid_value";
+        return "invalid value";
     case json::ParseStatus::max_depth_reached:
-        return "max_depth_reached";
+        return "max. depth reached";
     case json::ParseStatus::unexpected_eof:
-        return "unexpected_eof";
-    case json::ParseStatus::unexpected_token:
-        return "unexpected_token";
+        return "unexpected EOF";
     case json::ParseStatus::unknown:
+        assert(false && "unreachable");
         return "unknown";
     case json::ParseStatus::unrecognized_identifier:
-        return "unrecognized_identifier";
+        return "unrecognized identifier";
     }
 
     assert(false && "unreachable");
@@ -541,10 +540,10 @@ TEST_CASE("JSONTestSuite")
             json::Value val;
             auto const res = json::parse(val, test.input.data(), test.input.data() + test.input.size());
             CHECK(res.ec != json::ParseStatus::success);
-#if 0
+#if 1
             printf("Test '%s'\n", test.name.c_str());
             printf("   Error: %s\n", ParseStatusDescr(res.ec));
-            printf("   Found: %s |%s|\n", TokenKindDescr(res.kind), ToPrintableString(res.ptr, res.end).c_str());
+            printf("   Found: %s |%s|\n", TokenKindDescr(res.token.kind), ToPrintableString(res.token.ptr, res.token.end).c_str());
 #endif
         }
     }
