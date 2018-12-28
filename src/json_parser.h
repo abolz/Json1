@@ -49,64 +49,70 @@ namespace json {
 namespace charclass {
 
 enum /*class*/ ECharClass : uint8_t {
-    CC_none            = 0,    // nothing special
-    CC_string_special  = 0x01, // quote or bs : '"', '\\'
-    CC_digit           = 0x02, // digit       : '0'...'9'
-    CC_identifier_body = 0x04, // ident-body  : IsDigit, IsLetter, '_', '$'
-    CC_whitespace      = 0x08, // whitespace  : '\t', '\n', '\r', ' '
-    CC_punctuation     = 0x40, // punctuation : '[', ']', '{', '}', ',', ':'
-    CC_needs_cleaning  = 0x80, // needs cleaning (strings)
+    CC_none             = 0,    // nothing special
+    CC_string_special   = 0x01, // quote or bs : '"', '\\'
+    CC_digit            = 0x02, // digit       : '0'...'9'
+    CC_identifier_body  = 0x04, // ident-body  : IsDigit, IsLetter, '_', '$'
+    CC_whitespace       = 0x08, // whitespace  : '\t', '\n', '\r', ' '
+    CC_identifier_start = 0x20,
+    CC_punctuation      = 0x40, // punctuation : '[', ']', '{', '}', ',', ':'
+    CC_needs_cleaning   = 0x80, // needs cleaning (strings)
 };
 
 inline uint32_t CharClass(char ch)
 {
     enum : uint8_t {
-        S = CC_string_special,
-        D = CC_digit,
-        I = CC_identifier_body,
-        W = CC_whitespace,
-        P = CC_punctuation,
-        C = CC_needs_cleaning,
+        S  = CC_string_special,
+        D  = CC_digit,
+        I  = CC_identifier_body,
+        W  = CC_whitespace,
+        A  = CC_identifier_start,
+        P  = CC_punctuation,
+        C  = CC_needs_cleaning,
+        ID = I|A,
+        BS = I|A|C|S,   // backslash
+        U8 = I|A|C,     // >= 0x80
     };
 
     static constexpr uint8_t const kMap[] = {
-    //  NUL     SOH     STX     ETX     EOT     ENQ     ACK     BEL     BS      HT      LF      VT      FF      CR      SO      SI
-        C,      C,      C,      C,      C,      C,      C,      C,      C,      W|C,    W|C,    C,      C,      W|C,    C,      C,
-    //  DLE     DC1     DC2     DC3     DC4     NAK     SYN     ETB     CAN     EM      SUB     ESC     FS      GS      RS      US
-        C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,
-    //  space   !       "       #       $       %       &       '       (       )       *       +       ,       -       .       /
-        W,      0,      S,      0,      I,      0,      0,      0,      0,      0,      0,      0,      P,      0,      0,      0,
-    //  0       1       2       3       4       5       6       7       8       9       :       ;       <       =       >       ?
-        D|I,    D|I,    D|I,    D|I,    D|I,    D|I,    D|I,    D|I,    D|I,    D|I,    P,      0,      0,      0,      0,      0,
-    //  @       A       B       C       D       E       F       G       H       I       J       K       L       M       N       O
-        0,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,
-    //  P       Q       R       S       T       U       V       W       X       Y       Z       [       \       ]       ^       _
-        I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      P,      S|C,    P,      0,      I,
-    //  `       a       b       c       d       e       f       g       h       i       j       k       l       m       n       o
-        0,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,
-    //  p       q       r       s       t       u       v       w       x       y       z       {       |       }       ~       DEL
-        I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      I,      P,      0,      P,      0,      0,
-        C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,
-        C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,
-        C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,
-        C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,
-        C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,
-        C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,
-        C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,
-        C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,      C,
+    //  NUL   SOH   STX   ETX   EOT   ENQ   ACK   BEL   BS    HT    LF    VT    FF    CR    SO    SI
+        C,    C,    C,    C,    C,    C,    C,    C,    C,    W|C,  W|C,  C,    C,    W|C,  C,    C,
+    //  DLE   DC1   DC2   DC3   DC4   NAK   SYN   ETB   CAN   EM    SUB   ESC   FS    GS    RS    US
+        C,    C,    C,    C,    C,    C,    C,    C,    C,    C,    C,    C,    C,    C,    C,    C,
+    //  space !     "     #     $     %     &     '     (     )     *     +     ,     -     .     /
+        W,    0,    S,    0,    I,    0,    0,    0,    0,    0,    0,    0,    P,    0,    0,    0,
+    //  0     1     2     3     4     5     6     7     8     9     :     ;     <     =     >     ?
+        D|I,  D|I,  D|I,  D|I,  D|I,  D|I,  D|I,  D|I,  D|I,  D|I,  P,    0,    0,    0,    0,    0,
+    //  @     A     B     C     D     E     F     G     H     I     J     K     L     M     N     O
+        0,    ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,
+    //  P     Q     R     S     T     U     V     W     X     Y     Z     [     \     ]     ^     _
+        ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   P,    BS,   P,    0,    ID,
+    //  `     a     b     c     d     e     f     g     h     i     j     k     l     m     n     o
+        0,    ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,
+    //  p     q     r     s     t     u     v     w     x     y     z     {     |     }     ~     DEL
+        ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   P,    0,    P,    0,    0,
+        U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,
+        U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,
+        U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,
+        U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,
+        U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,
+        U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,
+        U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,
+        U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,
     };
 
     return kMap[static_cast<uint8_t>(ch)];
 }
 
-inline bool IsWhitespace     (char ch) { return (CharClass(ch) & CC_whitespace     ) != 0; }
+inline bool IsWhitespace     (char ch) { return (CharClass(ch) & CC_whitespace      ) != 0; }
 #if 1
 inline bool IsDigit          (char ch) { return '0' <= ch && ch <= '9'; }
 #else
-inline bool IsDigit          (char ch) { return (CharClass(ch) & CC_digit          ) != 0; }
+inline bool IsDigit          (char ch) { return (CharClass(ch) & CC_digit           ) != 0; }
 #endif
-inline bool IsIdentifierBody (char ch) { return (CharClass(ch) & CC_identifier_body) != 0; }
-inline bool IsPunctuation    (char ch) { return (CharClass(ch) & CC_punctuation    ) != 0; }
+inline bool IsIdentifierStart(char ch) { return (CharClass(ch) & CC_identifier_start) != 0; }
+inline bool IsIdentifierBody (char ch) { return (CharClass(ch) & CC_identifier_body ) != 0; }
+inline bool IsPunctuation    (char ch) { return (CharClass(ch) & CC_punctuation     ) != 0; }
 
 inline bool IsSeparator(char ch)
 {
@@ -321,6 +327,7 @@ enum class StringClass : uint8_t {
 
 enum class TokenKind : uint8_t {
     unknown,
+    invalid_character,
     eof,
     l_brace,
     r_brace,
@@ -332,7 +339,8 @@ enum class TokenKind : uint8_t {
     number,
     identifier,
     comment,
-    incomplete, // Incomplete string or C-style comment
+    incomplete_string,
+    incomplete_comment,
 };
 
 struct Token
@@ -342,7 +350,7 @@ struct Token
     TokenKind kind = TokenKind::unknown;
     union
     {
-        StringClass string_class; // Valid iff kind == TokenKind::string
+        StringClass string_class; // Valid iff kind == TokenKind::string || kind == TokenKind::identifier
         NumberClass number_class; // Valid iff kind == TokenKind::number
     };
 };
@@ -395,7 +403,7 @@ L_again:
     if (p == end)
         return MakeToken(p, TokenKind::eof);
 
-    TokenKind kind = TokenKind::unknown;
+    TokenKind kind;
 
     char const ch = *p;
     switch (ch)
@@ -420,8 +428,8 @@ L_again:
         break;
     case '"':
         return LexString(p);
-//  case '.':
-//  case '+':
+    case '.':
+    case '+':
     case '-':
     case '0':
     case '1':
@@ -434,61 +442,6 @@ L_again:
     case '8':
     case '9':
         return LexNumber(p, options);
-//  case '$':
-    case 'A':
-    case 'B':
-    case 'C':
-    case 'D':
-    case 'E':
-    case 'F':
-    case 'G':
-    case 'H':
-    case 'I':
-    case 'J':
-    case 'K':
-    case 'L':
-    case 'M':
-    case 'N':
-    case 'O':
-    case 'P':
-    case 'Q':
-    case 'R':
-    case 'S':
-    case 'T':
-    case 'U':
-    case 'V':
-    case 'W':
-    case 'X':
-    case 'Y':
-    case 'Z':
-    case '_':
-    case 'a':
-    case 'b':
-    case 'c':
-    case 'd':
-    case 'e':
-    case 'f':
-    case 'g':
-    case 'h':
-    case 'i':
-    case 'j':
-    case 'k':
-    case 'l':
-    case 'm':
-    case 'n':
-    case 'o':
-    case 'p':
-    case 'q':
-    case 'r':
-    case 's':
-    case 't':
-    case 'u':
-    case 'v':
-    case 'w':
-    case 'x':
-    case 'y':
-    case 'z':
-        return LexIdentifier(p);
     case '/':
         {
             auto const tok = LexComment(p);
@@ -499,6 +452,9 @@ L_again:
         }
         break;
     default:
+        if (json::charclass::IsIdentifierStart(ch))
+            return LexIdentifier(p);
+        kind = TokenKind::invalid_character;
         break;
     }
 
@@ -510,7 +466,8 @@ inline Token Lexer::LexString(char const* p)
 {
     using namespace json::charclass;
 
-    JSON_ASSERT(p != end && *p == '"');
+    JSON_ASSERT(p != end);
+    JSON_ASSERT(*p == '"');
 
     ptr = ++p; // skip "
 
@@ -533,8 +490,8 @@ inline Token Lexer::LexString(char const* p)
 
     tok.ptr = ptr;
     tok.end = p;
-    tok.kind = p == end ? TokenKind::incomplete : TokenKind::string;
-    tok.string_class = (mask & CC_needs_cleaning) != 0 ? StringClass::needs_cleaning : StringClass::plain_ascii;
+    tok.kind = (p == end) ? TokenKind::incomplete_string : TokenKind::string;
+    tok.string_class = ((mask & CC_needs_cleaning) != 0) ? StringClass::needs_cleaning : StringClass::plain_ascii;
 //  tok.number_class = 0;
 
     ptr = (p == end)
@@ -582,13 +539,36 @@ inline Token Lexer::LexNumber(char const* p, Options const& options)
 
 inline Token Lexer::LexIdentifier(char const* p)
 {
-    using json::charclass::IsIdentifierBody;
+    using namespace json::charclass;
 
-    for ( ; p != end && IsIdentifierBody(*p); ++p)
+    JSON_ASSERT(p != end);
+    JSON_ASSERT(IsIdentifierStart(*p));
+    JSON_ASSERT(IsIdentifierBody(*p));
+
+    // Don't skip identifier start here.
+    // Might have the set needs_cleaning flag below.
+
+    uint32_t mask = 0;
+    while (p != end)
     {
+        auto const m = CharClass(*p);
+        mask |= m;
+        if ((m & CC_identifier_body) == 0)
+            break;
+        ++p;
     }
 
-    return MakeToken(p, TokenKind::identifier);
+    Token tok;
+
+    tok.ptr = ptr;
+    tok.end = p;
+    tok.kind = TokenKind::identifier;
+    tok.string_class = (mask & CC_needs_cleaning) != 0 ? StringClass::needs_cleaning : StringClass::plain_ascii;
+//  tok.number_class = 0;
+
+    ptr = p;
+
+    return tok;
 }
 
 inline Token Lexer::LexComment(char const* p)
@@ -596,7 +576,7 @@ inline Token Lexer::LexComment(char const* p)
     JSON_ASSERT(p != end);
     JSON_ASSERT(*p == '/');
 
-    TokenKind kind = TokenKind::unknown;
+    TokenKind kind = TokenKind::invalid_character;
 
     ++p; // Skip '/'
 
@@ -614,7 +594,7 @@ inline Token Lexer::LexComment(char const* p)
         }
         else if (*p == '*')
         {
-            kind = TokenKind::incomplete;
+            kind = TokenKind::incomplete_comment;
 
             for (++p; p != end; /**/)
             {
@@ -676,6 +656,7 @@ enum class ParseStatus : uint8_t {
     expected_comma_or_closing_bracket,
     expected_eof,
     expected_key,
+    expected_value,
     invalid_key,
     invalid_number,
     invalid_string,
@@ -806,7 +787,7 @@ ParseStatus Parser<ParseCallbacks>::ParsePrimitive()
         ec = ParseStatus::unexpected_eof;
         break;
     default:
-        ec = ParseStatus::unexpected_token;
+        ec = ParseStatus::expected_value;
         break;
     }
 
@@ -1017,6 +998,9 @@ struct ParseResult
 {
     ParseStatus ec = ParseStatus::unknown;
 
+    // On return, KIND contains the kind of the last token read.
+    TokenKind kind = TokenKind::unknown;
+
     // On return, PTR denotes the position after the parsed value, or if an
     // error occurred, denotes the position of the invalid token.
     char const* ptr = nullptr;
@@ -1045,24 +1029,12 @@ ParseResult ParseSAX(ParseCallbacks& cb, char const* next, char const* last, Opt
         {
             ec = ParseStatus::expected_eof;
         }
-#if 0
-        else if (options.allow_trailing_characters && last_read.kind == TokenKind::comma)
-        {
-            // Skip commas at end of value.
-            // Allows to parse strings like "true,1,[1]"
-            last_read = parser.Lex();
-        }
-#endif
     }
-
-    //
-    // XXX:
-    // Return token.kind on error?!?!
-    //
 
     ParseResult res;
 
     res.ec = ec;
+    res.kind = last_read.kind;
     res.ptr = last_read.ptr;
     res.end = last_read.end;
 

@@ -26,6 +26,113 @@
 #include "catch.hpp"
 #include "../src/json.h"
 
+inline char const* TokenKindDescr(json::TokenKind kind)
+{
+    switch (kind) {
+    case json::TokenKind::unknown:
+        assert(false && "unreachable");
+        return "unknown";
+    case json::TokenKind::invalid_character:
+        return "invalid_character";
+    case json::TokenKind::eof:
+        return "eof";
+    case json::TokenKind::l_brace:
+        return "l_brace";
+    case json::TokenKind::r_brace:
+        return "r_brace";
+    case json::TokenKind::l_square:
+        return "l_square";
+    case json::TokenKind::r_square:
+        return "r_square";
+    case json::TokenKind::comma:
+        return "comma";
+    case json::TokenKind::colon:
+        return "colon";
+    case json::TokenKind::string:
+        return "string";
+    case json::TokenKind::number:
+        return "number";
+    case json::TokenKind::identifier:
+        return "identifier";
+    case json::TokenKind::comment:
+        return "comment";
+    case json::TokenKind::incomplete_string:
+        return "incomplete_string";
+    case json::TokenKind::incomplete_comment:
+        return "incomplete_comment";
+    }
+
+    assert(false && "unreachable");
+    return "<unknown>";
+}
+
+inline char const* ParseStatusDescr(json::ParseStatus ec)
+{
+    switch (ec) {
+    case json::ParseStatus::success:
+        return "success";
+    case json::ParseStatus::duplicate_key:
+        return "duplicate_key";
+    case json::ParseStatus::expected_colon_after_key:
+        return "expected_colon_after_key";
+    case json::ParseStatus::expected_comma_or_closing_brace:
+        return "expected_comma_or_closing_brace";
+    case json::ParseStatus::expected_comma_or_closing_bracket:
+        return "expected_comma_or_closing_bracket";
+    case json::ParseStatus::expected_eof:
+        return "expected_eof";
+    case json::ParseStatus::expected_key:
+        return "expected_key";
+    case json::ParseStatus::expected_value:
+        return "expected_value";
+    case json::ParseStatus::invalid_key:
+        return "invalid_key";
+    case json::ParseStatus::invalid_number:
+        return "invalid_number";
+    case json::ParseStatus::invalid_string:
+        return "invalid_string";
+    case json::ParseStatus::invalid_value:
+        return "invalid_value";
+    case json::ParseStatus::max_depth_reached:
+        return "max_depth_reached";
+    case json::ParseStatus::unexpected_eof:
+        return "unexpected_eof";
+    case json::ParseStatus::unexpected_token:
+        return "unexpected_token";
+    case json::ParseStatus::unknown:
+        return "unknown";
+    case json::ParseStatus::unrecognized_identifier:
+        return "unrecognized_identifier";
+    }
+
+    assert(false && "unreachable");
+    return "<unknown>";
+}
+
+inline std::string ToPrintableString(char const* next, char const* last)
+{
+    std::string str;
+
+    for ( ; next != last; ++next)
+    {
+        uint8_t const b = static_cast<uint8_t>(*next);
+        if (b >= 0x20 && b <= 0x7E)
+        {
+            str.push_back(*next);
+        }
+        else
+        {
+            str.push_back('<');
+            str.push_back('x');
+            str.push_back("0123456789ABCDEF"[(b >> 4) & 0xF]);
+            str.push_back("0123456789ABCDEF"[(b >> 0) & 0xF]);
+            str.push_back('>');
+        }
+    }
+
+    return str;
+}
+
 struct JSONTestSuiteTest {
     std::string input;
     std::string name;
@@ -434,6 +541,11 @@ TEST_CASE("JSONTestSuite")
             json::Value val;
             auto const res = json::parse(val, test.input.data(), test.input.data() + test.input.size());
             CHECK(res.ec != json::ParseStatus::success);
+#if 0
+            printf("Test '%s'\n", test.name.c_str());
+            printf("   Error: %s\n", ParseStatusDescr(res.ec));
+            printf("   Found: %s |%s|\n", TokenKindDescr(res.kind), ToPrintableString(res.ptr, res.end).c_str());
+#endif
         }
     }
 }
