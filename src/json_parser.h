@@ -845,8 +845,7 @@ L_begin_object:
     if (Failed ec = cb.HandleBeginObject())
         return ParseStatus(ec);
 
-    // skip '{'
-    Lex();
+    Lex(); // skip '{'
 
     if (token.kind != TokenKind::r_brace)
     {
@@ -858,14 +857,12 @@ L_begin_object:
             if (Failed ec = cb.HandleKey(token.ptr, token.end, token.string_class))
                 return ParseStatus(ec);
 
-            // skip 'key'
-            Lex();
+            Lex(); // skip 'key'
 
             if (token.kind != TokenKind::colon)
                 return ParseStatus::expected_colon_after_key;
 
-            // skip ':'
-            Lex();
+            Lex(); // skip ':'
 
             // parse 'value'
             if (token.kind == TokenKind::l_brace)
@@ -895,8 +892,6 @@ L_end_member:
     if (Failed ec = cb.HandleEndObject(stack[stack_size - 1].count))
         return ParseStatus(ec);
 
-    // skip '}'
-    Lex();
     goto L_end_structured;
 
 L_begin_array:
@@ -919,8 +914,7 @@ L_begin_array:
     if (Failed ec = cb.HandleBeginArray())
         return ParseStatus(ec);
 
-    // skip '['
-    Lex();
+    Lex(); // skip '['
 
     if (token.kind != TokenKind::r_square)
     {
@@ -954,11 +948,11 @@ L_end_element:
     if (Failed ec = cb.HandleEndArray(stack[stack_size - 1].count))
         return ParseStatus(ec);
 
-    // skip ']'
-    Lex();
     goto L_end_structured;
 
 L_end_structured:
+    Lex(); // skip '}' or ']'
+
     JSON_ASSERT(stack_size != 0);
     --stack_size;
 
