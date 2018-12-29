@@ -373,8 +373,6 @@ private:
     Token LexComment    (char const* p);
 
     Token MakeToken(char const* p, TokenKind kind);
-
-    static char const* SkipWhitespace(char const* f, char const* l);
 };
 
 inline void Lexer::SetInput(char const* first, char const* last, bool skip_bom)
@@ -395,10 +393,15 @@ inline void Lexer::SetInput(char const* first, char const* last, bool skip_bom)
 
 JSON_NEVER_INLINE Token Lexer::Lex(Options const& options)
 {
-L_again:
-    ptr = SkipWhitespace(ptr, end);
+    using namespace json::charclass;
 
+L_again:
     char const* p = ptr;
+    for ( ; p != end && IsWhitespace(*p); ++p)
+    {
+    }
+
+    ptr = p; // Mark start of next token.
 
     if (p == end)
         return MakeToken(p, TokenKind::eof);
@@ -452,7 +455,7 @@ L_again:
         }
         break;
     default:
-        if (json::charclass::IsIdentifierStart(ch))
+        if (IsIdentifierStart(ch))
             return LexIdentifier(p);
         kind = TokenKind::invalid_character;
         break;
@@ -563,7 +566,7 @@ inline Token Lexer::LexIdentifier(char const* p)
     tok.ptr = ptr;
     tok.end = p;
     tok.kind = TokenKind::identifier;
-    tok.string_class = (mask & CC_needs_cleaning) != 0 ? StringClass::needs_cleaning : StringClass::plain_ascii;
+    tok.string_class = ((mask & CC_needs_cleaning) != 0) ? StringClass::needs_cleaning : StringClass::plain_ascii;
 //  tok.number_class = 0;
 
     ptr = p;
@@ -631,17 +634,6 @@ inline Token Lexer::MakeToken(char const* p, TokenKind kind)
     ptr = p;
 
     return tok;
-}
-
-inline char const* Lexer::SkipWhitespace(char const* f, char const* l)
-{
-    using json::charclass::IsWhitespace;
-
-    for ( ; f != l && IsWhitespace(*f); ++f)
-    {
-    }
-
-    return f;
 }
 
 //==================================================================================================
