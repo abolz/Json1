@@ -686,6 +686,11 @@ public:
     Token CurrToken() const;
     Token Lex();
 
+    // Extract the next JSON value from the input and - depending on
+    // the current options - check whether EOF has been reached.
+    ParseStatus Parse();
+
+    // Extract the next JSON value from the input.
     ParseStatus ParseValue();
 
 private:
@@ -719,6 +724,22 @@ Token Parser<ParseCallbacks>::Lex()
 {
     token = lexer.Lex(options);
     return token;
+}
+
+template <typename ParseCallbacks>
+ParseStatus Parser<ParseCallbacks>::Parse()
+{
+    ParseStatus ec = ParseValue();
+
+    if (ec == ParseStatus::success)
+    {
+        if (!options.allow_trailing_characters && token.kind != TokenKind::eof)
+        {
+            ec = ParseStatus::expected_eof;
+        }
+    }
+
+    return ec;
 }
 
 template <typename ParseCallbacks>
@@ -994,20 +1015,9 @@ ParseResult ParseSAX(ParseCallbacks& cb, char const* next, char const* last, Opt
     Parser<ParseCallbacks> parser(cb, options);
 
     parser.SetInput(next, last);
-    ParseStatus ec = parser.ParseValue();
 
-    Token last_read = parser.CurrToken();
-
-    if (ec == ParseStatus::success)
-    {
-        // TODO:
-        // Move this test into ParseValue()???
-
-        if (!options.allow_trailing_characters && last_read.kind != TokenKind::eof)
-        {
-            ec = ParseStatus::expected_eof;
-        }
-    }
+    auto const ec = parser.Parse();
+    auto const last_read = parser.CurrToken();
 
     return {ec, last_read};
 }
