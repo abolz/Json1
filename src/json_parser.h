@@ -686,14 +686,12 @@ public:
     Token CurrToken() const;
     Token Lex();
 
-private:
-    ParseStatus ParsePrimitive();
-
-public:
     ParseStatus ParseValue();
 
 private:
     bool AdvanceToNextValue(TokenKind close);
+
+    ParseStatus ParsePrimitive();
 };
 
 template <typename ParseCallbacks>
@@ -721,74 +719,6 @@ Token Parser<ParseCallbacks>::Lex()
 {
     token = lexer.Lex(options);
     return token;
-}
-
-template <typename ParseCallbacks>
-ParseStatus Parser<ParseCallbacks>::ParsePrimitive()
-{
-    JSON_ASSERT(token.kind != TokenKind::l_brace && token.kind != TokenKind::l_square);
-
-    auto const f = token.ptr;
-    auto const l = token.end;
-    auto const len = l - f;
-
-    ParseStatus ec;
-    switch (token.kind)
-    {
-    case TokenKind::string:
-        ec = cb.HandleString(token.ptr, token.end, token.string_class);
-        break;
-    case TokenKind::number:
-        if (token.number_class != NumberClass::invalid)
-        {
-            ec = cb.HandleNumber(token.ptr, token.end, token.number_class);
-        }
-        else
-        {
-            ec = ParseStatus::invalid_number;
-        }
-        break;
-    case TokenKind::identifier:
-        if (len == 4 && json::impl::StrEqual(f, "null", 4))
-        {
-            ec = cb.HandleNull();
-        }
-        else if (len == 4 && json::impl::StrEqual(f, "true", 4))
-        {
-            ec = cb.HandleTrue();
-        }
-        else if (len == 5 && json::impl::StrEqual(f, "false", 5))
-        {
-            ec = cb.HandleFalse();
-        }
-        else if (options.allow_nan_inf && len == 8 && json::impl::StrEqual(f, "Infinity", 8))
-        {
-            ec = cb.HandleNumber(f, l, NumberClass::pos_infinity);
-        }
-        else if (options.allow_nan_inf && len == 3 && json::impl::StrEqual(f, "NaN", 3))
-        {
-            ec = cb.HandleNumber(f, l, NumberClass::nan);
-        }
-        else
-        {
-            ec = ParseStatus::unrecognized_identifier;
-        }
-        break;
-    case TokenKind::eof:
-        ec = ParseStatus::unexpected_eof;
-        break;
-    default:
-        ec = ParseStatus::expected_value;
-        break;
-    }
-
-    if (ec == ParseStatus::success)
-    {
-        // Skip 'string', 'number', or 'identifier'
-        Lex();
-    }
-
-    return ec;
 }
 
 template <typename ParseCallbacks>
@@ -975,6 +905,74 @@ bool Parser<ParseCallbacks>::AdvanceToNextValue(TokenKind close)
     }
 }
 
+template <typename ParseCallbacks>
+ParseStatus Parser<ParseCallbacks>::ParsePrimitive()
+{
+    JSON_ASSERT(token.kind != TokenKind::l_brace && token.kind != TokenKind::l_square);
+
+    auto const f = token.ptr;
+    auto const l = token.end;
+    auto const len = l - f;
+
+    ParseStatus ec;
+    switch (token.kind)
+    {
+    case TokenKind::string:
+        ec = cb.HandleString(token.ptr, token.end, token.string_class);
+        break;
+    case TokenKind::number:
+        if (token.number_class != NumberClass::invalid)
+        {
+            ec = cb.HandleNumber(token.ptr, token.end, token.number_class);
+        }
+        else
+        {
+            ec = ParseStatus::invalid_number;
+        }
+        break;
+    case TokenKind::identifier:
+        if (len == 4 && json::impl::StrEqual(f, "null", 4))
+        {
+            ec = cb.HandleNull();
+        }
+        else if (len == 4 && json::impl::StrEqual(f, "true", 4))
+        {
+            ec = cb.HandleTrue();
+        }
+        else if (len == 5 && json::impl::StrEqual(f, "false", 5))
+        {
+            ec = cb.HandleFalse();
+        }
+        else if (options.allow_nan_inf && len == 8 && json::impl::StrEqual(f, "Infinity", 8))
+        {
+            ec = cb.HandleNumber(f, l, NumberClass::pos_infinity);
+        }
+        else if (options.allow_nan_inf && len == 3 && json::impl::StrEqual(f, "NaN", 3))
+        {
+            ec = cb.HandleNumber(f, l, NumberClass::nan);
+        }
+        else
+        {
+            ec = ParseStatus::unrecognized_identifier;
+        }
+        break;
+    case TokenKind::eof:
+        ec = ParseStatus::unexpected_eof;
+        break;
+    default:
+        ec = ParseStatus::expected_value;
+        break;
+    }
+
+    if (ec == ParseStatus::success)
+    {
+        // Skip 'string', 'number', or 'identifier'
+        Lex();
+    }
+
+    return ec;
+}
+
 //==================================================================================================
 // ParseSAX
 //==================================================================================================
@@ -1002,6 +1000,9 @@ ParseResult ParseSAX(ParseCallbacks& cb, char const* next, char const* last, Opt
 
     if (ec == ParseStatus::success)
     {
+        // TODO:
+        // Move this test into ParseValue()???
+
         if (!options.allow_trailing_characters && last_read.kind != TokenKind::eof)
         {
             ec = ParseStatus::expected_eof;
