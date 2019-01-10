@@ -132,6 +132,29 @@ inline std::string ToPrintableString(char const* next, char const* last)
     return str;
 }
 
+inline std::string ToPrintableString(std::string const& str)
+{
+    return ToPrintableString(str.data(), str.data() + str.size());
+}
+
+inline std::string FormatError(json::ParseResult const& res)
+{
+    std::string s;
+
+    s.append("Error: ");
+    s.append(ParseStatusDescr(res.ec));
+    s.append("\n");
+    s.append("Found: ");
+    s.append(TokenKindDescr(res.token.kind));
+    s.append(" ");
+    s.append("|");
+    s.append(ToPrintableString(res.token.ptr, res.token.end));
+    s.append("|");
+    s.append("\n");
+
+    return s;
+}
+
 struct JSONTestSuiteTest {
     std::string input;
     std::string name;
@@ -540,10 +563,13 @@ TEST_CASE("JSONTestSuite")
             json::Value val;
             auto const res = json::parse(val, test.input.data(), test.input.data() + test.input.size());
             CHECK(res.ec != json::ParseStatus::success);
-#if 0
+#if 1
             printf("Test '%s'\n", test.name.c_str());
-            printf("   Error: %s\n", ParseStatusDescr(res.ec));
-            printf("   Found: %s |%s|\n", TokenKindDescr(res.token.kind), ToPrintableString(res.token.ptr, res.token.end).c_str());
+            printf("Source: %s\n", ToPrintableString(test.input).c_str());
+            // printf("Error : %s\n", ParseStatusDescr(res.ec));
+            // printf("Found : %s |%s|\n", TokenKindDescr(res.token.kind), ToPrintableString(res.token.ptr, res.token.end).c_str());
+            printf("%s", FormatError(res).c_str());
+            printf("\n");
 #endif
         }
     }
