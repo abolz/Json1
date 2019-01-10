@@ -313,11 +313,9 @@ inline ScanNumberResult ScanNumber(char const* next, char const* last, Options c
         }
     }
 
-    NumberClass nc;
-    if (has_decimal_point)
-        nc = has_exponent ? NumberClass::decimal_with_exponent : NumberClass::decimal;
-    else
-        nc = has_exponent ? NumberClass::integer_with_exponent : NumberClass::integer;
+    NumberClass const nc = has_decimal_point
+        ? (has_exponent ? NumberClass::decimal_with_exponent : NumberClass::decimal)
+        : (has_exponent ? NumberClass::integer_with_exponent : NumberClass::integer);
 
     return {next, nc};
 }
@@ -487,7 +485,7 @@ inline Token Lexer::LexString(char const* p)
     uint32_t mask = 0;
     while (p != end)
     {
-        auto const m = CharClass(*p);
+        uint32_t const m = CharClass(*p);
         mask |= m;
         if ((m & CC_string_special) != 0)
         {
@@ -518,10 +516,10 @@ inline Token Lexer::LexNumber(char const* p, Options const& options)
 {
     using json::charclass::IsSeparator;
 
-    auto const res = json::ScanNumber(p, end, options);
+    ScanNumberResult const res = json::ScanNumber(p, end, options);
 
     p = res.next;
-    auto nc = res.number_class;
+    NumberClass nc = res.number_class;
 
     if (nc == NumberClass::invalid || (p != end && !IsSeparator(*p)))
     {
@@ -564,7 +562,7 @@ inline Token Lexer::LexIdentifier(char const* p)
     uint32_t mask = 0;
     while (p != end)
     {
-        auto const m = CharClass(*p);
+        uint32_t const m = CharClass(*p);
         mask |= m;
         if ((m & CC_identifier_body) == 0)
             break;
@@ -773,6 +771,7 @@ ParseStatus Parser<ParseCallbacks>::ParseValue()
         goto L_begin_object;
     if (peek.kind == TokenKind::l_square)
         goto L_begin_array;
+
     if (Failed ec = ParsePrimitive())
         return ParseStatus(ec);
 
@@ -829,6 +828,7 @@ L_begin_object:
                 goto L_begin_object;
             if (peek.kind == TokenKind::l_square)
                 goto L_begin_array;
+
             if (Failed ec = ParsePrimitive())
                 return ParseStatus(ec);
 
@@ -887,6 +887,7 @@ L_begin_array:
                 goto L_begin_object;
             if (peek.kind == TokenKind::l_square)
                 goto L_begin_array;
+
             if (Failed ec = ParsePrimitive())
                 return ParseStatus(ec);
 
