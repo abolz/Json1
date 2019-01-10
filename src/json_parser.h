@@ -685,14 +685,17 @@ class Parser
     ParseCallbacks& cb;
     Options         options;
     Lexer           lexer;
-    Token           token; // The next token.
+    Token           peek; // The next token.
 
 public:
     Parser(ParseCallbacks& cb_, Options const& options_);
 
     void SetInput(char const* next, char const* last);
 
-    Token CurrToken() const;
+    // Returns the current token.
+    Token GetPeekToken() const;
+
+    // Read the next token from the input stream.
     Token Lex();
 
     // Extract the next JSON value from the input and - depending on
@@ -719,20 +722,20 @@ template <typename ParseCallbacks>
 void Parser<ParseCallbacks>::SetInput(char const* next, char const* last)
 {
     lexer.SetInput(next, last, options.skip_bom);
-    token = lexer.Lex(options); // Get the first token
+    peek = lexer.Lex(options); // Get the first token
 }
 
 template <typename ParseCallbacks>
-Token Parser<ParseCallbacks>::CurrToken() const
+Token Parser<ParseCallbacks>::GetPeekToken() const
 {
-    return token;
+    return peek;
 }
 
 template <typename ParseCallbacks>
 Token Parser<ParseCallbacks>::Lex()
 {
-    token = lexer.Lex(options);
-    return token;
+    peek = lexer.Lex(options);
+    return peek;
 }
 
 template <typename ParseCallbacks>
@@ -742,7 +745,7 @@ ParseStatus Parser<ParseCallbacks>::Parse()
 
     if (ec == ParseStatus::success)
     {
-        if (!options.allow_trailing_characters && token.kind != TokenKind::eof)
+        if (!options.allow_trailing_characters && peek.kind != TokenKind::eof)
         {
             ec = ParseStatus::expected_eof;
         }
@@ -767,10 +770,12 @@ ParseStatus Parser<ParseCallbacks>::ParseValue()
     uint32_t stack_size = 0;
     StackElement stack[kMaxDepth];
 
-    // parse 'value'
-    if (token.kind == TokenKind::l_brace)
+    // The first token has been read in SetInput()
+    // or in the last call to ParseValue().
+
+    if (peek.kind == TokenKind::l_brace)
         goto L_begin_object;
-    if (token.kind == TokenKind::l_square)
+    if (peek.kind == TokenKind::l_square)
         goto L_begin_array;
 
     return ParsePrimitive();
@@ -786,7 +791,7 @@ L_begin_object:
     //  pair
     //      string : value
     //
-    JSON_ASSERT(token.kind == TokenKind::l_brace);
+    JSON_ASSERT(peek.kind == TokenKind::l_brace);
 
     if (stack_size >= kMaxDepth)
         return ParseStatus::max_depth_reached;
@@ -797,29 +802,34 @@ L_begin_object:
     if (Failed ec = cb.HandleBeginObject())
         return ParseStatus(ec);
 
-    Lex(); // skip '{'
+    // Read the token after the '{'.
+    // This must be either an '}' or a key.
+    Lex();
 
-    if (token.kind != TokenKind::r_brace)
+    if (peek.kind != TokenKind::r_brace)
     {
         for (;;)
         {
-            if (token.kind != TokenKind::string && (!options.allow_unquoted_keys || token.kind != TokenKind::identifier))
+            if (peek.kind != TokenKind::string && (!options.allow_unquoted_keys || peek.kind != TokenKind::identifier))
                 return ParseStatus::expected_key;
 
-            if (Failed ec = cb.HandleKey(token.ptr, token.end, token.string_class))
+            if (Failed ec = cb.HandleKey(peek.ptr, peek.end, peek.string_class))
                 return ParseStatus(ec);
 
-            Lex(); // skip 'key'
+            // Read the token after the key.
+            // This must be a ':'.
+            Lex();
 
-            if (token.kind != TokenKind::colon)
+            if (peek.kind != TokenKind::colon)
                 return ParseStatus::expected_colon_after_key;
 
-            Lex(); // skip ':'
+            // Read the token after the ':'.
+            // This must be a JSON value.
+            Lex();
 
-            // parse 'value'
-            if (token.kind == TokenKind::l_brace)
+            if (peek.kind == TokenKind::l_brace)
                 goto L_begin_object;
-            if (token.kind == TokenKind::l_square)
+            if (peek.kind == TokenKind::l_square)
                 goto L_begin_array;
 
             if (Failed ec = ParsePrimitive())
@@ -833,11 +843,13 @@ L_end_member:
             if (Failed ec = cb.HandleEndMember(stack[stack_size - 1].count))
                 return ParseStatus(ec);
 
+            // Expect a ',' (and another member) or a closing '}'.
+            // AdvanceToNextValue() returns false if the end of the object has been reached.
             if (!AdvanceToNextValue(TokenKind::r_brace))
                 break;
         }
 
-        if (token.kind != TokenKind::r_brace)
+        if (peek.kind != TokenKind::r_brace)
             return ParseStatus::expected_comma_or_closing_brace;
     }
 
@@ -855,7 +867,7 @@ L_begin_array:
     //      value
     //      value , elements
     //
-    JSON_ASSERT(token.kind == TokenKind::l_square);
+    JSON_ASSERT(peek.kind == TokenKind::l_square);
 
     if (stack_size >= kMaxDepth)
         return ParseStatus::max_depth_reached;
@@ -866,16 +878,17 @@ L_begin_array:
     if (Failed ec = cb.HandleBeginArray())
         return ParseStatus(ec);
 
-    Lex(); // skip '['
+     // Read the token after '['.
+    // This must be a ']' or any JSON value.
+    Lex();
 
-    if (token.kind != TokenKind::r_square)
+    if (peek.kind != TokenKind::r_square)
     {
         for (;;)
         {
-            // parse 'value'
-            if (token.kind == TokenKind::l_brace)
+            if (peek.kind == TokenKind::l_brace)
                 goto L_begin_object;
-            if (token.kind == TokenKind::l_square)
+            if (peek.kind == TokenKind::l_square)
                 goto L_begin_array;
 
             if (Failed ec = ParsePrimitive())
@@ -889,11 +902,13 @@ L_end_element:
             if (Failed ec = cb.HandleEndElement(stack[stack_size - 1].count))
                 return ParseStatus(ec);
 
+            // Expect a ',' (and another element) or a closing ']'.
+            // AdvanceToNextValue() returns false if the end of the array has been reached.
             if (!AdvanceToNextValue(TokenKind::r_square))
                 break;
         }
 
-        if (token.kind != TokenKind::r_square)
+        if (peek.kind != TokenKind::r_square)
             return ParseStatus::expected_comma_or_closing_bracket;
     }
 
@@ -903,7 +918,9 @@ L_end_element:
     goto L_end_structured;
 
 L_end_structured:
-    Lex(); // skip '}' or ']'
+    // Read the token after '}' or ']'.
+    // Parser::peek refers to the next token the parser needs to look at.
+    Lex();
 
     JSON_ASSERT(stack_size != 0);
     --stack_size;
@@ -917,20 +934,22 @@ L_end_structured:
         goto L_end_element;
 }
 
+// Returns true, if another object member or another array element should be
+// read in the resp. loop above.
 template <typename ParseCallbacks>
 JSON_FORCE_INLINE bool Parser<ParseCallbacks>::AdvanceToNextValue(TokenKind close)
 {
-    if (token.kind == TokenKind::comma)
+    if (peek.kind == TokenKind::comma)
     {
-        Lex(); // skip ','
+        Lex(); // Read the token after the ','.
         if (options.allow_trailing_commas)
-            return token.kind != close;
+            return peek.kind != close;
         return true;
     }
     else
     {
         if (options.ignore_missing_commas)
-            return token.kind != close;
+            return peek.kind != close;
         return false;
     }
 }
@@ -938,22 +957,22 @@ JSON_FORCE_INLINE bool Parser<ParseCallbacks>::AdvanceToNextValue(TokenKind clos
 template <typename ParseCallbacks>
 ParseStatus Parser<ParseCallbacks>::ParsePrimitive()
 {
-    JSON_ASSERT(token.kind != TokenKind::l_brace && token.kind != TokenKind::l_square);
+    JSON_ASSERT(peek.kind != TokenKind::l_brace && peek.kind != TokenKind::l_square);
 
-    auto const f = token.ptr;
-    auto const l = token.end;
+    auto const f = peek.ptr;
+    auto const l = peek.end;
     auto const len = l - f;
 
     ParseStatus ec;
-    switch (token.kind)
+    switch (peek.kind)
     {
     case TokenKind::string:
-        ec = cb.HandleString(token.ptr, token.end, token.string_class);
+        ec = cb.HandleString(peek.ptr, peek.end, peek.string_class);
         break;
     case TokenKind::number:
-        if (token.number_class != NumberClass::invalid)
+        if (peek.number_class != NumberClass::invalid)
         {
-            ec = cb.HandleNumber(token.ptr, token.end, token.number_class);
+            ec = cb.HandleNumber(peek.ptr, peek.end, peek.number_class);
         }
         else
         {
@@ -996,7 +1015,7 @@ ParseStatus Parser<ParseCallbacks>::ParsePrimitive()
 
     if (ec == ParseStatus::success)
     {
-        // Skip 'string', 'number', or 'identifier'
+        // Peek the next token after 'string', 'number', or 'identifier'.
         Lex();
     }
 
@@ -1010,6 +1029,7 @@ ParseStatus Parser<ParseCallbacks>::ParsePrimitive()
 struct ParseResult
 {
     ParseStatus ec = ParseStatus::unknown;
+
     // On return, TOKEN contains the last token which has been read by the parser.
     // In case of an error, this contains the invalid token.
     Token token;
@@ -1026,9 +1046,9 @@ ParseResult ParseSAX(ParseCallbacks& cb, char const* next, char const* last, Opt
     parser.SetInput(next, last);
 
     auto const ec = parser.Parse();
-    auto const last_read = parser.CurrToken();
+    auto const token = parser.GetPeekToken();
 
-    return {ec, last_read};
+    return {ec, token};
 }
 
 } // namespace json
