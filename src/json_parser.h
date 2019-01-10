@@ -144,6 +144,16 @@ inline bool StrEqual(char const* str, char const* expected, intptr_t n)
 #endif
 }
 
+inline bool IsInfString(char const* str) // PRE: strlen >= 8
+{
+    return std::memcmp(str, "Infinity", 8) == 0;
+}
+
+inline bool IsNaNString(char const* str) // PRE: strlen >= 3
+{
+    return std::memcmp(str, "NaN", 3) == 0;
+}
+
 } // namespace impl
 
 //==================================================================================================
@@ -246,11 +256,11 @@ JSON_FORCE_INLINE ScanNumberResult ScanNumberInline(char const* next, char const
                 break;
         }
     }
-    else if (options.allow_nan_inf && last - next >= 8 && json::impl::StrEqual(next, "Infinity", 8))
+    else if (options.allow_nan_inf && last - next >= 8 && json::impl::IsInfString(next))
     {
         return {next + 8, is_neg ? NumberClass::neg_infinity : NumberClass::pos_infinity};
     }
-    else if (options.allow_nan_inf && last - next >= 3 && json::impl::StrEqual(next, "NaN", 3))
+    else if (options.allow_nan_inf && last - next >= 3 && json::impl::IsNaNString(next))
     {
         return {next + 3, NumberClass::nan};
     }
@@ -992,11 +1002,11 @@ ParseStatus Parser<ParseCallbacks>::ParsePrimitive()
         {
             ec = cb.HandleFalse();
         }
-        else if (options.allow_nan_inf && len == 8 && json::impl::StrEqual(f, "Infinity", 8))
+        else if (options.allow_nan_inf && len == 8 && json::impl::IsInfString(f))
         {
             ec = cb.HandleNumber(f, l, NumberClass::pos_infinity);
         }
-        else if (options.allow_nan_inf && len == 3 && json::impl::StrEqual(f, "NaN", 3))
+        else if (options.allow_nan_inf && len == 3 && json::impl::IsNaNString(f))
         {
             ec = cb.HandleNumber(f, l, NumberClass::nan);
         }
