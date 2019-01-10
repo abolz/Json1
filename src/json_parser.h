@@ -215,10 +215,8 @@ struct ScanNumberResult
     NumberClass number_class;
 };
 
-namespace impl {
-
 // PRE: next points at '0', ..., '9', or '-'
-JSON_FORCE_INLINE ScanNumberResult ScanNumberInline(char const* next, char const* last, Options const& options)
+inline ScanNumberResult ScanNumber(char const* next, char const* last, Options const& options)
 {
     using json::charclass::IsDigit;
 
@@ -324,13 +322,6 @@ JSON_FORCE_INLINE ScanNumberResult ScanNumberInline(char const* next, char const
     return {next, nc};
 }
 
-} // namespace impl
-
-inline ScanNumberResult ScanNumber(char const* next, char const* last, Options const& options = {})
-{
-    return json::impl::ScanNumberInline(next, last, options);
-}
-
 //==================================================================================================
 // ScanString
 //==================================================================================================
@@ -410,7 +401,7 @@ inline void Lexer::SetInput(char const* first, char const* last, bool skip_bom)
     end = last;
 }
 
-JSON_NEVER_INLINE Token Lexer::Lex(Options const& options)
+inline Token Lexer::Lex(Options const& options)
 {
     using namespace json::charclass;
 
@@ -484,7 +475,7 @@ L_again:
     return MakeToken(p, kind);
 }
 
-JSON_FORCE_INLINE Token Lexer::LexString(char const* p)
+inline Token Lexer::LexString(char const* p)
 {
     using namespace json::charclass;
 
@@ -523,11 +514,11 @@ JSON_FORCE_INLINE Token Lexer::LexString(char const* p)
     return tok;
 }
 
-JSON_FORCE_INLINE Token Lexer::LexNumber(char const* p, Options const& options)
+inline Token Lexer::LexNumber(char const* p, Options const& options)
 {
     using json::charclass::IsSeparator;
 
-    auto const res = json::impl::ScanNumberInline(p, end, options);
+    auto const res = json::ScanNumber(p, end, options);
 
     p = res.next;
     auto nc = res.number_class;
@@ -559,7 +550,7 @@ JSON_FORCE_INLINE Token Lexer::LexNumber(char const* p, Options const& options)
     return tok;
 }
 
-JSON_FORCE_INLINE Token Lexer::LexIdentifier(char const* p)
+inline Token Lexer::LexIdentifier(char const* p)
 {
     using namespace json::charclass;
 
@@ -593,7 +584,7 @@ JSON_FORCE_INLINE Token Lexer::LexIdentifier(char const* p)
     return tok;
 }
 
-JSON_NEVER_INLINE Token Lexer::LexComment(char const* p)
+inline Token Lexer::LexComment(char const* p)
 {
     JSON_ASSERT(p != end);
     JSON_ASSERT(*p == '/');
@@ -888,7 +879,7 @@ L_begin_array:
     if (Failed ec = cb.HandleBeginArray())
         return ParseStatus(ec);
 
-     // Read the token after '['.
+    // Read the token after '['.
     // This must be a ']' or any JSON value.
     Lex();
 
@@ -947,7 +938,7 @@ L_end_structured:
 // Returns true, if another object member or another array element should be
 // read in the resp. loop above.
 template <typename ParseCallbacks>
-JSON_FORCE_INLINE bool Parser<ParseCallbacks>::AdvanceToNextValue(TokenKind close)
+bool Parser<ParseCallbacks>::AdvanceToNextValue(TokenKind close)
 {
     if (peek.kind == TokenKind::comma)
     {
