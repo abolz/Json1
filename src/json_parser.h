@@ -690,7 +690,7 @@ class Parser
 public:
     Parser(ParseCallbacks& cb_, Options const& options_);
 
-    void SetInput(char const* next, char const* last);
+    void Init(char const* next, char const* last);
 
     // Returns the current token.
     Token GetPeekToken() const;
@@ -719,7 +719,7 @@ Parser<ParseCallbacks>::Parser(ParseCallbacks& cb_, Options const& options_)
 }
 
 template <typename ParseCallbacks>
-void Parser<ParseCallbacks>::SetInput(char const* next, char const* last)
+void Parser<ParseCallbacks>::Init(char const* next, char const* last)
 {
     lexer.SetInput(next, last, options.skip_bom);
     peek = lexer.Lex(options); // Get the first token
@@ -1043,7 +1043,7 @@ ParseResult ParseSAX(ParseCallbacks& cb, char const* next, char const* last, Opt
 
     Parser<ParseCallbacks> parser(cb, options);
 
-    parser.SetInput(next, last);
+    parser.Init(next, last);
 
     auto const ec = parser.Parse();
     auto const token = parser.GetPeekToken();
