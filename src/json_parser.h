@@ -778,8 +778,10 @@ ParseStatus Parser<ParseCallbacks>::ParseValue()
         goto L_begin_object;
     if (peek.kind == TokenKind::l_square)
         goto L_begin_array;
+    if (Failed ec = ParsePrimitive())
+        return ParseStatus(ec);
 
-    return ParsePrimitive();
+    return ParseStatus::success;
 
 L_begin_object:
     //
@@ -832,7 +834,6 @@ L_begin_object:
                 goto L_begin_object;
             if (peek.kind == TokenKind::l_square)
                 goto L_begin_array;
-
             if (Failed ec = ParsePrimitive())
                 return ParseStatus(ec);
 
@@ -891,7 +892,6 @@ L_begin_array:
                 goto L_begin_object;
             if (peek.kind == TokenKind::l_square)
                 goto L_begin_array;
-
             if (Failed ec = ParsePrimitive())
                 return ParseStatus(ec);
 
