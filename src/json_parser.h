@@ -909,7 +909,7 @@ L_end_structured:
 }
 
 template <typename ParseCallbacks>
-bool Parser<ParseCallbacks>::AdvanceToNextValue(TokenKind close)
+JSON_FORCE_INLINE bool Parser<ParseCallbacks>::AdvanceToNextValue(TokenKind close)
 {
     if (token.kind == TokenKind::comma)
     {
