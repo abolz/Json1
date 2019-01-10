@@ -758,14 +758,9 @@ ParseStatus Parser<ParseCallbacks>::Parse()
 template <typename ParseCallbacks>
 ParseStatus Parser<ParseCallbacks>::ParseValue()
 {
-    enum class Structure : uint8_t {
-        object,
-        array,
-    };
-
     struct StackElement {
         size_t count; // number of elements or members in the current array resp. object
-        Structure structure;
+        TokenKind close;
     };
 
     uint32_t stack_size = 0;
@@ -799,7 +794,7 @@ L_begin_object:
     if (stack_size >= kMaxDepth)
         return ParseStatus::max_depth_reached;
 
-    stack[stack_size] = {0, Structure::object};
+    stack[stack_size] = {0, TokenKind::r_brace};
     ++stack_size;
 
     if (Failed ec = cb.HandleBeginObject())
@@ -839,7 +834,7 @@ L_begin_object:
 
 L_end_member:
             JSON_ASSERT(stack_size != 0);
-            JSON_ASSERT(stack[stack_size - 1].structure == Structure::object);
+            JSON_ASSERT(stack[stack_size - 1].close == TokenKind::r_brace);
             ++stack[stack_size - 1].count;
 
             if (Failed ec = cb.HandleEndMember(stack[stack_size - 1].count))
@@ -874,7 +869,7 @@ L_begin_array:
     if (stack_size >= kMaxDepth)
         return ParseStatus::max_depth_reached;
 
-    stack[stack_size] = {0, Structure::array};
+    stack[stack_size] = {0, TokenKind::r_square};
     ++stack_size;
 
     if (Failed ec = cb.HandleBeginArray())
@@ -897,7 +892,7 @@ L_begin_array:
 
 L_end_element:
             JSON_ASSERT(stack_size != 0);
-            JSON_ASSERT(stack[stack_size - 1].structure == Structure::array);
+            JSON_ASSERT(stack[stack_size - 1].close == TokenKind::r_square);
             ++stack[stack_size - 1].count;
 
             if (Failed ec = cb.HandleEndElement(stack[stack_size - 1].count))
@@ -929,7 +924,7 @@ L_end_structured:
     if (stack_size == 0)
         return ParseStatus::success;
 
-    if (stack[stack_size - 1].structure == Structure::object)
+    if (stack[stack_size - 1].close == TokenKind::r_brace)
         goto L_end_member;
     else
         goto L_end_element;
