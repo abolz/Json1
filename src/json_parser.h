@@ -205,8 +205,10 @@ struct ScanNumberResult
     NumberClass number_class;
 };
 
+namespace impl {
+
 // PRE: next points at '0', ..., '9', or '-'
-inline ScanNumberResult ScanNumber(char const* next, char const* last, Options const& options = {})
+JSON_FORCE_INLINE ScanNumberResult ScanNumberInline(char const* next, char const* last, Options const& options)
 {
     using json::charclass::IsDigit;
 
@@ -310,6 +312,13 @@ inline ScanNumberResult ScanNumber(char const* next, char const* last, Options c
         nc = has_exponent ? NumberClass::integer_with_exponent : NumberClass::integer;
 
     return {next, nc};
+}
+
+} // namespace impl
+
+inline ScanNumberResult ScanNumber(char const* next, char const* last, Options const& options = {})
+{
+    return json::impl::ScanNumberInline(next, last, options);
 }
 
 //==================================================================================================
@@ -465,7 +474,7 @@ L_again:
     return MakeToken(p, kind);
 }
 
-inline Token Lexer::LexString(char const* p)
+JSON_FORCE_INLINE Token Lexer::LexString(char const* p)
 {
     using namespace json::charclass;
 
@@ -504,11 +513,11 @@ inline Token Lexer::LexString(char const* p)
     return tok;
 }
 
-inline Token Lexer::LexNumber(char const* p, Options const& options)
+JSON_FORCE_INLINE Token Lexer::LexNumber(char const* p, Options const& options)
 {
     using json::charclass::IsSeparator;
 
-    auto const res = ScanNumber(p, end, options);
+    auto const res = json::impl::ScanNumberInline(p, end, options);
 
     p = res.next;
     auto nc = res.number_class;
@@ -540,7 +549,7 @@ inline Token Lexer::LexNumber(char const* p, Options const& options)
     return tok;
 }
 
-inline Token Lexer::LexIdentifier(char const* p)
+JSON_FORCE_INLINE Token Lexer::LexIdentifier(char const* p)
 {
     using namespace json::charclass;
 
@@ -574,7 +583,7 @@ inline Token Lexer::LexIdentifier(char const* p)
     return tok;
 }
 
-inline Token Lexer::LexComment(char const* p)
+JSON_NEVER_INLINE Token Lexer::LexComment(char const* p)
 {
     JSON_ASSERT(p != end);
     JSON_ASSERT(*p == '/');
