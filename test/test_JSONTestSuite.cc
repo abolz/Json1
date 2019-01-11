@@ -91,8 +91,6 @@ inline char const* ParseStatusDescr(json::ParseStatus ec)
         return "invalid value";
     case json::ParseStatus::max_depth_reached:
         return "max. depth reached";
-    case json::ParseStatus::unexpected_eof:
-        return "unexpected EOF";
     case json::ParseStatus::unknown:
         assert(false && "unreachable");
         return "unknown";

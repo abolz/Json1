@@ -546,7 +546,6 @@ enum class ParseStatus : uint8_t {
     invalid_string,
     invalid_value,
     max_depth_reached,
-    unexpected_eof,
     unknown,
     unrecognized_identifier,
 };
@@ -869,9 +868,6 @@ ParseStatus Parser<ParseCallbacks>::ParsePrimitive()
         {
             ec = ParseStatus::unrecognized_identifier;
         }
-        break;
-    case TokenKind::eof:
-        ec = ParseStatus::unexpected_eof;
         break;
     default:
         ec = ParseStatus::expected_value;
