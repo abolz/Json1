@@ -601,7 +601,9 @@ template <typename ParseCallbacks>
 void Parser<ParseCallbacks>::Init(char const* next, char const* last)
 {
     lexer.SetInput(next, last, /*skip_bom*/ true);
-    peek = lexer.Lex(); // Get the first token
+
+    // Get the first token.
+    Lex();
 }
 
 template <typename ParseCallbacks>
