@@ -54,12 +54,8 @@ inline char const* TokenKindDescr(json::TokenKind kind)
         return "number";
     case json::TokenKind::identifier:
         return "identifier";
-    case json::TokenKind::comment:
-        return "comment";
     case json::TokenKind::incomplete_string:
         return "incomplete_string";
-    case json::TokenKind::incomplete_comment:
-        return "incomplete_comment";
     }
 
     assert(false && "unreachable");

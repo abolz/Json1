@@ -166,11 +166,6 @@ struct Options
     // Default is true.
     bool skip_bom = true;
 
-    // If true, skip line comments (introduced with "//") and block
-    // comments like "/* hello */".
-    // Default is false.
-    bool skip_comments = false;
-
     // If true, parses "NaN" and "Infinity" (without the quotes) as numbers.
     // Default is false.
     bool allow_nan_inf = false;
@@ -346,9 +341,7 @@ enum class TokenKind : uint8_t {
     string,
     number,
     identifier,
-    comment,
     incomplete_string,
-    incomplete_comment,
 };
 
 struct Token
@@ -378,7 +371,6 @@ private:
     Token LexString     (char const* p);
     Token LexNumber     (char const* p, Options const& options);
     Token LexIdentifier (char const* p);
-    Token LexComment    (char const* p);
 
     Token MakeToken(char const* p, TokenKind kind);
 };
@@ -403,7 +395,6 @@ inline Token Lexer::Lex(Options const& options)
 {
     using namespace json::charclass;
 
-L_again:
     char const* p = ptr;
     for ( ; p != end && IsWhitespace(*p); ++p)
     {
@@ -453,15 +444,6 @@ L_again:
     case '8':
     case '9':
         return LexNumber(p, options);
-    case '/':
-        {
-            auto const tok = LexComment(p);
-            if (options.skip_comments && tok.kind == TokenKind::comment)
-                goto L_again;
-
-            return tok;
-        }
-        break;
     default:
         if (IsIdentifierStart(ch))
             return LexIdentifier(p);
@@ -580,53 +562,6 @@ inline Token Lexer::LexIdentifier(char const* p)
     ptr = p;
 
     return tok;
-}
-
-inline Token Lexer::LexComment(char const* p)
-{
-    JSON_ASSERT(p != end);
-    JSON_ASSERT(*p == '/');
-
-    TokenKind kind = TokenKind::invalid_character;
-
-    ++p; // Skip '/'
-
-    if (p != end)
-    {
-        if (*p == '/')
-        {
-            kind = TokenKind::comment;
-
-            for (++p; p != end; ++p)
-            {
-                if (*p == '\n' || *p == '\r')
-                    break;
-            }
-        }
-        else if (*p == '*')
-        {
-            kind = TokenKind::incomplete_comment;
-
-            for (++p; p != end; /**/)
-            {
-                char const ch = *p;
-                ++p;
-                if (ch == '*')
-                {
-                    if (p == end)
-                        break;
-                    if (*p == '/')
-                    {
-                        ++p;
-                        kind = TokenKind::comment;
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    return MakeToken(p, kind);
 }
 
 inline Token Lexer::MakeToken(char const* p, TokenKind kind)

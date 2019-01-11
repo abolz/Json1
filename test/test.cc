@@ -827,68 +827,6 @@ TEST_CASE("Stringify")
     CHECK(val == val2);
 }
 
-TEST_CASE("Comments")
-{
-    std::string const inp = R"(// comment
-    /* nested /* multi line */
-    { /* object
-// starts
-here */
-        "empty_array" /* comment */: [ // comment
-        ],
-        "/*empty object*/" : { /**/ },
-    })";
-
-    json::Options options;
-    options.skip_comments = true;
-    options.allow_trailing_commas = true;
-
-    json::Value val;
-    auto const res = json::parse(val, inp.data(), inp.data() + inp.size(), options);
-    //printf("|%.*s|\n", static_cast<int>(res.end - res.ptr), res.ptr);
-    REQUIRE(res.ec == json::ParseStatus::success);
-
-    CHECK(val.is_object());
-    CHECK(val.size() == 2);
-    CHECK(val.has_member("empty_array"));
-    CHECK(val["empty_array"].is_array());
-    CHECK(val["empty_array"].size() == 0);
-    CHECK(val.has_member("/*empty object*/"));
-    CHECK(val["/*empty object*/"].is_object());
-    CHECK(val["/*empty object*/"].empty());
-}
-
-TEST_CASE("Invalid block comments")
-{
-    std::vector<std::string> inputs = {
-        "/*",
-        "/* ",
-        "/*/",
-        "/**",
-        "/*\n/",
-        "/*\n*",
-        "/*/\n",
-        "/**\n",
-        "/*\r\n/",
-        "/*\r\n*",
-        "/*\r/\n",
-        "/*\r*\n",
-        "/**\n/",
-        "/**\r\n/",
-        "/** /",
-        "/*/**/",
-    };
-
-    for (auto const& inp : inputs)
-    {
-        json::Options options;
-        options.skip_comments = true;
-        json::Value val;
-        auto const res = json::parse(val, inp.data(), inp.data() + inp.size(), options);
-        CHECK(res.ec != json::ParseStatus::success);
-    }
-}
-
 TEST_CASE("Conversion")
 {
     SECTION("ToBoolean")
@@ -1881,18 +1819,12 @@ TEST_CASE("Unquoted keys")
 TEST_CASE("Relaxed")
 {
     std::string const input = R"({
-    // An empty array
     "empty_array": []
-    /*/*
-an empty object /*/
     "empty_object" : {}
-/* commented out:
-    "another_empty_object": {},/**/
     FirstName: "John",
     LastName: "Doe",
     Age: 43
     Address: {
-/** Note: no commas: /*//**/
         Street: "Downing \"Street\" 10"
         City: "London"
         Country: "Great Britain",
@@ -1904,7 +1836,6 @@ an empty object /*/
 })";
 
     json::Options opts;
-    opts.skip_comments = true;
     opts.allow_nan_inf = true;
     opts.allow_trailing_commas = true;
     opts.allow_unquoted_keys = true;
