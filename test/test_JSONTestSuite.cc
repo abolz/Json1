@@ -67,8 +67,6 @@ inline char const* ParseStatusDescr(json::ParseStatus ec)
     switch (ec) {
     case json::ParseStatus::success:
         return "success";
-    case json::ParseStatus::duplicate_key:
-        return "duplicate_key";
     case json::ParseStatus::expected_colon_after_key:
         return "expected ':' after key";
     case json::ParseStatus::expected_comma_or_closing_brace:

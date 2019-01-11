@@ -534,7 +534,6 @@ inline Token Lexer::MakeToken(char const* p, TokenKind kind)
 
 enum class ParseStatus : uint8_t {
     success,
-    duplicate_key,
     expected_colon_after_key,
     expected_comma_or_closing_brace,
     expected_comma_or_closing_bracket,
