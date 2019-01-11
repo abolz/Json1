@@ -588,8 +588,6 @@ public:
     ParseStatus ParseValue();
 
 private:
-    bool AdvanceToNextValue(TokenKind close);
-
     ParseStatus ParsePrimitive();
 };
 
@@ -723,9 +721,16 @@ L_end_member:
                 return ParseStatus(ec);
 
             // Expect a ',' (and another member) or a closing '}'.
-            // AdvanceToNextValue() returns false if the end of the object has been reached.
-            if (!AdvanceToNextValue(TokenKind::r_brace))
+            if (peek.kind == TokenKind::comma)
+            {
+                // Read the token after the ','.
+                // This must be a key.
+                Lex();
+            }
+            else
+            {
                 break;
+            }
         }
 
         if (peek.kind != TokenKind::r_brace)
@@ -782,9 +787,16 @@ L_end_element:
                 return ParseStatus(ec);
 
             // Expect a ',' (and another element) or a closing ']'.
-            // AdvanceToNextValue() returns false if the end of the array has been reached.
-            if (!AdvanceToNextValue(TokenKind::r_square))
+            if (peek.kind == TokenKind::comma)
+            {
+                // Read the token after the ','.
+                // This must be a JSON value.
+                Lex();
+            }
+            else
+            {
                 break;
+            }
         }
 
         if (peek.kind != TokenKind::r_square)
@@ -811,22 +823,6 @@ L_end_structured:
         goto L_end_member;
     else
         goto L_end_element;
-}
-
-// Returns true, if another object member or another array element should be
-// read in the resp. loop above.
-template <typename ParseCallbacks>
-bool Parser<ParseCallbacks>::AdvanceToNextValue(TokenKind /*close*/)
-{
-    if (peek.kind == TokenKind::comma)
-    {
-        Lex(); // Read the token after the ','.
-        return true;
-    }
-    else
-    {
-        return false;
-    }
 }
 
 template <typename ParseCallbacks>
