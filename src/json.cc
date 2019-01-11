@@ -1074,11 +1074,11 @@ private:
     }
 };
 
-ParseResult json::parse(Value& value, char const* next, char const* last, Options const& options)
+ParseResult json::parse(Value& value, char const* next, char const* last)
 {
     ParseValueCallbacks cb;
 
-    auto const res = json::ParseSAX(cb, next, last, options);
+    auto const res = json::ParseSAX(cb, next, last);
     if (res.ec == ParseStatus::success)
     {
         JSON_ASSERT(cb.stack.size() == 1);
@@ -1090,12 +1090,12 @@ ParseResult json::parse(Value& value, char const* next, char const* last, Option
     return res;
 }
 
-ParseStatus json::parse(Value& value, std::string const& str, Options const& options)
+ParseStatus json::parse(Value& value, std::string const& str)
 {
     char const* next = str.data();
     char const* last = str.data() + str.size();
 
-    return json::parse(value, next, last, options).ec;
+    return json::parse(value, next, last).ec;
 }
 
 //==================================================================================================

@@ -426,13 +426,10 @@ TEST_CASE("Strtod - Paxson, Kahan")
     CHECK_EQ(7022835002724438581513e-33, Strtod("7022835002724438581513", -33));
 }
 
-static double Strtod(std::string const& str, bool allow_nan_inf = false)
+static double Strtod(std::string const& str)
 {
-    json::Options options;
-    options.allow_nan_inf = allow_nan_inf;
-
     double value;
-    auto const res = json::numbers::StringToNumber(value, str.data(), str.data() + str.size(), options);
+    auto const res = json::numbers::StringToNumber(value, str.data(), str.data() + str.size());
     CHECK(res == true);
     return value;
 }
@@ -1039,25 +1036,4 @@ TEST_CASE("Strtod - Regression")
     CHECK_EQ(2.2250738585072011e-308, Strtod("2.2250738585072011e-308"));
 
     CHECK_EQ(6114917000000003e-14, Strtod("6114917000000003e-14"));
-}
-
-static double StrtodNanInf(std::string const& str)
-{
-    json::Options options;
-    options.allow_nan_inf = true;
-
-    double value;
-    auto const res = json::numbers::StringToNumber(value, str.data(), str.data() + str.size(), options);
-    CHECK(res == true);
-    return value;
-}
-
-TEST_CASE("Strtod - Special")
-{
-    constexpr double Inf = std::numeric_limits<double>::infinity();
-
-    CHECK_EQ(Inf, StrtodNanInf("Infinity"));
-    CHECK_EQ(-Inf, StrtodNanInf("-Infinity"));
-    CHECK_TRUE(std::isnan(StrtodNanInf("NaN")));
-    CHECK_TRUE(std::isnan(StrtodNanInf("-NaN")));
 }

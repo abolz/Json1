@@ -11,6 +11,8 @@
 
 #if USE_RAPIDJSON_DOCUMENT
 #include "../ext/rapidjson/document.h"
+#include "../ext/rapidjson/stringbuffer.h"
+#include "../src/json_rapidjson_interop.h"
 #endif
 
 using namespace json;
@@ -116,138 +118,6 @@ private:
 };
 
 #if USE_RAPIDJSON_DOCUMENT
-struct RapidjsonDocumentCallbacks
-{
-    static constexpr bool kCopyCleanStrings = true;
-
-    rapidjson::Document* doc;
-
-    RapidjsonDocumentCallbacks(rapidjson::Document* doc_)
-        : doc(doc_)
-    {
-    }
-
-    ParseStatus HandleNull()
-    {
-        doc->Null();
-        return {};
-    }
-
-    ParseStatus HandleTrue()
-    {
-        doc->Bool(true);
-        return {};
-    }
-
-    ParseStatus HandleFalse()
-    {
-        doc->Bool(false);
-        return {};
-    }
-
-    ParseStatus HandleNumber(char const* first, char const* last, NumberClass nc)
-    {
-        // TODO:
-        // nc == NumberClass::integer
-
-        doc->Double(json::numbers::StringToNumber(first, last, nc));
-        return {};
-    }
-
-    ParseStatus HandleString(char const* first, char const* last, StringClass sc)
-    {
-        if (sc == StringClass::needs_cleaning)
-        {
-            std::string str;
-            str.reserve(static_cast<size_t>(last - first));
-
-            auto yield = [&](char ch) { str.push_back(ch); };
-            auto const res = json::strings::UnescapeString(first, last, yield);
-            if (res.ec != json::strings::Status::success) {
-                return ParseStatus::invalid_string;
-            }
-
-            doc->String(str.data(), static_cast<rapidjson::SizeType>(str.size()), /*copy*/ true);
-        }
-        else
-        {
-            doc->String(first, static_cast<rapidjson::SizeType>(last - first), /*copy*/ kCopyCleanStrings);
-        }
-        return {};
-    }
-
-    ParseStatus HandleBeginArray()
-    {
-        doc->StartArray();
-        return {};
-    }
-
-    ParseStatus HandleEndArray(size_t count)
-    {
-        doc->EndArray(static_cast<rapidjson::SizeType>(count));
-        return {};
-    }
-
-    ParseStatus HandleEndElement(size_t /*count*/)
-    {
-        return {};
-    }
-
-    ParseStatus HandleBeginObject()
-    {
-        doc->StartObject();
-        return {};
-    }
-
-    ParseStatus HandleEndObject(size_t count)
-    {
-        doc->EndObject(static_cast<rapidjson::SizeType>(count));
-        return {};
-    }
-
-    ParseStatus HandleEndMember(size_t /*count*/)
-    {
-        return {};
-    }
-
-    ParseStatus HandleKey(char const* first, char const* last, StringClass sc)
-    {
-        if (sc == StringClass::needs_cleaning)
-        {
-            std::string str;
-            str.reserve(static_cast<size_t>(last - first));
-
-            auto yield = [&](char ch) { str.push_back(ch); };
-            auto const res = json::strings::UnescapeString(first, last, yield);
-            if (res.ec != json::strings::Status::success) {
-                return ParseStatus::invalid_string;
-            }
-
-            doc->Key(str.data(), static_cast<rapidjson::SizeType>(str.size()), /*copy*/ true);
-        }
-        else
-        {
-            doc->Key(first, static_cast<rapidjson::SizeType>(last - first), /*copy*/ kCopyCleanStrings);
-        }
-        return {};
-    }
-};
-
-inline json::ParseResult ParseRapidjsonDocument(rapidjson::Document& document, char const* next, char const* last, json::Options const& options = {})
-{
-    json::ParseResult res;
-
-    auto gen = [&](rapidjson::Document& doc)
-    {
-        RapidjsonDocumentCallbacks cb(&doc);
-        res = json::ParseSAX(cb, next, last, options);
-        return res.ec == json::ParseStatus::success;
-    };
-
-    document.Populate(gen);
-    return res;
-}
-
 struct RapidjsonStatsHandler
 {
     jsonstats& stats;

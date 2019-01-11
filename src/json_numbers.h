@@ -629,12 +629,12 @@ inline double StringToNumber(char const* next, char const* last, NumberClass nc)
 
     switch (nc) {
     case NumberClass::invalid:
-    case NumberClass::nan:
+    //case NumberClass::nan:
         return std::numeric_limits<double>::quiet_NaN();
-    case NumberClass::pos_infinity:
-        return +std::numeric_limits<double>::infinity();
-    case NumberClass::neg_infinity:
-        return -std::numeric_limits<double>::infinity();
+    //case NumberClass::pos_infinity:
+    //    return +std::numeric_limits<double>::infinity();
+    //case NumberClass::neg_infinity:
+    //    return -std::numeric_limits<double>::infinity();
     default:
         break;
     }
@@ -652,7 +652,7 @@ inline double StringToNumber(char const* next, char const* last, NumberClass nc)
 // Convert the string `[next, last)` to a double-precision value.
 // Returns true if the string is a valid number according to the JSON grammar.
 // Otherwise returns false and stores 'NaN' in `result`.
-inline bool StringToNumber(double& result, char const* next, char const* last, Options const& options = {})
+inline bool StringToNumber(double& result, char const* next, char const* last)
 {
     if (next == last)
     {
@@ -660,7 +660,7 @@ inline bool StringToNumber(double& result, char const* next, char const* last, O
         return true;
     }
 
-    auto const res = json::ScanNumber(next, last, options);
+    auto const res = json::ScanNumber(next, last);
 
     if (res.next == last && res.number_class != NumberClass::invalid)
     {
