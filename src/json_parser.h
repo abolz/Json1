@@ -580,8 +580,8 @@ public:
     // Read the next token from the input stream.
     Token Lex();
 
-    // Extract the next JSON value from the input and - depending on
-    // the current options - check whether EOF has been reached.
+    // Extract the next JSON value from the input
+    // and check whether EOF has been reached.
     ParseStatus Parse();
 
     // Extract the next JSON value from the input.
