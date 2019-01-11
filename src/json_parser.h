@@ -156,9 +156,9 @@ enum class NumberClass : uint8_t {
     integer_with_exponent,
     decimal,
     decimal_with_exponent,
-    nan,
-    pos_infinity,
-    neg_infinity,
+    //nan,
+    //pos_infinity,
+    //neg_infinity,
 };
 
 struct ScanNumberResult

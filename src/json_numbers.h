@@ -629,12 +629,12 @@ inline double StringToNumber(char const* next, char const* last, NumberClass nc)
 
     switch (nc) {
     case NumberClass::invalid:
-    case NumberClass::nan:
+    //case NumberClass::nan:
         return std::numeric_limits<double>::quiet_NaN();
-    case NumberClass::pos_infinity:
-        return +std::numeric_limits<double>::infinity();
-    case NumberClass::neg_infinity:
-        return -std::numeric_limits<double>::infinity();
+    //case NumberClass::pos_infinity:
+    //    return +std::numeric_limits<double>::infinity();
+    //case NumberClass::neg_infinity:
+    //    return -std::numeric_limits<double>::infinity();
     default:
         break;
     }
