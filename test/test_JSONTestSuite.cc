@@ -267,7 +267,7 @@ static const JSONTestSuiteTest kJSONTestSuite_y[] = {
     {std::string("[-237462374673276894279832749832423479823246327846]", 51), "i_number_very_big_negative_int"},
 
     // From the implementation-defined tests:
-#if 1
+#if 0
     {std::string("[-NaN]", 6), "i_n_number_-NaN"},
     //{std::string("[Inf]", 5), "i_n_number_Inf"},
     {std::string("[Infinity]", 10), "i_n_number_infinity"},
@@ -520,13 +520,8 @@ TEST_CASE("JSONTestSuite")
         {
             CAPTURE(test.name);
 
-            json::Options options;
-#if 1
-            options.allow_nan_inf = true;
-#endif
-
             json::Value val;
-            auto const res = json::parse(val, test.input.data(), test.input.data() + test.input.size(), options);
+            auto const res = json::parse(val, test.input.data(), test.input.data() + test.input.size());
             CHECK(res.ec == json::ParseStatus::success);
 
             // Only the "y" tests must round-trip

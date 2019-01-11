@@ -144,50 +144,7 @@ inline bool StrEqual(char const* str, char const* expected, intptr_t n)
 #endif
 }
 
-inline bool IsInfString(char const* str) // PRE: strlen >= 8
-{
-    return std::memcmp(str, "Infinity", 8) == 0;
-}
-
-inline bool IsNaNString(char const* str) // PRE: strlen >= 3
-{
-    return std::memcmp(str, "NaN", 3) == 0;
-}
-
 } // namespace impl
-
-//==================================================================================================
-// Options
-//==================================================================================================
-
-struct Options
-{
-    // If true, skip UTF-8 byte order mark - if any.
-    // Default is true.
-    bool skip_bom = true;
-
-    // If true, parses "NaN" and "Infinity" (without the quotes) as numbers.
-    // Default is false.
-    bool allow_nan_inf = false;
-
-    // If true, allows trailing commas in arrays or objects.
-    // Default is false.
-    bool allow_trailing_commas = false;
-
-    // If true, allow unquoted keys in objects.
-    // Default is false.
-    bool allow_unquoted_keys = false;
-
-    // If true, allow characters after value.
-    // Might be used to parse strings like "[1,2,3]{"hello":"world"}" into
-    // different values by repeatedly calling parse.
-    // Default is false.
-    bool allow_trailing_characters = false;
-
-    // If true, don't require commas to separate object members or array elements.
-    // Default is false.
-    bool ignore_missing_commas = false;
-};
 
 //==================================================================================================
 // ScanNumber
@@ -211,7 +168,7 @@ struct ScanNumberResult
 };
 
 // PRE: next points at '0', ..., '9', or '-'
-inline ScanNumberResult ScanNumber(char const* next, char const* last, Options const& options = {})
+inline ScanNumberResult ScanNumber(char const* next, char const* last)
 {
     using json::charclass::IsDigit;
 
@@ -248,14 +205,6 @@ inline ScanNumberResult ScanNumber(char const* next, char const* last, Options c
             if (!IsDigit(*next))
                 break;
         }
-    }
-    else if (options.allow_nan_inf && last - next >= 8 && json::impl::IsInfString(next))
-    {
-        return {next + 8, is_neg ? NumberClass::neg_infinity : NumberClass::pos_infinity};
-    }
-    else if (options.allow_nan_inf && last - next >= 3 && json::impl::IsNaNString(next))
-    {
-        return {next + 3, NumberClass::nan};
     }
     else
     {
@@ -365,11 +314,11 @@ private:
 public:
     void SetInput(char const* first, char const* last, bool skip_bom = true);
 
-    Token Lex(Options const& options);
+    Token Lex();
 
 private:
     Token LexString     (char const* p);
-    Token LexNumber     (char const* p, Options const& options);
+    Token LexNumber     (char const* p);
     Token LexIdentifier (char const* p);
 
     Token MakeToken(char const* p, TokenKind kind);
@@ -391,7 +340,7 @@ inline void Lexer::SetInput(char const* first, char const* last, bool skip_bom)
     end = last;
 }
 
-inline Token Lexer::Lex(Options const& options)
+inline Token Lexer::Lex()
 {
     using namespace json::charclass;
 
@@ -443,7 +392,7 @@ inline Token Lexer::Lex(Options const& options)
     case '7':
     case '8':
     case '9':
-        return LexNumber(p, options);
+        return LexNumber(p);
     default:
         if (IsIdentifierStart(ch))
             return LexIdentifier(p);
@@ -494,11 +443,11 @@ inline Token Lexer::LexString(char const* p)
     return tok;
 }
 
-inline Token Lexer::LexNumber(char const* p, Options const& options)
+inline Token Lexer::LexNumber(char const* p)
 {
     using json::charclass::IsSeparator;
 
-    ScanNumberResult const res = json::ScanNumber(p, end, options);
+    ScanNumberResult const res = json::ScanNumber(p, end);
 
     p = res.next;
     NumberClass nc = res.number_class;
@@ -617,12 +566,11 @@ class Parser
     static constexpr uint32_t kMaxDepth = 500;
 
     ParseCallbacks& cb;
-    Options         options;
     Lexer           lexer;
     Token           peek; // The next token.
 
 public:
-    Parser(ParseCallbacks& cb_, Options const& options_);
+    Parser(ParseCallbacks& cb_);
 
     void Init(char const* next, char const* last);
 
@@ -646,17 +594,16 @@ private:
 };
 
 template <typename ParseCallbacks>
-Parser<ParseCallbacks>::Parser(ParseCallbacks& cb_, Options const& options_)
+Parser<ParseCallbacks>::Parser(ParseCallbacks& cb_)
     : cb(cb_)
-    , options(options_)
 {
 }
 
 template <typename ParseCallbacks>
 void Parser<ParseCallbacks>::Init(char const* next, char const* last)
 {
-    lexer.SetInput(next, last, options.skip_bom);
-    peek = lexer.Lex(options); // Get the first token
+    lexer.SetInput(next, last, /*skip_bom*/ true);
+    peek = lexer.Lex(); // Get the first token
 }
 
 template <typename ParseCallbacks>
@@ -668,7 +615,7 @@ Token Parser<ParseCallbacks>::GetPeekToken() const
 template <typename ParseCallbacks>
 Token Parser<ParseCallbacks>::Lex()
 {
-    peek = lexer.Lex(options);
+    peek = lexer.Lex();
     return peek;
 }
 
@@ -679,7 +626,7 @@ ParseStatus Parser<ParseCallbacks>::Parse()
 
     if (ec == ParseStatus::success)
     {
-        if (!options.allow_trailing_characters && peek.kind != TokenKind::eof)
+        if (peek.kind != TokenKind::eof)
         {
             ec = ParseStatus::expected_eof;
         }
@@ -742,7 +689,7 @@ L_begin_object:
     {
         for (;;)
         {
-            if (peek.kind != TokenKind::string && (!options.allow_unquoted_keys || peek.kind != TokenKind::identifier))
+            if (peek.kind != TokenKind::string)
                 return ParseStatus::expected_key;
 
             if (Failed ec = cb.HandleKey(peek.ptr, peek.end, peek.string_class))
@@ -869,19 +816,15 @@ L_end_structured:
 // Returns true, if another object member or another array element should be
 // read in the resp. loop above.
 template <typename ParseCallbacks>
-bool Parser<ParseCallbacks>::AdvanceToNextValue(TokenKind close)
+bool Parser<ParseCallbacks>::AdvanceToNextValue(TokenKind /*close*/)
 {
     if (peek.kind == TokenKind::comma)
     {
         Lex(); // Read the token after the ','.
-        if (options.allow_trailing_commas)
-            return peek.kind != close;
         return true;
     }
     else
     {
-        if (options.ignore_missing_commas)
-            return peek.kind != close;
         return false;
     }
 }
@@ -924,14 +867,6 @@ ParseStatus Parser<ParseCallbacks>::ParsePrimitive()
         {
             ec = cb.HandleFalse();
         }
-        else if (options.allow_nan_inf && len == 8 && json::impl::IsInfString(f))
-        {
-            ec = cb.HandleNumber(f, l, NumberClass::pos_infinity);
-        }
-        else if (options.allow_nan_inf && len == 3 && json::impl::IsNaNString(f))
-        {
-            ec = cb.HandleNumber(f, l, NumberClass::nan);
-        }
         else
         {
             ec = ParseStatus::unrecognized_identifier;
@@ -968,12 +903,12 @@ struct ParseResult
 };
 
 template <typename ParseCallbacks>
-ParseResult ParseSAX(ParseCallbacks& cb, char const* next, char const* last, Options const& options = {})
+ParseResult ParseSAX(ParseCallbacks& cb, char const* next, char const* last)
 {
     JSON_ASSERT(next != nullptr);
     JSON_ASSERT(last != nullptr);
 
-    Parser<ParseCallbacks> parser(cb, options);
+    Parser<ParseCallbacks> parser(cb);
 
     parser.Init(next, last);
 
@@ -1005,7 +940,7 @@ ParseResult ParseSAX(ParseCallbacks& cb, char const* next, char const* last, Opt
 //    virtual json::ParseStatus HandleEndMember(size_t& count) = 0;
 //};
 //
-//json::ParseResult ParseJson(ParseCallbacks& cb, char const* next, char const* last, json::Options const& options = {})
+//json::ParseResult ParseJson(ParseCallbacks& cb, char const* next, char const* last)
 //{
-//    return json::ParseSAX(cb, next, last, options);
+//    return json::ParseSAX(cb, next, last);
 //}

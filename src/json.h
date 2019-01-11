@@ -1408,10 +1408,10 @@ struct TestConversionToJson
 //==================================================================================================
 
 // Parse the JSON value stored in [NEXT, LAST).
-ParseResult parse(Value& value, char const* next, char const* last, Options const& options = {});
+ParseResult parse(Value& value, char const* next, char const* last);
 
 // Parse the JSON value stored in STR.
-ParseStatus parse(Value& value, std::string const& str, Options const& options = {});
+ParseStatus parse(Value& value, std::string const& str);
 
 //==================================================================================================
 // stringify

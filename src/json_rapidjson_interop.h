@@ -24,8 +24,8 @@
 #include "json_parser.h"
 #include "json_strings.h"
 
-#include <rapidjson/document.h>
-#include <rapidjson/stringbuffer.h>
+//#include <rapidjson/document.h>
+//#include <rapidjson/stringbuffer.h>
 
 namespace json {
 
@@ -152,14 +152,14 @@ struct RapidjsonDocumentReader
 
 } // namespace impl
 
-inline ParseResult ParseRapidjsonDocument(rapidjson::Document& document, char const* next, char const* last, Options const& options = {})
+inline ParseResult ParseRapidjsonDocument(rapidjson::Document& document, char const* next, char const* last)
 {
     ParseResult res;
 
     auto gen = [&](rapidjson::Document& doc)
     {
         json::impl::RapidjsonDocumentReader cb(&doc);
-        res = json::ParseSAX(cb, next, last, options);
+        res = json::ParseSAX(cb, next, last);
         return res.ec == json::ParseStatus::success;
     };
 
