@@ -87,8 +87,6 @@ inline char const* ParseStatusDescr(json::ParseStatus ec)
         return "invalid number";
     case json::ParseStatus::invalid_string:
         return "invalid string";
-    case json::ParseStatus::invalid_value:
-        return "invalid value";
     case json::ParseStatus::max_depth_reached:
         return "max. depth reached";
     case json::ParseStatus::unknown:

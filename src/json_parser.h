@@ -544,7 +544,6 @@ enum class ParseStatus : uint8_t {
     invalid_key,
     invalid_number,
     invalid_string,
-    invalid_value,
     max_depth_reached,
     unknown,
     unrecognized_identifier,
