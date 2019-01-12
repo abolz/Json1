@@ -122,31 +122,6 @@ inline bool IsSeparator(char ch)
 } // namespace charclass
 
 //==================================================================================================
-// Util
-//==================================================================================================
-
-namespace impl {
-
-inline bool StrEqual(char const* str, char const* expected, intptr_t n)
-{
-    JSON_ASSERT(str != nullptr);
-    JSON_ASSERT(expected != nullptr);
-    JSON_ASSERT(n >= 0);
-
-#if 1
-    return std::memcmp(str, expected, static_cast<size_t>(n)) == 0;
-#else
-    for (intptr_t i = 0; i < n; ++i) {
-        if (str[i] != expected[i])
-            return false;
-    }
-    return true;
-#endif
-}
-
-} // namespace impl
-
-//==================================================================================================
 // ScanNumber
 //==================================================================================================
 
@@ -868,15 +843,15 @@ ParseStatus Parser<ParseCallbacks>::ConsumePrimitive()
         }
         break;
     case TokenKind::identifier:
-        if (len == 4 && json::impl::StrEqual(f, "null", 4))
+        if (len == 4 && std::memcmp(f, "null", 4) == 0)
         {
             ec = cb.HandleNull();
         }
-        else if (len == 4 && json::impl::StrEqual(f, "true", 4))
+        else if (len == 4 && std::memcmp(f, "true", 4) == 0)
         {
             ec = cb.HandleTrue();
         }
-        else if (len == 5 && json::impl::StrEqual(f, "false", 5))
+        else if (len == 5 && std::memcmp(f, "false", 5) == 0)
         {
             ec = cb.HandleFalse();
         }
