@@ -585,7 +585,7 @@ public:
     ParseStatus ParseValue();
 
 private:
-    ParseStatus ParsePrimitive();
+    ParseStatus ConsumePrimitive();
 };
 
 template <typename ParseCallbacks>
@@ -651,7 +651,7 @@ ParseStatus Parser<ParseCallbacks>::ParseValue()
     if (peek.kind == TokenKind::l_square)
         goto L_begin_array;
 
-    if (Failed ec = ParsePrimitive())
+    if (Failed ec = ConsumePrimitive())
         return ParseStatus(ec);
 
     return ParseStatus::success;
@@ -708,7 +708,7 @@ L_begin_object:
             if (peek.kind == TokenKind::l_square)
                 goto L_begin_array;
 
-            if (Failed ec = ParsePrimitive())
+            if (Failed ec = ConsumePrimitive())
                 return ParseStatus(ec);
 
 L_end_member:
@@ -774,7 +774,7 @@ L_begin_array:
             if (peek.kind == TokenKind::l_square)
                 goto L_begin_array;
 
-            if (Failed ec = ParsePrimitive())
+            if (Failed ec = ConsumePrimitive())
                 return ParseStatus(ec);
 
 L_end_element:
@@ -825,7 +825,7 @@ L_end_structured:
 }
 
 template <typename ParseCallbacks>
-ParseStatus Parser<ParseCallbacks>::ParsePrimitive()
+ParseStatus Parser<ParseCallbacks>::ConsumePrimitive()
 {
     JSON_ASSERT(peek.kind != TokenKind::l_brace && peek.kind != TokenKind::l_square);
 
