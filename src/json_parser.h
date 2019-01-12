@@ -411,7 +411,7 @@ inline Token Lexer::LexString(char const* p)
     JSON_ASSERT(p != end);
     JSON_ASSERT(*p == '"');
 
-    ptr = ++p; // skip "
+    ++p; // Skip '"'
 
     uint32_t mask = 0;
     while (p != end)
@@ -428,17 +428,19 @@ inline Token Lexer::LexString(char const* p)
 
     JSON_ASSERT(p == end || *p == '"');
 
+    bool const is_incomplete = (p == end);
+    if (!is_incomplete)
+        ++p; // Skip '"'
+
     Token tok;
 
     tok.ptr = ptr;
     tok.end = p;
-    tok.kind = (p == end) ? TokenKind::incomplete_string : TokenKind::string;
+    tok.kind = is_incomplete ? TokenKind::incomplete_string : TokenKind::string;
     tok.string_class = ((mask & CC_needs_cleaning) != 0) ? StringClass::needs_cleaning : StringClass::plain_ascii;
 //  tok.number_class = 0;
 
-    ptr = (p == end)
-        ? p
-        : p + 1; // skip "
+    ptr = p;
 
     return tok;
 }
@@ -689,8 +691,16 @@ L_begin_object:
             if (peek.kind != TokenKind::string)
                 return ParseStatus::expected_key;
 
-            if (Failed ec = cb.HandleKey(peek.ptr, peek.end, peek.string_class))
-                return ParseStatus(ec);
+            {
+                JSON_ASSERT(peek.end - peek.ptr >= 2);
+                JSON_ASSERT(peek.ptr[ 0] == '"');
+                JSON_ASSERT(peek.end[-1] == '"');
+                char const* I = peek.ptr + 1; // Discard leading '"'
+                char const* E = peek.end - 1; // Discard trailing '"'
+
+                if (Failed ec = cb.HandleKey(I, E, peek.string_class))
+                    return ParseStatus(ec);
+            }
 
             // Read the token after the key.
             // This must be a ':'.
@@ -837,7 +847,15 @@ ParseStatus Parser<ParseCallbacks>::ConsumePrimitive()
     switch (peek.kind)
     {
     case TokenKind::string:
-        ec = cb.HandleString(peek.ptr, peek.end, peek.string_class);
+        {
+            JSON_ASSERT(peek.end - peek.ptr >= 2);
+            JSON_ASSERT(peek.ptr[ 0] == '"');
+            JSON_ASSERT(peek.end[-1] == '"');
+            char const* I = peek.ptr + 1; // Discard leading '"'
+            char const* E = peek.end - 1; // Discard trailing '"'
+
+            ec = cb.HandleString(I, E, peek.string_class);
+        }
         break;
     case TokenKind::number:
         if (peek.number_class != NumberClass::invalid)
