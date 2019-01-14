@@ -411,7 +411,8 @@ inline T ReadInt(char const* str, int len)
 
     for (int i = 0; i < len; ++i)
     {
-        value = 10 * value + static_cast<unsigned char>(str[i] - '0');
+        uint8_t const digit = static_cast<uint8_t>(str[i] - '0');
+        value = 10 * value + digit;
     }
 
     return value;
@@ -1292,7 +1293,8 @@ inline double DoubleFromDiyFp(DiyFp x)
 
     bool const is_subnormal = (x.e == Double::MinExponent && (x.f & Double::HiddenBit) == 0);
 
-    uint64_t const E = is_subnormal ? 0 : static_cast<uint64_t>(x.e + Double::ExponentBias);
+    JSON_ASSERT(x.e >= -Double::ExponentBias);
+    uint64_t const E = is_subnormal ? 0 : static_cast<unsigned>(x.e + Double::ExponentBias);
     uint64_t const F = x.f & Double::SignificandMask;
 
     return Double((E << Double::PhysicalSignificandSize) | F).Value();
