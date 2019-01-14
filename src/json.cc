@@ -1026,19 +1026,7 @@ private:
         auto const E = stack.end();
 
         auto& arr = I[-1].get_array();
-        //if (options.ignore_null_values)
-        //{
-        //    for (std::ptrdiff_t i = 0; i != count; ++i)
-        //    {
-        //        if (I[i].is_null())
-        //            continue;
-        //        arr.push_back(std::move(*I));
-        //    }
-        //}
-        //else
-        {
-            arr.insert(arr.end(), std::make_move_iterator(I), std::make_move_iterator(E));
-        }
+        arr.insert(arr.end(), std::make_move_iterator(I), std::make_move_iterator(E));
 
         stack.erase(I, E);
 
@@ -1067,9 +1055,6 @@ private:
         {
             auto& K = Ik[i];
             auto& V = Iv[i];
-
-            //if (options.ignore_null_values && V.is_null())
-            //    continue;
 
             obj[std::move(K)] = std::move(V);
         }
@@ -1115,8 +1100,7 @@ static bool StringifyValue(std::string& str, Value const& value, StringifyOption
 
 static bool StringifyNull(std::string& str, StringifyOptions const& /*options*/)
 {
-    //if (!options.ignore_null_values)
-        str += "null";
+    str += "null";
     return true;
 }
 
@@ -1130,10 +1114,7 @@ static bool StringifyNumber(std::string& str, double value, StringifyOptions con
 {
     if (!options.allow_nan_inf && !std::isfinite(value))
     {
-        // XXX:
-        // Should ignore_null_values apply here?!?!
-        //if (!options.ignore_null_values)
-            str += "null";
+        str += "null";
         return true;
     }
 
@@ -1154,11 +1135,7 @@ static bool StringifyString(std::string& str, String const& value, StringifyOpti
     char const* const last = value.data() + value.size();
     if (next != last)
     {
-#if 1
-        auto const res = strings::EscapeString(next, last, [&](char ch) { str += ch; });
-#else
         auto const res = strings::EscapeString(next, last, [&](char ch) { str += ch; }, /*allow_invalid_unicode*/ false);
-#endif
         success = res.ec == strings::Status::success;
     }
 
@@ -1177,67 +1154,42 @@ static bool StringifyArray(std::string& str, Array const& value, StringifyOption
     {
         if (options.indent_width > 0)
         {
-            bool skipped_all = true;
-
             // Prevent overflow in curr_indent + options.indent_width
             int const indent_width = (curr_indent <= INT_MAX - options.indent_width) ? options.indent_width : 0;
             curr_indent += indent_width;
 
             for (;;)
             {
-                //bool const skip = options.ignore_null_values && I->is_null();
-                //if (skip)
-                //{
-                //    if (++I == E)
-                //        break;
-                //}
-                //else
-                {
-                    skipped_all = false;
+                str += '\n';
+                str.append(static_cast<size_t>(curr_indent), ' ');
 
-                    str += '\n';
-                    str.append(static_cast<size_t>(curr_indent), ' ');
+                if (!StringifyValue(str, *I, options, curr_indent))
+                    return false;
 
-                    if (!StringifyValue(str, *I, options, curr_indent))
-                        return false;
+                if (++I == E)
+                    break;
 
-                    if (++I == E)
-                        break;
-
-                    str += ',';
-                }
+                str += ',';
             }
 
             curr_indent -= indent_width;
 
-            if (!skipped_all)
-            {
-                str += '\n';
-                str.append(static_cast<size_t>(curr_indent), ' ');
-            }
+            str += '\n';
+            str.append(static_cast<size_t>(curr_indent), ' ');
         }
         else
         {
             for (;;)
             {
-                //bool const skip = options.ignore_null_values && I->is_null();
-                //if (skip)
-                //{
-                //    if (++I == E)
-                //        break;
-                //}
-                //else
-                {
-                    if (!StringifyValue(str, *I, options, curr_indent))
-                        return false;
+                if (!StringifyValue(str, *I, options, curr_indent))
+                    return false;
 
-                    if (++I == E)
-                        break;
+                if (++I == E)
+                    break;
 
-                    str += ',';
-                    if (options.indent_width == 0)
-                        str += ' ';
-                }
+                str += ',';
+                if (options.indent_width == 0)
+                    str += ' ';
             }
         }
     }
@@ -1257,74 +1209,51 @@ static bool StringifyObject(std::string& str, Object const& value, StringifyOpti
     {
         if (options.indent_width > 0)
         {
-            bool skipped_all = true;
-
             // Prevent overflow in curr_indent + options.indent_width
             int const indent_width = (curr_indent <= INT_MAX - options.indent_width) ? options.indent_width : 0;
             curr_indent += indent_width;
 
             for (;;)
             {
-                //bool const skip = options.ignore_null_values && I->second.is_null();
-                //if (skip)
-                //{
-                //    if (++I == E)
-                //        break;
-                //}
-                //else
-                {
-                    str += '\n';
-                    str.append(static_cast<size_t>(curr_indent), ' ');
+                str += '\n';
+                str.append(static_cast<size_t>(curr_indent), ' ');
 
-                    if (!StringifyString(str, I->first, options))
-                        return false;
-                    str += ':';
-                    str += ' ';
-                    if (!StringifyValue(str, I->second, options, curr_indent))
-                        return false;
+                if (!StringifyString(str, I->first, options))
+                    return false;
+                str += ':';
+                str += ' ';
+                if (!StringifyValue(str, I->second, options, curr_indent))
+                    return false;
 
-                    if (++I == E)
-                        break;
+                if (++I == E)
+                    break;
 
-                    str += ',';
-                }
+                str += ',';
             }
 
             curr_indent -= indent_width;
 
-            if (!skipped_all)
-            {
-                str += '\n';
-                str.append(static_cast<size_t>(curr_indent), ' ');
-            }
+            str += '\n';
+            str.append(static_cast<size_t>(curr_indent), ' ');
         }
         else
         {
             for (;;)
             {
-                //bool const skip = options.ignore_null_values && I->second.is_null();
-                //if (skip)
-                //{
-                //    if (++I == E)
-                //        break;
-                //}
-                //else
-                {
-                    if (!StringifyString(str, I->first, options))
-                        return false;
-                    str += ':';
-                    if (options.indent_width == 0)
-                        str += ' ';
-                    if (!StringifyValue(str, I->second, options, curr_indent))
-                        return false;
+                if (!StringifyString(str, I->first, options))
+                    return false;
+                str += ':';
+                if (options.indent_width == 0)
+                    str += ' ';
+                if (!StringifyValue(str, I->second, options, curr_indent))
+                    return false;
 
-                    if (++I == E)
-                        break;
+                if (++I == E)
+                    break;
 
-                    str += ',';
-                    if (options.indent_width == 0)
-                        str += ' ';
-                }
+                str += ',';
+                if (options.indent_width == 0)
+                    str += ' ';
             }
         }
     }

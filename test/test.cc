@@ -189,8 +189,29 @@ TEST_CASE("Value - construct JSON")
     auto const res = json::parse(val, input.data(), input.data() + input.size());
     CHECK(res.ec == json::ParseStatus{});
 
+    json::StringifyOptions sopt;
+    sopt.indent_width = 4;
+
     std::string str;
-    json::stringify(str, val);
+    json::stringify(str, val, sopt);
+
+    std::string str_expected = R"({
+    "Address": {
+        "City": "London",
+        "Country": "Great Britain",
+        "Street": "Downing \"Street\" 10"
+    },
+    "Age": 43,
+    "FirstName": "John",
+    "LastName": "Doe",
+    "Phone numbers": [
+        "+44 1234567",
+        "+44 2345678"
+    ],
+    "empty_array": [],
+    "empty_object": {}
+})";
+    CHECK(str == str_expected);
 
     json::Value val2;
     json::parse(val2, str.data(), str.data() + str.size());
