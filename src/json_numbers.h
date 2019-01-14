@@ -67,10 +67,13 @@ inline bool DoubleToInteger(double x, uint64_t& result)
     {
         // 1 <= x < 2^p
 
-        uint64_t const v = I >> -k;
-        if ((v << -k) != I) // fractional part is non-zero, i.e. x is not an integer
+        // Test whether the lower -k bits are 0, i.e.
+        // whether the fractional part of x is 0.
+        uint64_t const mask = (1ull << -k) - 1;
+        if ((I & mask) != 0)
             return false;
-        value = v;
+
+        value = I >> -k;
     }
     else if (k == 1 && F == 0)
     {
