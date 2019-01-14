@@ -247,7 +247,7 @@ inline char* ExponentToString(char* buffer, int value)
     return buffer + n;
 }
 
-inline char* FormatFixed(char* buffer, int num_digits, int decimal_point, bool force_trailing_dot_zero)
+inline char* FormatFixed(char* buffer, intptr_t num_digits, intptr_t decimal_point, bool force_trailing_dot_zero)
 {
     JSON_ASSERT(buffer != nullptr);
     JSON_ASSERT(num_digits >= 1);
@@ -288,7 +288,7 @@ inline char* FormatFixed(char* buffer, int num_digits, int decimal_point, bool f
     }
 }
 
-inline char* FormatScientific(char* buffer, int num_digits, int exponent, bool force_trailing_dot_zero)
+inline char* FormatScientific(char* buffer, intptr_t num_digits, int exponent, bool force_trailing_dot_zero)
 {
     JSON_ASSERT(buffer != nullptr);
     JSON_ASSERT(num_digits >= 1);
