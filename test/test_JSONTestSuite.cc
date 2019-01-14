@@ -52,6 +52,12 @@ inline char const* TokenKindDescr(json::TokenKind kind)
         return "string";
     case json::TokenKind::number:
         return "number";
+    //case json::TokenKind::kw_null:
+    //    return "null";
+    //case json::TokenKind::kw_true:
+    //    return "true";
+    //case json::TokenKind::kw_false:
+    //    return "false";
     case json::TokenKind::identifier:
         return "identifier";
     case json::TokenKind::incomplete_string:

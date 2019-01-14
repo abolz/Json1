@@ -183,13 +183,13 @@ inline ScanNumberResult ScanNumber(char const* next, char const* last)
                 break;
         }
     }
-    else if (last - next >= 8 && std::memcmp(next, "Infinity", 8) == 0)
-    {
-        return {next + 8, is_neg ? NumberClass::neg_infinity : NumberClass::pos_infinity};
-    }
     else if (last - next >= 3 && std::memcmp(next, "NaN", 3) == 0)
     {
         return {next + 3, NumberClass::nan};
+    }
+    else if (last - next >= 8 && std::memcmp(next, "Infinity", 8) == 0)
+    {
+        return {next + 8, is_neg ? NumberClass::neg_infinity : NumberClass::pos_infinity};
     }
     else
     {
@@ -259,6 +259,38 @@ enum class StringClass : uint8_t {
 };
 
 //==================================================================================================
+// ScanIdentifier
+//==================================================================================================
+
+enum class Identifier : uint8_t {
+    other,
+    kw_null,
+    kw_true,
+    kw_false,
+    kw_nan,      // Not a keyword, actually.
+    kw_infinity, // Not a keyword, actually.
+};
+
+inline Identifier ScanIdentifer(char const* next, char const* last)
+{
+    auto const len = last - next;
+    JSON_ASSERT(len >= 1);
+
+    if (len == 4 && std::memcmp(next, "null", 4) == 0)
+        return Identifier::kw_null;
+    if (len == 4 && std::memcmp(next, "true", 4) == 0)
+        return Identifier::kw_true;
+    if (len == 5 && std::memcmp(next, "false", 5) == 0)
+        return Identifier::kw_false;
+    if (len == 3 && std::memcmp(next, "NaN", 3) == 0)
+        return Identifier::kw_nan;
+    if (len == 8 && std::memcmp(next, "Infinity", 8) == 0)
+        return Identifier::kw_infinity;
+
+    return Identifier::other;
+}
+
+//==================================================================================================
 // Lexer
 //==================================================================================================
 
@@ -274,6 +306,9 @@ enum class TokenKind : uint8_t {
     colon,
     string,
     number,
+    //kw_null,
+    //kw_true,
+    //kw_false,
     identifier,
     incomplete_string,
 };
@@ -832,39 +867,36 @@ ParseStatus Parser<ParseCallbacks>::ConsumePrimitive()
         JSON_ASSERT(last[-1] == '"');
         ec = cb.HandleString(first + 1, last - 1, peek.string_class);
         break;
+
     case TokenKind::number:
         ec = cb.HandleNumber(first, last, peek.number_class);
         break;
-    case TokenKind::identifier:
-        if (len == 4 && std::memcmp(first, "null", 4) == 0)
-        {
-            ec = cb.HandleNull();
-        }
-        else if (len == 4 && std::memcmp(first, "true", 4) == 0)
-        {
-            ec = cb.HandleTrue();
-        }
-        else if (len == 5 && std::memcmp(first, "false", 5) == 0)
-        {
-            ec = cb.HandleFalse();
-        }
-        else if (len == 8 && std::memcmp(first, "Infinity", 8) == 0)
-        {
-            peek.kind = TokenKind::number;
-            peek.number_class = NumberClass::pos_infinity;
 
-            ec = cb.HandleNumber(first, last, peek.number_class);
-        }
-        else if (len == 3 && std::memcmp(first, "NaN", 3) == 0)
+    case TokenKind::identifier:
+        switch (ScanIdentifer(first, last))
         {
+        case Identifier::kw_null:
+            ec = cb.HandleNull();
+            break;
+        case Identifier::kw_true:
+            ec = cb.HandleTrue();
+            break;
+        case Identifier::kw_false:
+            ec = cb.HandleFalse();
+            break;
+        case Identifier::kw_nan:
             peek.kind = TokenKind::number;
             peek.number_class = NumberClass::nan;
-
             ec = cb.HandleNumber(first, last, peek.number_class);
-        }
-        else
-        {
+            break;
+        case Identifier::kw_infinity:
+            peek.kind = TokenKind::number;
+            peek.number_class = NumberClass::pos_infinity;
+            ec = cb.HandleNumber(first, last, peek.number_class);
+            break;
+        default:
             ec = ParseStatus::unrecognized_identifier;
+            break;
         }
         break;
     default:
