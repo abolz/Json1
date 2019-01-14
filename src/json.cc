@@ -878,6 +878,7 @@ struct ParseValueCallbacks
     static constexpr int kMaxElements = 120;
     static constexpr int kMaxMembers = 120;
 
+    ParseOptions options;
     std::vector<Value> stack;
     std::vector<String> keys;
 
@@ -901,6 +902,12 @@ struct ParseValueCallbacks
 
     ParseStatus HandleNumber(char const* first, char const* last, NumberClass nc)
     {
+        if (nc == NumberClass::invalid)
+            return ParseStatus::invalid_number;
+
+        if (!options.allow_nan_inf && !IsFinite(nc))
+            return ParseStatus::invalid_number;
+
         //if (options.parse_numbers_as_strings)
         //    stack.emplace_back(json::string_tag, first, last);
         //else
@@ -1074,9 +1081,11 @@ private:
     }
 };
 
-ParseResult json::parse(Value& value, char const* next, char const* last)
+ParseResult json::parse(Value& value, char const* next, char const* last, ParseOptions const& options)
 {
     ParseValueCallbacks cb;
+
+    cb.options = options;
 
     auto const res = json::ParseSAX(cb, next, last);
     if (res.ec == ParseStatus::success)
@@ -1090,12 +1099,12 @@ ParseResult json::parse(Value& value, char const* next, char const* last)
     return res;
 }
 
-ParseStatus json::parse(Value& value, std::string const& str)
+ParseStatus json::parse(Value& value, std::string const& str, ParseOptions const& options)
 {
     char const* next = str.data();
     char const* last = str.data() + str.size();
 
-    return json::parse(value, next, last).ec;
+    return json::parse(value, next, last, options).ec;
 }
 
 //==================================================================================================

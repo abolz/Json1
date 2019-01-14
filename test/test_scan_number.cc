@@ -66,6 +66,11 @@ TEST_CASE("ScanNumber")
         {"100000000000000000000", json::NumberClass::integer},
         {"-237462374673276894279832749832423479823246327846", json::NumberClass::integer},
 
+        {"Infinity", json::NumberClass::pos_infinity, 8},
+        {"-Infinity", json::NumberClass::neg_infinity, 9},
+        {"NaN", json::NumberClass::nan, 3},
+        {"-NaN", json::NumberClass::nan, 4},
+
         //
         // Invalid inputs.
         //
@@ -109,17 +114,9 @@ TEST_CASE("ScanNumber")
         {"\357\274\221", json::NumberClass::invalid, 0},
         {"012", json::NumberClass::invalid, 1},
 
-        {"Infinity", json::NumberClass::invalid, 0},
-        {"-Infinity", json::NumberClass::invalid, 1},
         {"+Infinity", json::NumberClass::invalid, 0},
-        {"NaN", json::NumberClass::invalid, 0},
-        {"-NaN", json::NumberClass::invalid, 1},
         {"+NaN", json::NumberClass::invalid, 0},
-        {"Infinity1234", json::NumberClass::invalid, 0},
-        {"-Infinity1234", json::NumberClass::invalid, 1},
         {"+Infinity1234", json::NumberClass::invalid, 0},
-        {"NaN1234", json::NumberClass::invalid, 0},
-        {"-NaN1234", json::NumberClass::invalid, 1},
         {"+NaN1234", json::NumberClass::invalid, 0},
 
         //
@@ -141,6 +138,11 @@ TEST_CASE("ScanNumber")
         {"-1x", json::NumberClass::integer, 2},
         {"1.2a-3", json::NumberClass::decimal, 3},
         {"1.8011670033376514H-308", json::NumberClass::decimal, 18},
+
+        {"Infinity1234", json::NumberClass::pos_infinity, 8},
+        {"-Infinity1234", json::NumberClass::neg_infinity, 9},
+        {"NaN1234", json::NumberClass::nan, 3},
+        {"-NaN1234", json::NumberClass::nan, 4},
     };
 
     for (auto const& test : tests)

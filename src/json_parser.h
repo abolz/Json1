@@ -120,10 +120,23 @@ enum class NumberClass : uint8_t {
     integer_with_exponent,
     decimal,
     decimal_with_exponent,
-    //nan,
-    //pos_infinity,
-    //neg_infinity,
+    nan,
+    pos_infinity,
+    neg_infinity,
 };
+
+inline bool IsFinite(NumberClass nc)
+{
+    switch (nc) {
+    case NumberClass::integer:
+    case NumberClass::integer_with_exponent:
+    case NumberClass::decimal:
+    case NumberClass::decimal_with_exponent:
+        return true;
+    default:
+        return false;
+    }
+}
 
 struct ScanNumberResult
 {
@@ -169,6 +182,14 @@ inline ScanNumberResult ScanNumber(char const* next, char const* last)
             if (!IsDigit(*next))
                 break;
         }
+    }
+    else if (last - next >= 8 && std::memcmp(next, "Infinity", 8) == 0)
+    {
+        return {next + 8, is_neg ? NumberClass::neg_infinity : NumberClass::pos_infinity};
+    }
+    else if (last - next >= 3 && std::memcmp(next, "NaN", 3) == 0)
+    {
+        return {next + 3, NumberClass::nan};
     }
     else
     {
@@ -803,46 +824,50 @@ ParseStatus Parser<ParseCallbacks>::ConsumePrimitive()
 {
     JSON_ASSERT(peek.kind != TokenKind::l_brace && peek.kind != TokenKind::l_square);
 
-    auto const f = peek.ptr;
-    auto const l = peek.end;
-    auto const len = l - f;
+    auto const first = peek.ptr;
+    auto const last  = peek.end;
+    auto const len   = last - first;
 
     ParseStatus ec;
     switch (peek.kind)
     {
     case TokenKind::string:
-        {
-            JSON_ASSERT(peek.end - peek.ptr >= 2);
-            JSON_ASSERT(peek.ptr[ 0] == '"');
-            JSON_ASSERT(peek.end[-1] == '"');
-            char const* I = peek.ptr + 1; // Discard leading '"'
-            char const* E = peek.end - 1; // Discard trailing '"'
-
-            ec = cb.HandleString(I, E, peek.string_class);
-        }
+        JSON_ASSERT(len >= 2);
+        JSON_ASSERT(first[0] == '"');
+        JSON_ASSERT(last[-1] == '"');
+        ec = cb.HandleString(first + 1, last - 1, peek.string_class);
         break;
     case TokenKind::number:
-        if (peek.number_class != NumberClass::invalid)
-        {
-            ec = cb.HandleNumber(peek.ptr, peek.end, peek.number_class);
-        }
-        else
-        {
-            ec = ParseStatus::invalid_number;
-        }
+        ec = cb.HandleNumber(first, last, peek.number_class);
         break;
     case TokenKind::identifier:
-        if (len == 4 && std::memcmp(f, "null", 4) == 0)
+        if (len == 4 && std::memcmp(first, "null", 4) == 0)
         {
             ec = cb.HandleNull();
         }
-        else if (len == 4 && std::memcmp(f, "true", 4) == 0)
+        else if (len == 4 && std::memcmp(first, "true", 4) == 0)
         {
             ec = cb.HandleTrue();
         }
-        else if (len == 5 && std::memcmp(f, "false", 5) == 0)
+        else if (len == 5 && std::memcmp(first, "false", 5) == 0)
         {
             ec = cb.HandleFalse();
+        }
+//      else if (len == 8 && std::memcmp(first, "Infinity", 8) == 0)
+        else if (len >= 8 && std::memcmp(first, "Infinity", 8) == 0)
+        {
+            peek.kind = TokenKind::number;
+            peek.number_class = NumberClass::pos_infinity;
+
+            ec = cb.HandleNumber(first, last, peek.number_class);
+        }
+//      else if (len == 3 && std::memcmp(first, "NaN", 3) == 0)
+        else if (len >= 3 && std::memcmp(first, "NaN", 3) == 0)
+        {
+            peek.kind = TokenKind::number;
+            peek.number_class = NumberClass::nan;
+
+            ec = cb.HandleNumber(first, last, peek.number_class);
         }
         else
         {

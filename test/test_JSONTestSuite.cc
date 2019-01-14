@@ -261,15 +261,6 @@ static const JSONTestSuiteTest kJSONTestSuite_y[] = {
     {std::string("[-237462374673276894279832749832423479823246327846]", 51), "i_number_very_big_negative_int"},
 
     // From the implementation-defined tests:
-#if 0
-    {std::string("[-NaN]", 6), "i_n_number_-NaN"},
-    //{std::string("[Inf]", 5), "i_n_number_Inf"},
-    {std::string("[Infinity]", 10), "i_n_number_infinity"},
-    {std::string("[-Infinity]", 11), "i_n_number_minus_infinity"},
-    {std::string("[NaN]", 5), "i_n_number_NaN"},
-#endif
-
-    // From the implementation-defined tests:
     {std::string("\357\273\277{}", 5), "i_structure_UTF-8_BOM_empty_object"},
 };
 
@@ -310,7 +301,6 @@ static const JSONTestSuiteTest kJSONTestSuite_n[] = {
     {std::string("[-01]", 5), "n_number_-01"},
     {std::string("[-1.0.]", 7), "n_number_-1.0."},
     {std::string("[-2.]", 5), "n_number_-2."},
-    {std::string("[-NaN]", 6), "n_number_-NaN"},
     {std::string("[.-1]", 5), "n_number_.-1"},
     {std::string("[.2e-3]", 7), "n_number_.2e-3"},
     {std::string("[0.1.2]", 7), "n_number_0.1.2"},
@@ -334,16 +324,13 @@ static const JSONTestSuiteTest kJSONTestSuite_n[] = {
     {std::string("[0x1]", 5), "n_number_hex_1_digit"},
     {std::string("[0x42]", 6), "n_number_hex_2_digits"},
     {std::string("[Inf]", 5), "n_number_Inf"},
-    {std::string("[Infinity]", 10), "n_number_infinity"},
     {std::string("[0e+-1]", 7), "n_number_invalid+-"},
     {std::string("[-123.123foo]", 13), "n_number_invalid-negative-real"},
     {std::string("[123\345]", 6), "n_number_invalid-utf-8-in-bigger-int"},
     {std::string("[1e1\345]", 6), "n_number_invalid-utf-8-in-exponent"},
     {std::string("[0\345]\n", 5), "n_number_invalid-utf-8-in-int"},
-    {std::string("[-Infinity]", 11), "n_number_minus_infinity"},
     {std::string("[-foo]", 6), "n_number_minus_sign_with_trailing_garbage"},
     {std::string("[- 1]", 5), "n_number_minus_space_1"},
-    {std::string("[NaN]", 5), "n_number_NaN"},
     {std::string("[-012]", 6), "n_number_neg_int_starting_with_zero"},
     {std::string("[-.123]", 7), "n_number_neg_real_without_int_part"},
     {std::string("[-1x]", 5), "n_number_neg_with_garbage_at_end"},
@@ -504,7 +491,16 @@ static const JSONTestSuiteTest kJSONTestSuite_n[] = {
     {std::string("[\"\\uDBFF\\uDFxF\"]", 16), "n_string_invalid_unicode_escape"},
     {std::string("[\"\\uDBFF\\uDxFF\"]", 16), "n_string_invalid_unicode_escape"},
     {std::string("[\"\\uDBFF\\uxDFF\"]", 16), "n_string_invalid_unicode_escape"},
-};
+
+    // Infinity and NaN
+    {std::string("[Inf]", 5), "i_n_number_Inf"},
+    {std::string("[+Inf]", 6), "i_n_number_+Inf"},
+    {std::string("[-Inf]", 6), "i_n_number_-Inf"},
+
+    {std::string("[Infinity]", 10), "n_number_infinity"},
+    {std::string("[-Infinity]", 11), "n_number_minus_infinity"},
+    {std::string("[NaN]", 5), "n_number_NaN"},
+    {std::string("[-NaN]", 6), "n_number_-NaN"},};
 
 TEST_CASE("JSONTestSuite")
 {

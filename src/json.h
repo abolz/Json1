@@ -1407,11 +1407,19 @@ struct TestConversionToJson
 // parse
 //==================================================================================================
 
+struct ParseOptions
+{
+    // If true, NaN and Infinity will be parsed as numbers.
+    // Default is false.
+    // NOTE: Setting this flag to true, will accept invalid JSON.
+    bool allow_nan_inf = false;
+};
+
 // Parse the JSON value stored in [NEXT, LAST).
-ParseResult parse(Value& value, char const* next, char const* last);
+ParseResult parse(Value& value, char const* next, char const* last, ParseOptions const& options = {});
 
 // Parse the JSON value stored in STR.
-ParseStatus parse(Value& value, std::string const& str);
+ParseStatus parse(Value& value, std::string const& str, ParseOptions const& options = {});
 
 //==================================================================================================
 // stringify
