@@ -161,13 +161,8 @@ inline int PrintDecimalDigits(char* buf, uint64_t output)
     if (static_cast<uint32_t>(output >> 32) != 0)
     {
         JSON_ASSERT(i > 8);
-#if CC_32_BIT_PLATFORM
         uint64_t const q = charconv::ryu::Div100_000_000(output);
         uint32_t const r = static_cast<uint32_t>(output - 100000000 * q);
-#else
-        uint64_t const q = output / 100000000;
-        uint32_t const r = static_cast<uint32_t>(output % 100000000);
-#endif
         output = q;
         i -= 8;
         Utoa_8Digits(buf + i, r);
