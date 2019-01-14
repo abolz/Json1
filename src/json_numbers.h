@@ -321,22 +321,6 @@ inline char* FormatScientific(char* buffer, intptr_t num_digits, int exponent, b
     return buffer;
 }
 
-inline char* FormatGeneral(char* buffer, int num_digits, int decimal_exponent, bool force_trailing_dot_zero = false)
-{
-    int const decimal_point = num_digits + decimal_exponent;
-    int const scientific_exponent = decimal_point - 1;
-
-    // C/C++:      [-4,P) (P = 6 if omitted)
-    // Java:       [-3,7)
-    // JavaScript: [-6,21)
-    constexpr int kMinExp = -6;
-    constexpr int kMaxExp = 21;
-
-    return (kMinExp <= scientific_exponent && scientific_exponent < kMaxExp)
-        ? FormatFixed(buffer, num_digits, decimal_point, force_trailing_dot_zero)
-        : FormatScientific(buffer, num_digits, scientific_exponent, /*force_trailing_dot_zero*/ false);
-}
-
 } // namespace impl
 } // namespace json
 
@@ -400,7 +384,12 @@ inline char* NumberToString(char* buffer, int buffer_length, double value, bool 
     int decimal_exponent = 0;
 
     bool const is_int = json::impl::DoubleToInteger(value, digits);
-    if (!is_int)
+    if (is_int)
+    {
+        // value is an integer in the range [1, 2^53].
+        // Just print the decimal digits (below).
+    }
+    else
     {
         // value is not an integer in the range [1, 2^53].
         // Use Ryu to convert value to decimal.
@@ -413,16 +402,25 @@ inline char* NumberToString(char* buffer, int buffer_length, double value, bool 
     // Convert the digits to decimal.
     int const num_digits = json::impl::PrintDecimalDigits(buffer, digits);
 
-    if (!is_int)
-    {
-        // Reformat the buffer similar to printf("%g").
-        return json::impl::FormatGeneral(buffer, num_digits, decimal_exponent, force_trailing_dot_zero);
-    }
-    else
+    if (is_int)
     {
         // Done.
         // Never append a trailing ".0" in this case.
         return buffer + num_digits;
+    }
+    else
+    {
+        // Print values in the range [10^-6, 10^21) in fixed-point notation.
+        // All other values will be printed in scientific notation.
+        // This is what JavaScript does and it is consistent with the integer formatting above (2^53 < 10^17).
+
+        int const decimal_point = num_digits + decimal_exponent;
+        int const scientific_exponent = decimal_point - 1;
+
+        if (-6 <= scientific_exponent && scientific_exponent < 21)
+            return json::impl::FormatFixed(buffer, num_digits, decimal_point, force_trailing_dot_zero);
+        else
+            return json::impl::FormatScientific(buffer, num_digits, scientific_exponent, /*force_trailing_dot_zero*/ false);
     }
 }
 
