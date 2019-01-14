@@ -1822,12 +1822,12 @@ TEST_CASE("NaN/Inf")
 
         CHECK(json::ParseStatus::unrecognized_identifier == json::parse(j, "Na"));
         CHECK(json::ParseStatus::unrecognized_identifier == json::parse(j, "nan"));
-        CHECK(json::ParseStatus::invalid_number          == json::parse(j, "NaNNaNNaN"));
+        CHECK(json::ParseStatus::unrecognized_identifier == json::parse(j, "NaNNaNNaN"));
         CHECK(json::ParseStatus::unrecognized_identifier == json::parse(j, "Inf"));
         CHECK(json::ParseStatus::unrecognized_identifier == json::parse(j, "InfInf"));
         CHECK(json::ParseStatus::unrecognized_identifier == json::parse(j, "Infinit"));
         CHECK(json::ParseStatus::unrecognized_identifier == json::parse(j, "infinity"));
-        CHECK(json::ParseStatus::invalid_number          == json::parse(j, "InfinityInfinityInfinity"));
+        CHECK(json::ParseStatus::unrecognized_identifier == json::parse(j, "InfinityInfinityInfinity"));
     }
 
     SECTION("Allowed")
@@ -1856,11 +1856,11 @@ TEST_CASE("NaN/Inf")
 
         CHECK(json::ParseStatus::unrecognized_identifier == json::parse(j, "Na", options));
         CHECK(json::ParseStatus::unrecognized_identifier == json::parse(j, "nan", options));
-        CHECK(json::ParseStatus::invalid_number          == json::parse(j, "NaNNaNNaN", options));
+        CHECK(json::ParseStatus::unrecognized_identifier == json::parse(j, "NaNNaNNaN", options));
         CHECK(json::ParseStatus::unrecognized_identifier == json::parse(j, "Inf", options));
         CHECK(json::ParseStatus::unrecognized_identifier == json::parse(j, "InfInf", options));
         CHECK(json::ParseStatus::unrecognized_identifier == json::parse(j, "Infinit", options));
         CHECK(json::ParseStatus::unrecognized_identifier == json::parse(j, "infinity", options));
-        CHECK(json::ParseStatus::invalid_number          == json::parse(j, "InfinityInfinityInfinity", options));
+        CHECK(json::ParseStatus::unrecognized_identifier == json::parse(j, "InfinityInfinityInfinity", options));
     }
 }

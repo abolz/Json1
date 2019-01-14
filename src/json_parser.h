@@ -853,17 +853,17 @@ ParseStatus Parser<ParseCallbacks>::ConsumePrimitive()
         {
             ec = cb.HandleFalse();
         }
-        else if (len >= 8 && std::memcmp(first, "Infinity", 8) == 0)
+        else if (len == 8 && std::memcmp(first, "Infinity", 8) == 0)
         {
             peek.kind = TokenKind::number;
-            peek.number_class = (len == 8) ? NumberClass::pos_infinity : NumberClass::invalid;
+            peek.number_class = NumberClass::pos_infinity;
 
             ec = cb.HandleNumber(first, last, peek.number_class);
         }
-        else if (len >= 3 && std::memcmp(first, "NaN", 3) == 0)
+        else if (len == 3 && std::memcmp(first, "NaN", 3) == 0)
         {
             peek.kind = TokenKind::number;
-            peek.number_class = (len == 3) ? NumberClass::nan : NumberClass::invalid;
+            peek.number_class = NumberClass::nan;
 
             ec = cb.HandleNumber(first, last, peek.number_class);
         }
