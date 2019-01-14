@@ -676,16 +676,11 @@ L_begin_object:
             if (peek.kind != TokenKind::string)
                 return ParseStatus::expected_key;
 
-            {
-                JSON_ASSERT(peek.end - peek.ptr >= 2);
-                JSON_ASSERT(peek.ptr[ 0] == '"');
-                JSON_ASSERT(peek.end[-1] == '"');
-                char const* I = peek.ptr + 1; // Discard leading '"'
-                char const* E = peek.end - 1; // Discard trailing '"'
-
-                if (Failed ec = cb.HandleKey(I, E, peek.string_class))
-                    return ParseStatus(ec);
-            }
+            JSON_ASSERT(peek.end - peek.ptr >= 2);
+            JSON_ASSERT(peek.ptr[ 0] == '"');
+            JSON_ASSERT(peek.end[-1] == '"');
+            if (Failed ec = cb.HandleKey(peek.ptr + 1, peek.end - 1, peek.string_class))
+                return ParseStatus(ec);
 
             // Read the token after the key.
             // This must be a ':'.
