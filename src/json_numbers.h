@@ -38,7 +38,7 @@ namespace impl {
 // Returns whether x is an integer and in the range [1, 2^53]
 // and stores the integral value of x in result.
 // PRE: x > 0
-inline bool DoubleToInteger(double x, uint64_t& result)
+inline bool DoubleToSmallInt(double x, uint64_t& result)
 {
     using Flt = charconv::Double;
 
@@ -51,31 +51,28 @@ inline bool DoubleToInteger(double x, uint64_t& result)
     auto const E = d.PhysicalExponent();
 
     constexpr int p = Flt::SignificandSize;
-    // F < 2^p
+    // F < 2^(p-1)
     // e = E - bias
     // x = (1 + F/2^(p-1)) * 2^e
     //   = (2^(p-1) + F) * 2^(e - (p-1))
-    //   = (2^(p-1) + F) * 2^k
-    //   = I * 2^k
-    //   = I / 2^-k
-    // 2^(p-1) <= I < 2^p
-    auto const I = Flt::HiddenBit | F;
-    auto const k = static_cast<int>(E) - Flt::ExponentBias;
+    //   = significand * 2^exponent
+    //   = significand / 2^-exponent
+    // 2^(p-1) <= significand < 2^p
+    auto const significand = Flt::HiddenBit | F;
+    auto const exponent = static_cast<int>(E) - Flt::ExponentBias;
 
     uint64_t value;
-    if (0 <= -k && -k < p)
+    if (0 <= -exponent && -exponent < p)
     {
-        // 1 <= x < 2^p
-
-        // Test whether the lower -k bits are 0, i.e.
+        // Test whether the lower -exponent bits are 0, i.e.
         // whether the fractional part of x is 0.
-        uint64_t const mask = (1ull << -k) - 1;
-        if ((I & mask) != 0)
+        uint64_t const mask = (1ull << -exponent) - 1;
+        if ((significand & mask) != 0)
             return false;
 
-        value = I >> -k;
+        value = significand >> -exponent;
     }
-    else if (k == 1 && F == 0)
+    else if (exponent == 1 && F == 0)
     {
         // x = 2^p
 
@@ -381,7 +378,7 @@ inline char* NumberToString(char* buffer, int buffer_length, double value, bool 
     uint64_t digits;
     int decimal_exponent = 0;
 
-    bool const is_int = json::impl::DoubleToInteger(value, digits);
+    bool const is_int = json::impl::DoubleToSmallInt(value, digits);
     if (is_int)
     {
         // value is an integer in the range [1, 2^53].
