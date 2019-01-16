@@ -699,22 +699,6 @@ double Value::to_integer() const noexcept
     return std::trunc(v);
 }
 
-// The notation "x modulo y" (y must be finite and nonzero) computes
-// a value k of the same sign as y (or zero)
-// such that abs(k) < abs(y) and x-k = q * y for some integer q.
-static double Modulo(double x, double y)
-{
-    JSON_ASSERT(std::isfinite(x));
-    JSON_ASSERT(std::isfinite(y) && y > 0.0);
-
-    double m = std::fmod(x, y);
-    if (m < 0.0) {
-        m += y;
-    }
-
-    return m; // m in [-0.0, y)
-}
-
 int32_t Value::to_int32() const noexcept
 {
     // Assume 2's complement.
@@ -723,16 +707,60 @@ int32_t Value::to_int32() const noexcept
 
 uint32_t Value::to_uint32() const noexcept
 {
-    constexpr double kTwo32 = 4294967296.0;
+    using charconv::Double;
 
-    auto const v = to_number();
-    if (!std::isfinite(v) || v == 0.0) { // NB: -0 => +0
+    //
+    // https://tc39.github.io/ecma262/#sec-touint32
+    //
+    // The abstract operation ToUint32 converts argument to one of 2^32 integer values in the range 0 through 2^32 - 1, inclusive.
+    // This abstract operation functions as follows:
+    //
+    //  1.  Let number be ? ToNumber(argument).
+    //  2.  If number is NaN, +0, -0, +Infinity, or -Infinity, return +0.
+    //  3.  Let int be the mathematical value that is the same sign as number and whose magnitude is floor(abs(number)).
+    //  4.  Let int32bit be int modulo 2^32.
+    //  5.  Return int32bit.
+    //
+
+    const Double d(to_number());
+
+    const uint64_t F = d.PhysicalSignificand();
+    const uint64_t E = d.PhysicalExponent();
+
+    // Assume that x is a normalized floating-point number.
+    // The special cases subnormal/zero and nan/inf are actually handled below
+    // in the branches 'exponent <= -p' and 'exponent >= 32'.
+
+    const auto significand = Double::HiddenBit | F;
+    const auto exponent = static_cast<int>(E) - Double::ExponentBias;
+
+    uint32_t bits32; // = floor(abs(x)) mod 2^32
+    if (exponent <= -Double::SignificandSize)
+    {
+        // x = significand / 2^-exponent < 1.
+        return 0;
+    }
+    else if (exponent < 0)
+    {
+        // x = significand / 2^-exponent.
+        // Discard the fractional bits (floor).
+        // Since 0 < -exponent < 53, the (64-bit) right shift is well defined.
+        bits32 = static_cast<uint32_t>(significand >> -exponent);
+    }
+    else if (exponent < 32)
+    {
+        // x = significand * 2^exponent.
+        // Since 0 <= exponent < 32, the (32-bit) left shift is well defined.
+        bits32 = static_cast<uint32_t>(significand) << exponent;
+    }
+    else
+    {
+        // x = significand * 2^exponent.
+        // The lower 32 bits of x are definitely 0.
         return 0;
     }
 
-    auto k = Modulo(std::trunc(v), kTwo32);
-
-    return static_cast<uint32_t>(k);
+    return d.SignBit() ? 0 - bits32 : bits32;
 }
 
 int16_t Value::to_int16() const noexcept
