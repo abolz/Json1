@@ -717,20 +717,8 @@ static double Modulo(double x, double y)
 
 int32_t Value::to_int32() const noexcept
 {
-    constexpr double kTwo32 = 4294967296.0;
-    constexpr double kTwo31 = 2147483648.0;
-
-    auto const v = to_number();
-    if (!std::isfinite(v) || v == 0.0) { // NB: -0 => +0
-        return 0;
-    }
-
-    auto k = Modulo(std::trunc(v), kTwo32);
-    if (k >= kTwo31) {
-        k -= kTwo32;
-    }
-
-    return static_cast<int32_t>(k);
+    // Assume 2's complement.
+    return static_cast<int32_t>(to_uint32());
 }
 
 uint32_t Value::to_uint32() const noexcept
@@ -749,66 +737,24 @@ uint32_t Value::to_uint32() const noexcept
 
 int16_t Value::to_int16() const noexcept
 {
-    constexpr double kTwo16 = 65536.0;
-    constexpr double kTwo15 = 32768.0;
-
-    auto const v = to_number();
-    if (!std::isfinite(v) || v == 0.0) { // NB: -0 => +0
-        return 0;
-    }
-
-    auto k = Modulo(std::trunc(v), kTwo16);
-    if (k >= kTwo15) {
-        k -= kTwo16;
-    }
-
-    return static_cast<int16_t>(k);
+    // Assume 2's complement.
+    return static_cast<int16_t>(to_uint16());
 }
 
 uint16_t Value::to_uint16() const noexcept
 {
-    constexpr double kTwo16 = 65536.0;
-
-    auto const v = to_number();
-    if (!std::isfinite(v) || v == 0.0) { // NB: -0 => +0
-        return 0;
-    }
-
-    auto k = Modulo(std::trunc(v), kTwo16);
-
-    return static_cast<uint16_t>(k);
+    return static_cast<uint16_t>(to_uint32() /*& 0xFFFF*/);
 }
 
 int8_t Value::to_int8() const noexcept
 {
-    constexpr double kTwo8 = 256.0;
-    constexpr double kTwo7 = 128.0;
-
-    auto const v = to_number();
-    if (!std::isfinite(v) || v == 0.0) { // NB: -0 => +0
-        return 0;
-    }
-
-    auto k = Modulo(std::trunc(v), kTwo8);
-    if (k >= kTwo7) {
-        k -= kTwo8;
-    }
-
-    return static_cast<int8_t>(k);
+    // Assume 2's complement.
+    return static_cast<int8_t>(to_uint8());
 }
 
 uint8_t Value::to_uint8() const noexcept
 {
-    constexpr double kTwo8 = 256.0;
-
-    auto const v = to_number();
-    if (!std::isfinite(v) || v == 0.0) { // NB: -0 => +0
-        return 0;
-    }
-
-    auto k = Modulo(std::trunc(v), kTwo8);
-
-    return static_cast<uint8_t>(k);
+    return static_cast<uint8_t>(to_uint32() /*& 0xFF*/);
 }
 
 uint8_t Value::to_uint8_clamped() const noexcept
@@ -819,10 +765,10 @@ uint8_t Value::to_uint8_clamped() const noexcept
     }
 
     if (v <= 0.0) { // NB: -0 => +0
-        v = 0.0;
+        return 0;
     }
     if (v >= 255.0) {
-        v = 255.0;
+        return 255;
     }
 
     auto f = std::floor(v);
