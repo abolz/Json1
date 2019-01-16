@@ -64,9 +64,11 @@ inline bool DoubleToSmallInt(double x, uint64_t& result)
     uint64_t value;
     if (0 <= -exponent && -exponent < p)
     {
+        // 1 <= 2^-exponent <= 2^(p-1), i.e. 1 <= x < 2^p.
+
         // Test whether the lower -exponent bits are 0, i.e.
         // whether the fractional part of x is 0.
-        uint64_t const mask = (1ull << -exponent) - 1;
+        uint64_t const mask = (uint64_t{1} << -exponent) - 1;
         if ((significand & mask) != 0)
             return false;
 

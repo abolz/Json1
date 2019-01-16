@@ -416,12 +416,23 @@ TEST_CASE("Dtoa")
     CHECK_EQ("1.1e-308", Dtoa(1.1e-308));
 }
 
+static inline double NextDouble(double d) {
+    return std::nextafter(d, +std::numeric_limits<double>::infinity());
+}
+static inline double PrevDouble(double d) {
+    return std::nextafter(d, -std::numeric_limits<double>::infinity());
+}
+
 TEST_CASE("Dtoa - 2^n")
 {
+    const double Two53 = 9007199254740992.0;
+
     CHECK_EQ("0", Dtoa(0.0));
     CHECK_EQ("1", Dtoa(1.0));
+    CHECK_EQ("0.9999999999999999", Dtoa(PrevDouble(1.0)));
+    CHECK_EQ("1.0000000000000002", Dtoa(NextDouble(1.0)));
     CHECK_EQ("2", Dtoa(2.0));
-    CHECK_EQ("9007199254740991", Dtoa(9007199254740991.0)); // 2^53 - 1 ulp = 2^53 - 1
-    CHECK_EQ("9007199254740992", Dtoa(9007199254740992.0)); // 2^53
-    CHECK_EQ("9007199254740994.0", Dtoa(9007199254740994.0)); // 2^53 + 1 ulp
+    CHECK_EQ("9007199254740992", Dtoa(Two53));
+    CHECK_EQ("9007199254740991", Dtoa(PrevDouble(Two53))); // 2^53 - 1 ulp = 2^53 - 1
+    CHECK_EQ("9007199254740994.0", Dtoa(NextDouble(Two53))); // 2^53 + 1 ulp
 }
