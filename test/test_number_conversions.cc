@@ -54,7 +54,7 @@ static inline bool operator!=(DoubleParts const& lhs, DoubleParts const& rhs) {
 }
 static inline std::ostream& operator<<(std::ostream& os, DoubleParts const& parts) {
     char buf[128];
-    snprintf(buf, 64, "%g (%d,%d,0x%016" PRIX64 ")", DoubleFromParts(parts), static_cast<int>(parts.S), static_cast<int>(parts.E), parts.E);
+    snprintf(buf, 64, "%g (%d,%d,0x%016" PRIX64 ")", DoubleFromParts(parts), static_cast<int>(parts.S), static_cast<int>(parts.E), parts.F);
     os << buf;
     return os;
 }
