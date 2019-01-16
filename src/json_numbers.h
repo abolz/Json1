@@ -670,3 +670,96 @@ inline bool StringToNumber(double& result, char const* next, char const* last)
 
 } // namespace numbers
 } // namespace json
+
+//==================================================================================================
+// Number conversions
+//==================================================================================================
+
+namespace json {
+namespace numbers {
+
+inline uint32_t ToUint32(double value)
+{
+    using charconv::Double;
+
+    //
+    // https://tc39.github.io/ecma262/#sec-touint32
+    //
+    // The abstract operation ToUint32 converts argument to one of 2^32 integer values in the range 0 through 2^32 - 1, inclusive.
+    // This abstract operation functions as follows:
+    //
+    //  1.  Let number be ? ToNumber(argument).
+    //  2.  If number is NaN, +0, -0, +Infinity, or -Infinity, return +0.
+    //  3.  Let int be the mathematical value that is the same sign as number and whose magnitude is floor(abs(number)).
+    //  4.  Let int32bit be int modulo 2^32.
+    //  5.  Return int32bit.
+    //
+
+    const Double d(value);
+
+    const uint64_t F = d.PhysicalSignificand();
+    const uint64_t E = d.PhysicalExponent();
+
+    // Assume that x is a normalized floating-point number.
+    // The special cases subnormal/zero and nan/inf are actually handled below
+    // in the branches 'exponent <= -p' and 'exponent >= 32'.
+
+    const auto significand = Double::HiddenBit | F;
+    const auto exponent = static_cast<int>(E) - Double::ExponentBias;
+
+    uint32_t bits32; // = floor(abs(x)) mod 2^32
+    if (exponent <= -Double::SignificandSize)
+    {
+        // x = significand / 2^-exponent < 1.
+        return 0;
+    }
+    else if (exponent < 0)
+    {
+        // x = significand / 2^-exponent.
+        // Discard the fractional bits (floor).
+        // Since 0 < -exponent < 53, the (64-bit) right shift is well defined.
+        bits32 = static_cast<uint32_t>(significand >> -exponent);
+    }
+    else if (exponent < 32)
+    {
+        // x = significand * 2^exponent.
+        // Since 0 <= exponent < 32, the (32-bit) left shift is well defined.
+        bits32 = static_cast<uint32_t>(significand) << exponent;
+    }
+    else
+    {
+        // x = significand * 2^exponent.
+        // The lower 32 bits of x are definitely 0.
+        return 0;
+    }
+
+    return d.SignBit() ? 0 - bits32 : bits32;
+}
+
+inline int32_t ToInt32(double value)
+{
+    return static_cast<int32_t>(ToUint32(value));
+}
+
+inline uint16_t ToUint16(double value)
+{
+    return static_cast<uint16_t>(ToUint32(value));
+}
+
+inline int16_t ToInt16(double value)
+{
+    return static_cast<int16_t>(ToUint16(value));
+}
+
+inline uint8_t ToUint8(double value)
+{
+    return static_cast<uint8_t>(ToUint32(value));
+}
+
+inline int8_t ToInt8(double value)
+{
+    return static_cast<int8_t>(ToUint8(value));
+}
+
+} // namespace numbers
+} // namespace json

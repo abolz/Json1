@@ -701,88 +701,32 @@ double Value::to_integer() const noexcept
 
 int32_t Value::to_int32() const noexcept
 {
-    // Assume 2's complement.
-    return static_cast<int32_t>(to_uint32());
+    return json::numbers::ToInt32(to_number());
 }
 
 uint32_t Value::to_uint32() const noexcept
 {
-    using charconv::Double;
-
-    //
-    // https://tc39.github.io/ecma262/#sec-touint32
-    //
-    // The abstract operation ToUint32 converts argument to one of 2^32 integer values in the range 0 through 2^32 - 1, inclusive.
-    // This abstract operation functions as follows:
-    //
-    //  1.  Let number be ? ToNumber(argument).
-    //  2.  If number is NaN, +0, -0, +Infinity, or -Infinity, return +0.
-    //  3.  Let int be the mathematical value that is the same sign as number and whose magnitude is floor(abs(number)).
-    //  4.  Let int32bit be int modulo 2^32.
-    //  5.  Return int32bit.
-    //
-
-    const Double d(to_number());
-
-    const uint64_t F = d.PhysicalSignificand();
-    const uint64_t E = d.PhysicalExponent();
-
-    // Assume that x is a normalized floating-point number.
-    // The special cases subnormal/zero and nan/inf are actually handled below
-    // in the branches 'exponent <= -p' and 'exponent >= 32'.
-
-    const auto significand = Double::HiddenBit | F;
-    const auto exponent = static_cast<int>(E) - Double::ExponentBias;
-
-    uint32_t bits32; // = floor(abs(x)) mod 2^32
-    if (exponent <= -Double::SignificandSize)
-    {
-        // x = significand / 2^-exponent < 1.
-        return 0;
-    }
-    else if (exponent < 0)
-    {
-        // x = significand / 2^-exponent.
-        // Discard the fractional bits (floor).
-        // Since 0 < -exponent < 53, the (64-bit) right shift is well defined.
-        bits32 = static_cast<uint32_t>(significand >> -exponent);
-    }
-    else if (exponent < 32)
-    {
-        // x = significand * 2^exponent.
-        // Since 0 <= exponent < 32, the (32-bit) left shift is well defined.
-        bits32 = static_cast<uint32_t>(significand) << exponent;
-    }
-    else
-    {
-        // x = significand * 2^exponent.
-        // The lower 32 bits of x are definitely 0.
-        return 0;
-    }
-
-    return d.SignBit() ? 0 - bits32 : bits32;
+    return json::numbers::ToUint32(to_number());
 }
 
 int16_t Value::to_int16() const noexcept
 {
-    // Assume 2's complement.
-    return static_cast<int16_t>(to_uint16());
+    return json::numbers::ToInt16(to_number());
 }
 
 uint16_t Value::to_uint16() const noexcept
 {
-    return static_cast<uint16_t>(to_uint32() /*& 0xFFFF*/);
+    return json::numbers::ToUint16(to_number());
 }
 
 int8_t Value::to_int8() const noexcept
 {
-    // Assume 2's complement.
-    return static_cast<int8_t>(to_uint8());
+    return json::numbers::ToInt8(to_number());
 }
 
 uint8_t Value::to_uint8() const noexcept
 {
-    return static_cast<uint8_t>(to_uint32() /*& 0xFF*/);
+    return json::numbers::ToUint8(to_number());
 }
 
 uint8_t Value::to_uint8_clamped() const noexcept
