@@ -161,7 +161,7 @@ inline int PrintDecimalDigits(char* buf, uint64_t output)
     if (static_cast<uint32_t>(output >> 32) != 0)
     {
         JSON_ASSERT(i > 8);
-        uint64_t const q = charconv::ryu::Div100_000_000(output);
+        uint64_t const q = charconv::ryu::Div1e8(output);
         uint32_t const r = static_cast<uint32_t>(output - 100000000 * q);
         output = q;
         i -= 8;

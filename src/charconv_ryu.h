@@ -1075,7 +1075,7 @@ inline uint64_t Div100(uint64_t x) {
     return Mul128(x >> 2, 0x28F5C28F5C28F5C3u).hi >> 2;
 }
 
-inline uint64_t Div100_000_000(uint64_t x) {
+inline uint64_t Div1e8(uint64_t x) {
     return Mul128(x, 0xABCC77118461CEFDu).hi >> 26;
 }
 
@@ -1093,7 +1093,7 @@ inline uint64_t Div100(uint64_t x) {
     return x / 100;
 }
 
-inline uint64_t Div100_000_000(uint64_t x) {
+inline uint64_t Div1e8(uint64_t x) {
     return x / 100000000;
 }
 
