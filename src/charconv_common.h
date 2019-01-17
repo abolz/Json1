@@ -102,22 +102,42 @@ struct Double
         return (bits & ExponentMask) >> PhysicalSignificandSize;
     }
 
+    // Returns whether x is zero, subnormal or normal (not infinite or NaN).
     bool IsFinite() const {
         return (bits & ExponentMask) != ExponentMask;
     }
 
+    // Returns whether x is infinite.
     bool IsInf() const {
         return (bits & ExponentMask) == ExponentMask && (bits & SignificandMask) == 0;
     }
 
+    // Returns whether x is a NaN.
     bool IsNaN() const {
         return (bits & ExponentMask) == ExponentMask && (bits & SignificandMask) != 0;
     }
 
+    // Returns whether x is +0 or -0 or subnormal.
+    bool IsSubnormalOrZero() const {
+        return (bits & ExponentMask) == 0;
+    }
+
+    // Returns whether x is subnormal (not zero or normal or infinite or NaN).
+    bool IsSubnormal() const {
+        return (bits & ExponentMask) == 0 && (bits & SignificandMask) != 0;
+    }
+
+    // Returns whether x is +0 or -0.
     bool IsZero() const {
         return (bits & ~SignMask) == 0;
     }
 
+    // Returns whether x is -0.
+    bool IsMinusZero() const {
+        return bits == SignMask;
+    }
+
+    // Returns whether x has negative sign. Applies to zeros and NaNs as well.
     bool SignBit() const {
         return (bits & SignMask) != 0;
     }
@@ -135,6 +155,9 @@ struct Double
         return ReinterpretBits<value_type>(IsInf() ? bits : bits + 1);
     }
 };
+
+inline bool operator==(Double x, Double y) { return x.bits == y.bits; }
+inline bool operator!=(Double x, Double y) { return x.bits != y.bits; }
 
 //==================================================================================================
 //
