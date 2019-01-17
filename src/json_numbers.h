@@ -761,5 +761,46 @@ inline int8_t ToInt8(double value)
     return static_cast<int8_t>(ToUint8(value));
 }
 
+inline uint8_t ToUint8Clamp(double value)
+{
+    //
+    // The abstract operation ToUint8Clamp converts argument to one of 2^8 integer values in the
+    // range 0 through 255, inclusive.
+    // This abstract operation functions as follows:
+    //
+    //  1.  Let number be ? ToNumber(argument).
+    //  2.  If number is NaN, return +0.
+    //  3.  If number <= 0, return +0.
+    //  4.  If number >= 255, return 255.
+    //  5.  Let f be floor(number).
+    //  6.  If f + 0.5 < number, return f + 1.
+    //  7.  If number < f + 0.5, return f.
+    //  8.  If f is odd, return f + 1.
+    //  9.  Return f.
+    //
+
+    // The following test is equivalent to (std::isnan(value) || value <= 0.5),
+    // i.e. it catches NaN's and subnormal numbers.
+    if (!(value > 0.5))
+        return 0;
+    if (value > 254.5)
+        return 255;
+
+    int32_t t = static_cast<int32_t>(value);
+    if (value - t > 0.5) {
+        // Round up
+        t = (t + 1);
+    } else if (value - t == 0.5) {
+        // Round to nearest-even
+        t = (t + 1) & ~1;
+    } else {
+        // Round down
+    }
+
+    JSON_ASSERT(t >= 0);
+    JSON_ASSERT(t <= 255);
+    return static_cast<uint8_t>(static_cast<uint32_t>(t));
+}
+
 } // namespace numbers
 } // namespace json
