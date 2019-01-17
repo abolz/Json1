@@ -731,15 +731,30 @@ uint8_t Value::to_uint8() const noexcept
 
 uint8_t Value::to_uint8_clamped() const noexcept
 {
-    auto v = to_number();
-    if (std::isnan(v)) {
-        return 0;
-    }
+    //
+    // The abstract operation ToUint8Clamp converts argument to one of 2^8 integer values in the
+    // range 0 through 255, inclusive.
+    // This abstract operation functions as follows:
+    //
+    //  1.  Let number be ? ToNumber(argument).
+    //  2.  If number is NaN, return +0.
+    //  3.  If number <= 0, return +0.
+    //  4.  If number >= 255, return 255.
+    //  5.  Let f be floor(number).
+    //  6.  If f + 0.5 < number, return f + 1.
+    //  7.  If number < f + 0.5, return f.
+    //  8.  If f is odd, return f + 1.
+    //  9.  Return f.
+    //
 
-    if (v <= 0.0) { // NB: -0 => +0
+    auto v = to_number();
+
+    // The following test is equivalent to (std::isnan(value) || value <= 0.5),
+    // i.e. it catches NaN's and subnormal numbers.
+    if (!(v > 0.5)) {
         return 0;
     }
-    if (v >= 255.0) {
+    if (v > 254.5) {
         return 255;
     }
 
