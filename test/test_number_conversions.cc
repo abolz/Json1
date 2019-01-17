@@ -7,6 +7,7 @@
 #include <limits>
 #include <stdint.h>
 #include <inttypes.h>
+#include <cmath>
 
 struct DoubleParts {
     bool S;
