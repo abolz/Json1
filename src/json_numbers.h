@@ -37,7 +37,7 @@ namespace numbers {
 
 inline uint32_t ToUint32(double value)
 {
-    using charconv::Double;
+    using Double = charconv::Double;
 
     //
     // https://tc39.github.io/ecma262/#sec-touint32
@@ -121,6 +121,8 @@ inline int8_t ToInt8(double value)
 inline uint8_t ToUint8Clamp(double value)
 {
     //
+    // https://tc39.github.io/ecma262/#sec-touint8clamp
+    //
     // The abstract operation ToUint8Clamp converts argument to one of 2^8 integer values in the
     // range 0 through 255, inclusive.
     // This abstract operation functions as follows:
@@ -143,14 +145,24 @@ inline uint8_t ToUint8Clamp(double value)
     if (value > 254.5)
         return 255;
 
+    // Truncate to integer.
     int32_t t = static_cast<int32_t>(value);
-    if (value - t > 0.5) {
+
+    // Then do the rounding.
+    // Note: (value - t) is exact here (as would be (t + 0.5)).
+    const double fraction = value - t;
+    if (fraction > 0.5)
+    {
         // Round up
-        t = (t + 1);
-    } else if (value - t == 0.5) {
+        t += 1;
+    }
+    else if (fraction == 0.5)
+    {
         // Round to nearest-even
         t = (t + 1) & ~1;
-    } else {
+    }
+    else
+    {
         // Round down
     }
 
@@ -174,17 +186,16 @@ namespace impl {
 // PRE: x > 0
 inline bool DoubleToSmallInt(double x, uint64_t& result)
 {
-    using Flt = charconv::Double;
+    using Double = charconv::Double;
 
-    Flt const d(x);
+    const Double d(x);
 
     JSON_ASSERT(d.IsFinite());
     JSON_ASSERT(x > 0);
 
-    auto const F = d.PhysicalSignificand();
-    auto const E = d.PhysicalExponent();
+    const uint64_t F = d.PhysicalSignificand();
+    const uint64_t E = d.PhysicalExponent();
 
-    constexpr int p = Flt::SignificandSize;
     // F < 2^(p-1)
     // e = E - bias
     // x = (1 + F/2^(p-1)) * 2^e
@@ -192,11 +203,11 @@ inline bool DoubleToSmallInt(double x, uint64_t& result)
     //   = significand * 2^exponent
     //   = significand / 2^-exponent
     // 2^(p-1) <= significand < 2^p
-    auto const significand = Flt::HiddenBit | F;
-    auto const exponent = static_cast<int>(E) - Flt::ExponentBias;
+    const auto significand = Double::HiddenBit | F;
+    const auto exponent = static_cast<int>(E) - Double::ExponentBias;
 
     uint64_t value;
-    if (0 <= -exponent && -exponent < p)
+    if (0 <= -exponent && -exponent < Double::SignificandSize)
     {
         // 1 <= 2^-exponent <= 2^(p-1), i.e. 1 <= x < 2^p.
 
@@ -212,7 +223,7 @@ inline bool DoubleToSmallInt(double x, uint64_t& result)
     {
         // x = 2^p
 
-        value = uint64_t{1} << p;
+        value = uint64_t{1} << Double::SignificandSize;
     }
     else
     {
@@ -310,8 +321,9 @@ inline int PrintDecimalDigits(char* buf, uint64_t output)
     while (output2 >= 10000)
     {
         JSON_ASSERT(i > 4);
+        uint32_t const q = output2 / 10000;
         uint32_t const r = output2 % 10000;
-        output2 /= 10000;
+        output2 = q;
         i -= 4;
         Utoa_4Digits(buf + i, r);
     }
@@ -319,8 +331,9 @@ inline int PrintDecimalDigits(char* buf, uint64_t output)
     if (output2 >= 100)
     {
         JSON_ASSERT(i > 2);
+        uint32_t const q = output2 / 100;
         uint32_t const r = output2 % 100;
-        output2 /= 100;
+        output2 = q;
         i -= 2;
         Utoa_2Digits(buf + i, r);
     }
