@@ -751,27 +751,25 @@ uint8_t Value::to_uint8_clamped() const noexcept
 
     // The following test is equivalent to (std::isnan(value) || value <= 0.5),
     // i.e. it catches NaN's and subnormal numbers.
-    if (!(v > 0.5)) {
+    if (!(v > 0.5))
         return 0;
-    }
-    if (v > 254.5) {
+    if (v > 254.5)
         return 255;
+
+    int32_t t = static_cast<int32_t>(v);
+    if (v - t > 0.5) {
+        // Round up
+        t = (t + 1);
+    } else if (v - t == 0.5) {
+        // Round to nearest-even
+        t = (t + 1) & ~1;
+    } else {
+        // Round down
     }
 
-    auto f = std::floor(v);
-    if (f + 0.5 < v) {
-        // round up
-        f += 1.0;
-    }
-    else if (v < f + 0.5) {
-        // round down
-    }
-    else if ((static_cast<int>(f) & 1) != 0) {
-        // round to even
-        f += 1.0;
-    }
-
-    return static_cast<uint8_t>(f);
+    JSON_ASSERT(t >= 0);
+    JSON_ASSERT(t <= 255);
+    return static_cast<uint8_t>(static_cast<uint32_t>(t));
 }
 
 String Value::to_string() const
