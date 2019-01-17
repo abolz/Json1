@@ -856,13 +856,12 @@ ParseStatus Parser<ParseCallbacks>::ConsumePrimitive()
 
     auto const first = peek.ptr;
     auto const last  = peek.end;
-    auto const len   = last - first;
 
     ParseStatus ec;
     switch (peek.kind)
     {
     case TokenKind::string:
-        JSON_ASSERT(len >= 2);
+        JSON_ASSERT(last - first >= 2);
         JSON_ASSERT(first[0] == '"');
         JSON_ASSERT(last[-1] == '"');
         ec = cb.HandleString(first + 1, last - 1, peek.string_class);
