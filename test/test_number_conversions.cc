@@ -1,7 +1,9 @@
 #define __STDC_FORMAT_MACROS
 #include "catch.hpp"
 #include "../src/json.h"
+#include "../src/json_numbers.h"
 
+#include <algorithm>
 #include <limits>
 #include <stdint.h>
 #include <inttypes.h>
@@ -952,5 +954,44 @@ TEST_CASE("ToInt8Clamp")
         const auto actual_parts = GetDoubleParts(actual);
         CHECK(expected_parts == actual_parts);
         ++i;
+    }
+}
+
+static inline double NextUp(double d) {
+    return std::nextafter(d, std::numeric_limits<double>::infinity());
+}
+
+static inline double NextDown(double d) {
+    return std::nextafter(d, -std::numeric_limits<double>::infinity());
+}
+
+TEST_CASE("ToUint8Clamp boundary")
+{
+    for (int i = 0; i <= 255; ++i)
+    {
+        const double v = static_cast<double>(i);
+        const int32_t expected     = i;
+        const int32_t expectedDown = i;
+        const int32_t expectedUp   = i;
+        const int32_t actual       = json::numbers::ToUint8Clamp(v);
+        const int32_t actualDown   = json::numbers::ToUint8Clamp(NextDown(v));
+        const int32_t actualUp     = json::numbers::ToUint8Clamp(NextUp(v));
+        CHECK(expected == actual);
+        CHECK(expectedDown == actualDown);
+        CHECK(expectedUp == actualUp);
+    }
+
+    for (int i = 0; i <= 255; ++i)
+    {
+        const double v = static_cast<double>(2 * i + 1) / 2.0;
+        const int32_t expected     = std::min(255, (i + 1) & ~1);
+        const int32_t expectedDown = std::min(255, (i + 0)     );
+        const int32_t expectedUp   = std::min(255, (i + 1)     );
+        const int32_t actual       = json::numbers::ToUint8Clamp(v);
+        const int32_t actualDown   = json::numbers::ToUint8Clamp(NextDown(v));
+        const int32_t actualUp     = json::numbers::ToUint8Clamp(NextUp(v));
+        CHECK(expected == actual);
+        CHECK(expectedDown == actualDown);
+        CHECK(expectedUp == actualUp);
     }
 }
