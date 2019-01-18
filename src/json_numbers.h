@@ -225,13 +225,23 @@ namespace impl {
 
 // Returns whether x is an integer and in the range [1, 2^53]
 // and stores the integral value of x in result.
-// PRE: x > 0
 inline uint64_t DoubleToSmallInt(double x, bool& is_small_int)
 {
+#if 1
+    if (1.0 <= x && x <= 9007199254740992.0) // 1.0 <= x <= 2^53
+    {
+        const int64_t i = static_cast<int64_t>(x);
+        is_small_int = (x == static_cast<double>(i));
+        return static_cast<uint64_t>(i);
+    }
+
+    is_small_int = false;
+    return 0;
+#else
     using charconv::Double;
     const Double d(x);
 
-    if (0x3FF0000000000000 <= d.bits && d.bits < 0x4340000000000000) // 1 <= x < 2^53
+    if (0x3FF0000000000000ull <= d.bits && d.bits < 0x4340000000000000ull) // 1 <= x < 2^53
     {
         // x = significand * 2^exponent is a normalized floating-point number.
         const auto significand = Double::HiddenBit | d.PhysicalSignificand();
@@ -247,11 +257,12 @@ inline uint64_t DoubleToSmallInt(double x, bool& is_small_int)
     }
     else
     {
-        // Test whether x == 2^53
-        is_small_int = (d.bits == 0x4340000000000000);
-
+        // Test whether x == 2^53.
+        // TODO: Merge with the branch above? (significand*2, exponent-1)?
+        is_small_int = (d.bits == 0x4340000000000000ull);
         return uint64_t{1} << Double::SignificandSize;
     }
+#endif
 }
 
 inline char* Utoa_2Digits(char* buf, uint32_t digits)
