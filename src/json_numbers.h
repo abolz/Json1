@@ -137,6 +137,7 @@ inline uint8_t ToUint8Clamp(double value)
     //  9.  Return f.
     //
 
+#if 1
     // The following test is equivalent to (std::isnan(value) || value <= 0.5),
     // i.e. it catches NaN's and subnormal numbers.
     if (!(value > 0.5))
@@ -162,6 +163,54 @@ inline uint8_t ToUint8Clamp(double value)
     JSON_ASSERT(t >= 0);
     JSON_ASSERT(t <= 255);
     return static_cast<uint8_t>(static_cast<uint32_t>(t));
+#else
+    using Double = charconv::Double;
+    const Double d(value);
+
+    if (d.bits <= 0x3FE0000000000000ull) // +0.0 <= x <= 1/2
+    {
+        return 0;
+    }
+    else if (d.bits <= 0x406FD00000000000ull) // 0.5 < x <= 254.5
+    {
+        // x = significand * 2^exponent is a normalized floating-point number.
+        const uint64_t F = d.PhysicalSignificand();
+        const uint64_t E = d.PhysicalExponent();
+
+        const int exponent = static_cast<int>(E) - Double::ExponentBias;
+        // 44 < -exponent <= 53
+        JSON_ASSERT(exponent >= -1 - (Double::SignificandSize - 1));
+        JSON_ASSERT(exponent <   8 - (Double::SignificandSize - 1));
+
+        const uint64_t high = uint64_t{1} << -exponent;
+        const uint64_t mask = high - 1;
+        const uint64_t half = high >> 1;
+
+        const uint64_t significand = F | Double::HiddenBit;
+        const uint64_t fraction = significand & mask;
+
+        uint32_t t = static_cast<uint32_t>(significand >> -exponent);
+
+        // Round towards +Inf
+        t += (fraction >= half);
+        if (fraction == half)
+        {
+            // Round towards nearest-even.
+            t &= ~1u;
+        }
+
+        JSON_ASSERT(t <= 255);
+        return static_cast<uint8_t>(t);
+    }
+    else if (d.bits <= 0x7FF0000000000000ull) // 254.5 < x <= +Inf
+    {
+        return 255;
+    }
+    else // x <= -0.0 or NaN(x)
+    {
+        return 0;
+    }
+#endif
 }
 
 } // namespace numbers
