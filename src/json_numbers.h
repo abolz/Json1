@@ -226,9 +226,9 @@ namespace impl {
 // Returns whether x is an integer and in the range [1, 2^53]
 // and stores the integral value of x in result.
 // PRE: x > 0
-inline bool DoubleToSmallInt(double x, uint64_t& result)
+inline uint64_t DoubleToSmallInt(double x, bool& is_small_int)
 {
-    using Double = charconv::Double;
+    using charconv::Double;
     const Double d(x);
 
     JSON_ASSERT(d.IsFinite());
@@ -243,36 +243,27 @@ inline bool DoubleToSmallInt(double x, uint64_t& result)
     //   = (2^(p-1) + F) * 2^(e - (p-1))
     //   = significand * 2^exponent
     //   = significand / 2^-exponent
+    //   = significand / 2^k
     // 2^(p-1) <= significand < 2^p
     const auto significand = Double::HiddenBit | F;
-    const auto exponent = static_cast<int>(E) - Double::ExponentBias;
+    const auto k = Double::ExponentBias - static_cast<int>(E);
 
-    uint64_t value;
-    if (0 <= -exponent && -exponent < Double::SignificandSize)
+    if (0 <= k && k < Double::SignificandSize)
     {
-        // 1 <= 2^-exponent <= 2^(p-1), i.e. 1 <= x < 2^p.
+        // 1 <= 2^k <= 2^(p-1), i.e. 1 <= x < 2^p.
 
-        // Test whether the lower -exponent bits are 0, i.e.
+        // Test whether the lower k bits are 0, i.e.
         // whether the fractional part of x is 0.
-        uint64_t const mask = (uint64_t{1} << -exponent) - 1;
-        if ((significand & mask) != 0)
-            return false;
+        uint64_t const mask = (uint64_t{1} << k) - 1;
 
-        value = significand >> -exponent;
-    }
-    else if (exponent == 1 && F == 0)
-    {
-        // x = 2^p
-
-        value = uint64_t{1} << Double::SignificandSize;
+        is_small_int = ((significand & mask) == 0);
+        return significand >> k;
     }
     else
     {
-        return false;
+        is_small_int = (k == -1 && F == 0);
+        return uint64_t{1} << Double::SignificandSize;
     }
-
-    result = value;
-    return true;
 }
 
 inline char* Utoa_2Digits(char* buf, uint32_t digits)
@@ -568,8 +559,10 @@ inline char* NumberToString(char* buffer, int buffer_length, double value, bool 
     uint64_t digits;
     int decimal_exponent = 0;
 
-    bool const is_int = json::impl::DoubleToSmallInt(value, digits);
-    if (is_int)
+    bool is_small_int;
+    digits = json::impl::DoubleToSmallInt(value, is_small_int);
+
+    if (is_small_int)
     {
         // value is an integer in the range [1, 2^53].
         // Just print the decimal digits (below).
@@ -587,7 +580,7 @@ inline char* NumberToString(char* buffer, int buffer_length, double value, bool 
     // Convert the digits to decimal.
     int const num_digits = json::impl::PrintDecimalDigits(buffer, digits);
 
-    if (is_int)
+    if (is_small_int)
     {
         // Done.
         // Never append a trailing ".0" in this case.
