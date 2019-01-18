@@ -231,37 +231,25 @@ inline uint64_t DoubleToSmallInt(double x, bool& is_small_int)
     using charconv::Double;
     const Double d(x);
 
-    JSON_ASSERT(d.IsFinite());
-    JSON_ASSERT(x > 0);
-
-    const uint64_t F = d.PhysicalSignificand();
-    const uint64_t E = d.PhysicalExponent();
-
-    // F < 2^(p-1)
-    // e = E - bias
-    // x = (1 + F/2^(p-1)) * 2^e
-    //   = (2^(p-1) + F) * 2^(e - (p-1))
-    //   = significand * 2^exponent
-    //   = significand / 2^-exponent
-    //   = significand / 2^k
-    // 2^(p-1) <= significand < 2^p
-    const auto significand = Double::HiddenBit | F;
-    const auto k = Double::ExponentBias - static_cast<int>(E);
-
-    if (0 <= k && k < Double::SignificandSize)
+    if (0x3FF0000000000000 <= d.bits && d.bits < 0x4340000000000000) // 1 <= x < 2^53
     {
-        // 1 <= 2^k <= 2^(p-1), i.e. 1 <= x < 2^p.
+        // x = significand * 2^exponent is a normalized floating-point number.
+        const auto significand = Double::HiddenBit | d.PhysicalSignificand();
+        const auto exponent = static_cast<int>(d.PhysicalExponent()) - Double::ExponentBias;
+        JSON_ASSERT(-exponent >= 0);
+        JSON_ASSERT(-exponent < Double::SignificandSize);
 
-        // Test whether the lower k bits are 0, i.e.
+        // Test whether the lower -exponent bits are 0, i.e.
         // whether the fractional part of x is 0.
-        uint64_t const mask = (uint64_t{1} << k) - 1;
-
-        is_small_int = ((significand & mask) == 0);
-        return significand >> k;
+        const uint64_t value = significand >> -exponent;
+        is_small_int = (significand == (value << -exponent));
+        return value;
     }
     else
     {
-        is_small_int = (k == -1 && F == 0);
+        // Test whether x == 2^53
+        is_small_int = (d.bits == 0x4340000000000000);
+
         return uint64_t{1} << Double::SignificandSize;
     }
 }
@@ -556,12 +544,10 @@ inline char* NumberToString(char* buffer, int buffer_length, double value, bool 
         *buffer++ = '-';
     }
 
-    uint64_t digits;
-    int decimal_exponent = 0;
-
     bool is_small_int;
-    digits = json::impl::DoubleToSmallInt(value, is_small_int);
+    uint64_t digits = json::impl::DoubleToSmallInt(value, is_small_int);
 
+    int decimal_exponent = 0;
     if (is_small_int)
     {
         // value is an integer in the range [1, 2^53].
