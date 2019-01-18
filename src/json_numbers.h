@@ -37,8 +37,6 @@ namespace numbers {
 
 inline uint32_t ToUint32(double value)
 {
-    using Double = charconv::Double;
-
     //
     // https://tc39.github.io/ecma262/#sec-touint32
     //
@@ -52,6 +50,7 @@ inline uint32_t ToUint32(double value)
     //  5.  Return int32bit.
     //
 
+    using Double = charconv::Double;
     const Double d(value);
 
     const uint64_t F = d.PhysicalSignificand();
@@ -151,19 +150,13 @@ inline uint8_t ToUint8Clamp(double value)
     // Then do the rounding.
     // Note: (value - t) is exact here (as would be (t + 0.5)).
     const double fraction = value - t;
-    if (fraction > 0.5)
-    {
-        // Round up
-        t += 1;
-    }
-    else if (fraction == 0.5)
+
+    // Round towards +Inf
+    t += (fraction >= 0.5);
+    if (fraction == 0.5)
     {
         // Round to nearest-even
-        t = (t + 1) & ~1;
-    }
-    else
-    {
-        // Round down
+        t &= ~1;
     }
 
     JSON_ASSERT(t >= 0);
@@ -187,7 +180,6 @@ namespace impl {
 inline bool DoubleToSmallInt(double x, uint64_t& result)
 {
     using Double = charconv::Double;
-
     const Double d(x);
 
     JSON_ASSERT(d.IsFinite());
