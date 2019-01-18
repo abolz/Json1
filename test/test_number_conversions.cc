@@ -971,6 +971,7 @@ TEST_CASE("ToUint8Clamp boundary")
     for (int i = 0; i <= 255; ++i)
     {
         const double v = static_cast<double>(i);
+        CAPTURE(v);
         const int32_t expected     = i;
         const int32_t expectedDown = i;
         const int32_t expectedUp   = i;
@@ -985,6 +986,7 @@ TEST_CASE("ToUint8Clamp boundary")
     for (int i = 0; i <= 255; ++i)
     {
         const double v = static_cast<double>(2 * i + 1) / 2.0;
+        CAPTURE(v);
         const int32_t expected     = std::min(255, (i + 1) & ~1);
         const int32_t expectedDown = std::min(255, (i + 0)     );
         const int32_t expectedUp   = std::min(255, (i + 1)     );
@@ -995,4 +997,14 @@ TEST_CASE("ToUint8Clamp boundary")
         CHECK(expectedDown == actualDown);
         CHECK(expectedUp == actualUp);
     }
+}
+
+TEST_CASE("ToUint8Clamp special")
+{
+    constexpr double Inf = std::numeric_limits<double>::infinity();
+    constexpr double NaN = std::numeric_limits<double>::quiet_NaN();
+
+    CHECK(  0 == json::numbers::ToUint8Clamp(NaN));
+    CHECK(  0 == json::numbers::ToUint8Clamp(-Inf));
+    CHECK(255 == json::numbers::ToUint8Clamp(+Inf));
 }
