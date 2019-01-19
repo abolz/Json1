@@ -5,955 +5,257 @@
 
 #include <algorithm>
 #include <limits>
-#include <stdint.h>
-#include <inttypes.h>
-#include <cmath>
 
-struct DoubleParts {
-    bool S;
-    uint64_t E;
-    uint64_t F;
+struct Test {
+    double   value;
+    int32_t  i32;
+    uint32_t u32;
+    int16_t  i16;
+    uint16_t u16;
+    int8_t   i8;
+    uint8_t  u8;
+    uint8_t  u8_clamped;
 };
 
-static constexpr int      SignificandSize         = 53;                                    // = p   (includes the hidden bit)
-static constexpr int      PhysicalSignificandSize = SignificandSize - 1;                   // = p-1 (excludes the hidden bit)
-static constexpr uint64_t HiddenBit               = uint64_t{1} << (SignificandSize - 1);  // = 2^(p-1)
-static constexpr uint64_t SignificandMask         = HiddenBit - 1;                         // = 2^(p-1) - 1
-static constexpr uint64_t ExponentMask            = uint64_t{2 * 1024 - 1} << PhysicalSignificandSize;
-static constexpr uint64_t SignMask                = ~(~uint64_t{0} >> 1);
+static constexpr double Infinity = std::numeric_limits<double>::infinity();
+static constexpr double NaN = std::numeric_limits<double>::quiet_NaN();
 
-static inline DoubleParts GetDoubleParts(double d)
-{
-    static_assert(sizeof(double) == sizeof(uint64_t), "size mismatch");
-
-    uint64_t bits;
-    std::memcpy(&bits, &d, sizeof(double));
-
-    DoubleParts parts;
-    parts.S = (bits & SignMask) != 0 ? 1 : 0;
-    parts.E = (bits & ExponentMask) >> PhysicalSignificandSize;
-    parts.F = (bits & SignificandMask);
-    return parts;
-}
-
-static inline double DoubleFromParts(DoubleParts const& parts)
-{
-    uint64_t bits = 0;
-    if (parts.S)
-        bits |= SignMask;
-    bits |= parts.E << PhysicalSignificandSize;
-    bits |= parts.F;
-
-    double d;
-    std::memcpy(&d, &bits, sizeof(double));
-    return d;
-}
-
-static inline bool operator==(DoubleParts const& lhs, DoubleParts const& rhs) {
-    return lhs.S == rhs.S && lhs.E == rhs.E && lhs.F == rhs.F;
-}
-static inline bool operator!=(DoubleParts const& lhs, DoubleParts const& rhs) {
-    return !(lhs == rhs);
-}
-static inline std::ostream& operator<<(std::ostream& os, DoubleParts const& parts) {
-    char buf[128];
-    snprintf(buf, 64, "%g (%d,%d,0x%016" PRIX64 ")", DoubleFromParts(parts), static_cast<int>(parts.S), static_cast<int>(parts.E), parts.F);
-    os << buf;
-    return os;
-}
-
-static const double Arr[] = {
-    -0.0,
-    0.0,
-    -1.0,
-    1.0,
-
-    -126.0,
-    126.0,
-    -126.5,
-    126.5,
-    -127.0,
-    127.0,
-    -127.5,
-    127.5,
-    -128.0, // 2^7
-    128.0, // 2^7
-    -128.5,
-    128.5,
-    -129.0,
-    129.0,
-
-    -254.0,
-    254.0,
-    -254.5,
-    254.5,
-    -255.0,
-    255.0,
-    -255.5,
-    255.5,
-    -256.0, // 2^8
-    256.0, // 2^8
-    -256.5,
-    256.5,
-    -257.0,
-    257.0,
-
-    -32766.0,
-    32766.0,
-    -32766.5,
-    32766.5,
-    -32767.0,
-    32767.0,
-    -32767.5,
-    32767.5,
-    -32768.0, // 2^15
-    32768.0, // 2^15
-    -32768.5,
-    32768.5,
-    -32769.0,
-    32769.0,
-
-    -65534.0,
-    65534.0,
-    -65534.5,
-    65534.5,
-    -65535.0,
-    65535.0,
-    -65535.5,
-    65535.5,
-    -65536.0, // 2^16
-    65536.0, // 2^16
-    -65536.5,
-    65536.5,
-    -65537.0,
-    65537.0,
-
-    -2147483646.0,
-    2147483646.0,
-    -2147483646.5,
-    2147483646.5,
-    -2147483647.0,
-    2147483647.0,
-    -2147483647.5,
-    2147483647.5,
-    -2147483648.0, // 2^31
-    2147483648.0, // 2^31
-    -2147483648.5,
-    2147483648.5,
-    -2147483649.0,
-    2147483649.0,
-
-    -4294967294.0,
-    4294967294.0,
-    -4294967294.5,
-    4294967294.5,
-    -4294967295.0,
-    4294967295.0,
-    -4294967295.5,
-    4294967295.5,
-    -4294967296.0, // 2^32
-    4294967296.0, // 2^32
-    -4294967296.5,
-    4294967296.5,
-    -4294967297.0,
-    4294967297.0,
-
-    -std::numeric_limits<double>::infinity(),
-    std::numeric_limits<double>::infinity(),
-    std::numeric_limits<double>::quiet_NaN(),
+static const Test tests[] = {
+//                          value           i32            u32           i16            u16            i8             u8     u8_clamped
+    {         -0.0000000000000000,            0,            0u,            0,            0u,            0,            0u,            0u},
+    {          0.0000000000000000,            0,            0u,            0,            0u,            0,            0u,            0u},
+    {         -126.00000000000000,         -126,   4294967170u,         -126,        65410u,         -126,          130u,            0u},
+    {          126.00000000000000,          126,          126u,          126,          126u,          126,          126u,          126u},
+    {         -126.50000000000000,         -126,   4294967170u,         -126,        65410u,         -126,          130u,            0u},
+    {          126.50000000000000,          126,          126u,          126,          126u,          126,          126u,          126u},
+    {         -127.00000000000000,         -127,   4294967169u,         -127,        65409u,         -127,          129u,            0u},
+    {          127.00000000000000,          127,          127u,          127,          127u,          127,          127u,          127u},
+    {         -127.50000000000000,         -127,   4294967169u,         -127,        65409u,         -127,          129u,            0u},
+    {          127.50000000000000,          127,          127u,          127,          127u,          127,          127u,          128u},
+    {         -128.00000000000000,         -128,   4294967168u,         -128,        65408u,         -128,          128u,            0u},
+    {          128.00000000000000,          128,          128u,          128,          128u,         -128,          128u,          128u},
+    {         -128.50000000000000,         -128,   4294967168u,         -128,        65408u,         -128,          128u,            0u},
+    {          128.50000000000000,          128,          128u,          128,          128u,         -128,          128u,          128u},
+    {         -129.00000000000000,         -129,   4294967167u,         -129,        65407u,          127,          127u,            0u},
+    {          129.00000000000000,          129,          129u,          129,          129u,         -127,          129u,          129u},
+    {         -254.00000000000000,         -254,   4294967042u,         -254,        65282u,            2,            2u,            0u},
+    {          254.00000000000000,          254,          254u,          254,          254u,           -2,          254u,          254u},
+    {         -254.50000000000000,         -254,   4294967042u,         -254,        65282u,            2,            2u,            0u},
+    {          254.50000000000000,          254,          254u,          254,          254u,           -2,          254u,          254u},
+    {         -255.00000000000000,         -255,   4294967041u,         -255,        65281u,            1,            1u,            0u},
+    {          255.00000000000000,          255,          255u,          255,          255u,           -1,          255u,          255u},
+    {         -255.50000000000000,         -255,   4294967041u,         -255,        65281u,            1,            1u,            0u},
+    {          255.50000000000000,          255,          255u,          255,          255u,           -1,          255u,          255u},
+    {         -256.00000000000000,         -256,   4294967040u,         -256,        65280u,            0,            0u,            0u},
+    {          256.00000000000000,          256,          256u,          256,          256u,            0,            0u,          255u},
+    {         -256.50000000000000,         -256,   4294967040u,         -256,        65280u,            0,            0u,            0u},
+    {          256.50000000000000,          256,          256u,          256,          256u,            0,            0u,          255u},
+    {         -257.00000000000000,         -257,   4294967039u,         -257,        65279u,           -1,          255u,            0u},
+    {          257.00000000000000,          257,          257u,          257,          257u,            1,            1u,          255u},
+    {         -32766.000000000000,       -32766,   4294934530u,       -32766,        32770u,            2,            2u,            0u},
+    {          32766.000000000000,        32766,        32766u,        32766,        32766u,           -2,          254u,          255u},
+    {         -32766.500000000000,       -32766,   4294934530u,       -32766,        32770u,            2,            2u,            0u},
+    {          32766.500000000000,        32766,        32766u,        32766,        32766u,           -2,          254u,          255u},
+    {         -32767.000000000000,       -32767,   4294934529u,       -32767,        32769u,            1,            1u,            0u},
+    {          32767.000000000000,        32767,        32767u,        32767,        32767u,           -1,          255u,          255u},
+    {         -32767.500000000000,       -32767,   4294934529u,       -32767,        32769u,            1,            1u,            0u},
+    {          32767.500000000000,        32767,        32767u,        32767,        32767u,           -1,          255u,          255u},
+    {         -32768.000000000000,       -32768,   4294934528u,       -32768,        32768u,            0,            0u,            0u},
+    {          32768.000000000000,        32768,        32768u,       -32768,        32768u,            0,            0u,          255u},
+    {         -32768.500000000000,       -32768,   4294934528u,       -32768,        32768u,            0,            0u,            0u},
+    {          32768.500000000000,        32768,        32768u,       -32768,        32768u,            0,            0u,          255u},
+    {         -32769.000000000000,       -32769,   4294934527u,        32767,        32767u,           -1,          255u,            0u},
+    {          32769.000000000000,        32769,        32769u,       -32767,        32769u,            1,            1u,          255u},
+    {         -65534.000000000000,       -65534,   4294901762u,            2,            2u,            2,            2u,            0u},
+    {          65534.000000000000,        65534,        65534u,           -2,        65534u,           -2,          254u,          255u},
+    {         -65534.500000000000,       -65534,   4294901762u,            2,            2u,            2,            2u,            0u},
+    {          65534.500000000000,        65534,        65534u,           -2,        65534u,           -2,          254u,          255u},
+    {         -65535.000000000000,       -65535,   4294901761u,            1,            1u,            1,            1u,            0u},
+    {          65535.000000000000,        65535,        65535u,           -1,        65535u,           -1,          255u,          255u},
+    {         -65535.500000000000,       -65535,   4294901761u,            1,            1u,            1,            1u,            0u},
+    {          65535.500000000000,        65535,        65535u,           -1,        65535u,           -1,          255u,          255u},
+    {         -65536.000000000000,       -65536,   4294901760u,            0,            0u,            0,            0u,            0u},
+    {          65536.000000000000,        65536,        65536u,            0,            0u,            0,            0u,          255u},
+    {         -65536.500000000000,       -65536,   4294901760u,            0,            0u,            0,            0u,            0u},
+    {          65536.500000000000,        65536,        65536u,            0,            0u,            0,            0u,          255u},
+    {         -65537.000000000000,       -65537,   4294901759u,           -1,        65535u,           -1,          255u,            0u},
+    {          65537.000000000000,        65537,        65537u,            1,            1u,            1,            1u,          255u},
+    {         -2147483646.0000000,  -2147483646,   2147483650u,            2,            2u,            2,            2u,            0u},
+    {          2147483646.0000000,   2147483646,   2147483646u,           -2,        65534u,           -2,          254u,          255u},
+    {         -2147483646.5000000,  -2147483646,   2147483650u,            2,            2u,            2,            2u,            0u},
+    {          2147483646.5000000,   2147483646,   2147483646u,           -2,        65534u,           -2,          254u,          255u},
+    {         -2147483647.0000000,  -2147483647,   2147483649u,            1,            1u,            1,            1u,            0u},
+    {          2147483647.0000000,   2147483647,   2147483647u,           -1,        65535u,           -1,          255u,          255u},
+    {         -2147483647.5000000,  -2147483647,   2147483649u,            1,            1u,            1,            1u,            0u},
+    {          2147483647.5000000,   2147483647,   2147483647u,           -1,        65535u,           -1,          255u,          255u},
+    {         -2147483648.0000000,    INT32_MIN,   2147483648u,            0,            0u,            0,            0u,            0u},
+    {          2147483648.0000000,    INT32_MIN,   2147483648u,            0,            0u,            0,            0u,          255u},
+    {         -2147483648.5000000,    INT32_MIN,   2147483648u,            0,            0u,            0,            0u,            0u},
+    {          2147483648.5000000,    INT32_MIN,   2147483648u,            0,            0u,            0,            0u,          255u},
+    {         -2147483649.0000000,   2147483647,   2147483647u,           -1,        65535u,           -1,          255u,            0u},
+    {          2147483649.0000000,  -2147483647,   2147483649u,            1,            1u,            1,            1u,          255u},
+    {         -4294967296.0000000,            0,            0u,            0,            0u,            0,            0u,            0u},
+    {          4294967296.0000000,            0,            0u,            0,            0u,            0,            0u,          255u},
+    {         -4294971391.9999990,        -4095,   4294963201u,        -4095,        61441u,            1,            1u,            0u},
+    {          4294971391.9999990,         4095,         4095u,         4095,         4095u,           -1,          255u,          255u},
+    {         -4294969343.9999990,        -2047,   4294965249u,        -2047,        63489u,            1,            1u,            0u},
+    {          4294969343.9999990,         2047,         2047u,         2047,         2047u,           -1,          255u,          255u},
+    {         -4294969344.0000000,        -2048,   4294965248u,        -2048,        63488u,            0,            0u,            0u},
+    {          4294969344.0000000,         2048,         2048u,         2048,         2048u,            0,            0u,          255u},
+    {        -0.50000000000000000,            0,            0u,            0,            0u,            0,            0u,            0u},
+    {         0.50000000000000000,            0,            0u,            0,            0u,            0,            0u,            0u},
+    {        -0.99999999999999989,            0,            0u,            0,            0u,            0,            0u,            0u},
+    {         0.99999999999999989,            0,            0u,            0,            0u,            0,            0u,            1u},
+    {         -1.0000000000000000,           -1,   4294967295u,           -1,        65535u,           -1,          255u,            0u},
+    {          1.0000000000000000,            1,            1u,            1,            1u,            1,            1u,            1u},
+    {         -1.9999999999999998,           -1,   4294967295u,           -1,        65535u,           -1,          255u,            0u},
+    {          1.9999999999999998,            1,            1u,            1,            1u,            1,            1u,            2u},
+    {         -1.0000009536743162,           -1,   4294967295u,           -1,        65535u,           -1,          255u,            0u},
+    {          1.0000009536743162,            1,            1u,            1,            1u,            1,            1u,            1u},
+    {         -1.0000004768371580,           -1,   4294967295u,           -1,        65535u,           -1,          255u,            0u},
+    {          1.0000004768371580,            1,            1u,            1,            1u,            1,            1u,            1u},
+    {         -1.0000000000145517,           -1,   4294967295u,           -1,        65535u,           -1,          255u,            0u},
+    {          1.0000000000145517,            1,            1u,            1,            1u,            1,            1u,            1u},
+    {         -1.0000000000072757,           -1,   4294967295u,           -1,        65535u,           -1,          255u,            0u},
+    {          1.0000000000072757,            1,            1u,            1,            1u,            1,            1u,            1u},
+    {         -2251799813685248.0,            0,            0u,            0,            0u,            0,            0u,            0u},
+    {          2251799813685248.0,            0,            0u,            0,            0u,            0,            0u,          255u},
+    {         -4503599627370496.0,            0,            0u,            0,            0u,            0,            0u,            0u},
+    {          4503599627370496.0,            0,            0u,            0,            0u,            0,            0u,          255u},
+    {         -4503599627370497.0,           -1,   4294967295u,           -1,        65535u,           -1,          255u,            0u},
+    {          4503599627370497.0,            1,            1u,            1,            1u,            1,            1u,          255u},
+    {         -4503599627370751.0,         -255,   4294967041u,         -255,        65281u,            1,            1u,            0u},
+    {          4503599627370751.0,          255,          255u,          255,          255u,           -1,          255u,          255u},
+    {         -4503599627370623.0,         -127,   4294967169u,         -127,        65409u,         -127,          129u,            0u},
+    {          4503599627370623.0,          127,          127u,          127,          127u,          127,          127u,          255u},
+    {         -4503599627370624.0,         -128,   4294967168u,         -128,        65408u,         -128,          128u,            0u},
+    {          4503599627370624.0,          128,          128u,          128,          128u,         -128,          128u,          255u},
+    {         -4503599627436031.0,       -65535,   4294901761u,            1,            1u,            1,            1u,            0u},
+    {          4503599627436031.0,        65535,        65535u,           -1,        65535u,           -1,          255u,          255u},
+    {         -4503599627403263.0,       -32767,   4294934529u,       -32767,        32769u,            1,            1u,            0u},
+    {          4503599627403263.0,        32767,        32767u,        32767,        32767u,           -1,          255u,          255u},
+    {         -4503599627403264.0,       -32768,   4294934528u,       -32768,        32768u,            0,            0u,            0u},
+    {          4503599627403264.0,        32768,        32768u,       -32768,        32768u,            0,            0u,          255u},
+    {         -4503603922337791.0,            1,            1u,            1,            1u,            1,            1u,            0u},
+    {          4503603922337791.0,           -1,   4294967295u,           -1,        65535u,           -1,          255u,          255u},
+    {         -4503601774854143.0,  -2147483647,   2147483649u,            1,            1u,            1,            1u,            0u},
+    {          4503601774854143.0,   2147483647,   2147483647u,           -1,        65535u,           -1,          255u,          255u},
+    {         -4503601774854144.0,    INT32_MIN,   2147483648u,            0,            0u,            0,            0u,            0u},
+    {          4503601774854144.0,    INT32_MIN,   2147483648u,            0,            0u,            0,            0u,          255u},
+    {         -9007199254740992.0,            0,            0u,            0,            0u,            0,            0u,            0u},
+    {          9007199254740992.0,            0,            0u,            0,            0u,            0,            0u,          255u},
+    {        -18014398509481984.0,            0,            0u,            0,            0u,            0,            0u,            0u},
+    {         18014398509481984.0,            0,            0u,            0,            0u,            0,            0u,          255u},
+    {     -9.6714065569170334e+24,            0,            0u,            0,            0u,            0,            0u,            0u},
+    {      9.6714065569170334e+24,            0,            0u,            0,            0u,            0,            0u,          255u},
+    {     -1.9342813113834067e+25,            0,            0u,            0,            0u,            0,            0u,            0u},
+    {      1.9342813113834067e+25,            0,            0u,            0,            0u,            0,            0u,          255u},
+    {                   -Infinity,            0,            0u,            0,            0u,            0,            0u,            0u},
+    {                    Infinity,            0,            0u,            0,            0u,            0,            0u,          255u},
+    {                         NaN,            0,            0u,            0,            0u,            0,            0u,            0u},
 };
 
 TEST_CASE("ToInt32")
 {
-    static const double Expected[] = {
-        0.0,
-        0.0,
-        -1.0,
-        1.0,
-        -126.0,
-        126.0,
-        -126.0,
-        126.0,
-        -127.0,
-        127.0,
-        -127.0,
-        127.0,
-        -128.0,
-        128.0,
-        -128.0,
-        128.0,
-        -129.0,
-        129.0,
-        -254.0,
-        254.0,
-        -254.0,
-        254.0,
-        -255.0,
-        255.0,
-        -255.0,
-        255.0,
-        -256.0,
-        256.0,
-        -256.0,
-        256.0,
-        -257.0,
-        257.0,
-        -32766.0,
-        32766.0,
-        -32766.0,
-        32766.0,
-        -32767.0,
-        32767.0,
-        -32767.0,
-        32767.0,
-        -32768.0,
-        32768.0,
-        -32768.0,
-        32768.0,
-        -32769.0,
-        32769.0,
-        -65534.0,
-        65534.0,
-        -65534.0,
-        65534.0,
-        -65535.0,
-        65535.0,
-        -65535.0,
-        65535.0,
-        -65536.0,
-        65536.0,
-        -65536.0,
-        65536.0,
-        -65537.0,
-        65537.0,
-        -2147483646.0,
-        2147483646.0,
-        -2147483646.0,
-        2147483646.0,
-        -2147483647.0,
-        2147483647.0,
-        -2147483647.0,
-        2147483647.0,
-        -2147483648.0,
-        -2147483648.0,
-        -2147483648.0,
-        -2147483648.0,
-        2147483647.0,
-        -2147483647.0,
-        2.0,
-        -2.0,
-        2.0,
-        -2.0,
-        1.0,
-        -1.0,
-        1.0,
-        -1.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        -1.0,
-        1.0,
-        0.0,
-        0.0,
-        0.0,
-    };
-    static_assert(sizeof(Arr) == sizeof(Expected), "size mismatch");
-
-    size_t i = 0;
-    for (double d : Arr)
+    int i = 0;
+    for (auto const& test : tests)
     {
-        double expected = Expected[i];
-        CAPTURE(d);
-        json::Value j = d;
-        double actual = static_cast<double>(j.to_int32());
-        const auto expected_parts = GetDoubleParts(expected);
-        const auto actual_parts = GetDoubleParts(actual);
-        CHECK(expected_parts == actual_parts);
+        const double value = test.value;
+        CAPTURE(i);
+        CAPTURE(value);
+        const int32_t expected = test.i32;
+        const int32_t actual = json::numbers::ToInt32(value);
+        CHECK(expected == actual);
         ++i;
     }
 }
 
 TEST_CASE("ToUint32")
 {
-    static const double Expected[] = {
-        0.0,
-        0.0,
-        4294967295.0,
-        1.0,
-        4294967170.0,
-        126.0,
-        4294967170.0,
-        126.0,
-        4294967169.0,
-        127.0,
-        4294967169.0,
-        127.0,
-        4294967168.0,
-        128.0,
-        4294967168.0,
-        128.0,
-        4294967167.0,
-        129.0,
-        4294967042.0,
-        254.0,
-        4294967042.0,
-        254.0,
-        4294967041.0,
-        255.0,
-        4294967041.0,
-        255.0,
-        4294967040.0,
-        256.0,
-        4294967040.0,
-        256.0,
-        4294967039.0,
-        257.0,
-        4294934530.0,
-        32766.0,
-        4294934530.0,
-        32766.0,
-        4294934529.0,
-        32767.0,
-        4294934529.0,
-        32767.0,
-        4294934528.0,
-        32768.0,
-        4294934528.0,
-        32768.0,
-        4294934527.0,
-        32769.0,
-        4294901762.0,
-        65534.0,
-        4294901762.0,
-        65534.0,
-        4294901761.0,
-        65535.0,
-        4294901761.0,
-        65535.0,
-        4294901760.0,
-        65536.0,
-        4294901760.0,
-        65536.0,
-        4294901759.0,
-        65537.0,
-        2147483650.0,
-        2147483646.0,
-        2147483650.0,
-        2147483646.0,
-        2147483649.0,
-        2147483647.0,
-        2147483649.0,
-        2147483647.0,
-        2147483648.0,
-        2147483648.0,
-        2147483648.0,
-        2147483648.0,
-        2147483647.0,
-        2147483649.0,
-        2.0,
-        4294967294.0,
-        2.0,
-        4294967294.0,
-        1.0,
-        4294967295.0,
-        1.0,
-        4294967295.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        4294967295.0,
-        1.0,
-        0.0,
-        0.0,
-        0.0,
-    };
-    static_assert(sizeof(Arr) == sizeof(Expected), "size mismatch");
-
-    size_t i = 0;
-    for (double d : Arr)
+    int i = 0;
+    for (auto const& test : tests)
     {
-        double expected = Expected[i];
-        CAPTURE(d);
-        json::Value j = d;
-        double actual = static_cast<double>(j.to_uint32());
-        const auto expected_parts = GetDoubleParts(expected);
-        const auto actual_parts = GetDoubleParts(actual);
-        CHECK(expected_parts == actual_parts);
+        const double value = test.value;
+        CAPTURE(i);
+        CAPTURE(value);
+        const uint32_t expected = test.u32;
+        const uint32_t actual = json::numbers::ToUint32(value);
+        CHECK(expected == actual);
         ++i;
-
-        // The ToUint32 abstract operation is idempotent: if applied to a result
-        // that it produced, the second application leaves that value unchanged.
-        j = actual;
-        double actual2 = static_cast<double>(j.to_uint32());
-        const auto actual2_parts = GetDoubleParts(actual2);
-        CHECK(expected_parts == actual2_parts);
-
-        // ToUint32(ToInt32(x)) is equal to ToUint32(x) for all values of x.
-        // (It is to preserve this latter property that +Infinity and -Infinity are mapped to +0.)
-        j = d;
-        double i32 = static_cast<double>(j.to_int32()); // exact
-        j = i32;
-        double u32 = static_cast<double>(j.to_uint32());
-        const auto u32_parts = GetDoubleParts(u32);
-        CHECK(expected_parts == u32_parts);
     }
 }
 
 TEST_CASE("ToInt16")
 {
-    static const double Expected[] = {
-        0.0,
-        0.0,
-        -1.0,
-        1.0,
-        -126.0,
-        126.0,
-        -126.0,
-        126.0,
-        -127.0,
-        127.0,
-        -127.0,
-        127.0,
-        -128.0,
-        128.0,
-        -128.0,
-        128.0,
-        -129.0,
-        129.0,
-        -254.0,
-        254.0,
-        -254.0,
-        254.0,
-        -255.0,
-        255.0,
-        -255.0,
-        255.0,
-        -256.0,
-        256.0,
-        -256.0,
-        256.0,
-        -257.0,
-        257.0,
-        -32766.0,
-        32766.0,
-        -32766.0,
-        32766.0,
-        -32767.0,
-        32767.0,
-        -32767.0,
-        32767.0,
-        -32768.0,
-        -32768.0,
-        -32768.0,
-        -32768.0,
-        32767.0,
-        -32767.0,
-        2.0,
-        -2.0,
-        2.0,
-        -2.0,
-        1.0,
-        -1.0,
-        1.0,
-        -1.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        -1.0,
-        1.0,
-        2.0,
-        -2.0,
-        2.0,
-        -2.0,
-        1.0,
-        -1.0,
-        1.0,
-        -1.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        -1.0,
-        1.0,
-        2.0,
-        -2.0,
-        2.0,
-        -2.0,
-        1.0,
-        -1.0,
-        1.0,
-        -1.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        -1.0,
-        1.0,
-        0.0,
-        0.0,
-        0.0,
-    };
-    static_assert(sizeof(Arr) == sizeof(Expected), "size mismatch");
-
-    size_t i = 0;
-    for (double d : Arr)
+    int i = 0;
+    for (auto const& test : tests)
     {
-        double expected = Expected[i];
-        CAPTURE(d);
-        json::Value j = d;
-        double actual = static_cast<double>(j.to_int16());
-        const auto expected_parts = GetDoubleParts(expected);
-        const auto actual_parts = GetDoubleParts(actual);
-        CHECK(expected_parts == actual_parts);
+        const double value = test.value;
+        CAPTURE(i);
+        CAPTURE(value);
+        const int32_t expected = test.i16;
+        const int32_t actual = json::numbers::ToInt16(value);
+        CHECK(expected == actual);
         ++i;
     }
 }
 
 TEST_CASE("ToUint16")
 {
-    static const double Expected[] = {
-        0.0,
-        0.0,
-        65535.0,
-        1.0,
-        65410.0,
-        126.0,
-        65410.0,
-        126.0,
-        65409.0,
-        127.0,
-        65409.0,
-        127.0,
-        65408.0,
-        128.0,
-        65408.0,
-        128.0,
-        65407.0,
-        129.0,
-        65282.0,
-        254.0,
-        65282.0,
-        254.0,
-        65281.0,
-        255.0,
-        65281.0,
-        255.0,
-        65280.0,
-        256.0,
-        65280.0,
-        256.0,
-        65279.0,
-        257.0,
-        32770.0,
-        32766.0,
-        32770.0,
-        32766.0,
-        32769.0,
-        32767.0,
-        32769.0,
-        32767.0,
-        32768.0,
-        32768.0,
-        32768.0,
-        32768.0,
-        32767.0,
-        32769.0,
-        2.0,
-        65534.0,
-        2.0,
-        65534.0,
-        1.0,
-        65535.0,
-        1.0,
-        65535.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        65535.0,
-        1.0,
-        2.0,
-        65534.0,
-        2.0,
-        65534.0,
-        1.0,
-        65535.0,
-        1.0,
-        65535.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        65535.0,
-        1.0,
-        2.0,
-        65534.0,
-        2.0,
-        65534.0,
-        1.0,
-        65535.0,
-        1.0,
-        65535.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        65535.0,
-        1.0,
-        0.0,
-        0.0,
-        0.0,
-    };
-    static_assert(sizeof(Arr) == sizeof(Expected), "size mismatch");
-
-    size_t i = 0;
-    for (double d : Arr)
+    int i = 0;
+    for (auto const& test : tests)
     {
-        double expected = Expected[i];
-        CAPTURE(d);
-        json::Value j = d;
-        double actual = static_cast<double>(j.to_uint16());
-        const auto expected_parts = GetDoubleParts(expected);
-        const auto actual_parts = GetDoubleParts(actual);
-        CHECK(expected_parts == actual_parts);
+        const double value = test.value;
+        CAPTURE(i);
+        CAPTURE(value);
+        const uint32_t expected = test.u16;
+        const uint32_t actual = json::numbers::ToUint16(value);
+        CHECK(expected == actual);
         ++i;
     }
 }
 
 TEST_CASE("ToInt8")
 {
-    static const double Expected[] = {
-        0,
-        0,
-        -1,
-        1,
-        -126,
-        126,
-        -126,
-        126,
-        -127,
-        127,
-        -127,
-        127,
-        -128,
-        -128,
-        -128,
-        -128,
-        127,
-        -127,
-        2,
-        -2,
-        2,
-        -2,
-        1,
-        -1,
-        1,
-        -1,
-        0,
-        0,
-        0,
-        0,
-        -1,
-        1,
-        2,
-        -2,
-        2,
-        -2,
-        1,
-        -1,
-        1,
-        -1,
-        0,
-        0,
-        0,
-        0,
-        -1,
-        1,
-        2,
-        -2,
-        2,
-        -2,
-        1,
-        -1,
-        1,
-        -1,
-        0,
-        0,
-        0,
-        0,
-        -1,
-        1,
-        2,
-        -2,
-        2,
-        -2,
-        1,
-        -1,
-        1,
-        -1,
-        0,
-        0,
-        0,
-        0,
-        -1,
-        1,
-        2,
-        -2,
-        2,
-        -2,
-        1,
-        -1,
-        1,
-        -1,
-        0,
-        0,
-        0,
-        0,
-        -1,
-        1,
-        0.0,
-        0.0,
-        0.0,
-    };
-    static_assert(sizeof(Arr) == sizeof(Expected), "size mismatch");
-
-    size_t i = 0;
-    for (double d : Arr)
+    int i = 0;
+    for (auto const& test : tests)
     {
-        double expected = Expected[i];
-        CAPTURE(d);
-        json::Value j = d;
-        double actual = static_cast<double>(j.to_int8());
-        const auto expected_parts = GetDoubleParts(expected);
-        const auto actual_parts = GetDoubleParts(actual);
-        CHECK(expected_parts == actual_parts);
+        const double value = test.value;
+        CAPTURE(i);
+        CAPTURE(value);
+        const int32_t expected = test.i8;
+        const int32_t actual = json::numbers::ToInt8(value);
+        CHECK(expected == actual);
         ++i;
     }
 }
 
 TEST_CASE("ToUint8")
 {
-    static const double Expected[] = {
-        0.0,
-        0.0,
-        255.0,
-        1.0,
-
-        130.0,
-        126.0,
-        130.0,
-        126.0,
-        129.0,
-        127.0,
-        129.0,
-        127.0,
-        128.0,
-        128.0,
-        128.0,
-        128.0,
-        127.0,
-        129.0,
-
-        2.0,
-        254.0,
-        2.0,
-        254.0,
-        1.0,
-        255.0,
-        1.0,
-        255.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        255.0,
-        1.0,
-        2.0,
-        254.0,
-        2.0,
-        254.0,
-        1.0,
-        255.0,
-        1.0,
-        255.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        255.0,
-        1.0,
-        2.0,
-        254.0,
-        2.0,
-        254.0,
-        1.0,
-        255.0,
-        1.0,
-        255.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        255.0,
-        1.0,
-        2.0,
-        254.0,
-        2.0,
-        254.0,
-        1.0,
-        255.0,
-        1.0,
-        255.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        255.0,
-        1.0,
-        2.0,
-        254.0,
-        2.0,
-        254.0,
-        1.0,
-        255.0,
-        1.0,
-        255.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        255.0,
-        1.0,
-        0.0,
-        0.0,
-        0.0,
-    };
-    static_assert(sizeof(Arr) == sizeof(Expected), "size mismatch");
-
-    size_t i = 0;
-    for (double d : Arr)
+    int i = 0;
+    for (auto const& test : tests)
     {
-        double expected = Expected[i];
-        CAPTURE(d);
-        json::Value j = d;
-        double actual = static_cast<double>(j.to_uint8());
-        const auto expected_parts = GetDoubleParts(expected);
-        const auto actual_parts = GetDoubleParts(actual);
-        CHECK(expected_parts == actual_parts);
+        const double value = test.value;
+        CAPTURE(i);
+        CAPTURE(value);
+        const uint32_t expected = test.u8;
+        const uint32_t actual = json::numbers::ToUint8(value);
+        CHECK(expected == actual);
         ++i;
     }
 }
 
-TEST_CASE("ToInt8Clamp")
+TEST_CASE("ToUint8Clamp")
 {
-    static const double Expected[] = {
-        0.0,
-        0.0,
-        0.0,
-        1.0,
-        0.0,
-        126.0,
-        0.0,
-        126.0,
-        0.0,
-        127.0,
-        0.0,
-        128.0,
-        0.0,
-        128.0,
-        0.0,
-        128.0,
-        0.0,
-        129.0,
-        0.0,
-        254.0,
-        0.0,
-        254.0,
-        0.0,
-        255.0,
-        0.0,
-        255.0,
-        0.0,
-        255.0,
-        0.0,
-        255.0,
-        0.0,
-        255.0,
-        0.0,
-        255.0,
-        0.0,
-        255.0,
-        0.0,
-        255.0,
-        0.0,
-        255.0,
-        0.0,
-        255.0,
-        0.0,
-        255.0,
-        0.0,
-        255.0,
-        0.0,
-        255.0,
-        0.0,
-        255.0,
-        0.0,
-        255.0,
-        0.0,
-        255.0,
-        0.0,
-        255.0,
-        0.0,
-        255.0,
-        0.0,
-        255.0,
-        0.0,
-        255.0,
-        0.0,
-        255.0,
-        0.0,
-        255.0,
-        0.0,
-        255.0,
-        0.0,
-        255.0,
-        0.0,
-        255.0,
-        0.0,
-        255.0,
-        0.0,
-        255.0,
-        0.0,
-        255.0,
-        0.0,
-        255.0,
-        0.0,
-        255.0,
-        0.0,
-        255.0,
-        0.0,
-        255.0,
-        0.0,
-        255.0,
-        0.0, // -Inf
-        255.0, // +Inf
-        0.0, // NaN
-    };
-    static_assert(sizeof(Arr) == sizeof(Expected), "size mismatch");
-
-    size_t i = 0;
-    for (double d : Arr)
+    int i = 0;
+    for (auto const& test : tests)
     {
-        double expected = Expected[i];
-        CAPTURE(d);
-        json::Value j = d;
-        double actual = static_cast<double>(j.to_uint8_clamped());
-        const auto expected_parts = GetDoubleParts(expected);
-        const auto actual_parts = GetDoubleParts(actual);
-        CHECK(expected_parts == actual_parts);
+        const double value = test.value;
+        CAPTURE(i);
+        CAPTURE(value);
+        const uint32_t expected = test.u8_clamped;
+        const uint32_t actual = json::numbers::ToUint8Clamp(value);
+        CHECK(expected == actual);
         ++i;
     }
 }
@@ -966,45 +268,43 @@ static inline double NextDown(double d) {
     return std::nextafter(d, -std::numeric_limits<double>::infinity());
 }
 
-TEST_CASE("ToUint8Clamp boundary")
+TEST_CASE("ToUint8Clamp boundaries")
 {
-    for (int i = 0; i <= 255; ++i)
+    for (int32_t i = 0; i <= 255; ++i)
     {
         const double v = static_cast<double>(i);
+        const double vDown = NextDown(v);
+        const double vUp = NextUp(v);
         CAPTURE(v);
+        CAPTURE(vDown);
+        CAPTURE(vUp);
         const int32_t expected     = i;
         const int32_t expectedDown = i;
         const int32_t expectedUp   = i;
         const int32_t actual       = json::numbers::ToUint8Clamp(v);
-        const int32_t actualDown   = json::numbers::ToUint8Clamp(NextDown(v));
-        const int32_t actualUp     = json::numbers::ToUint8Clamp(NextUp(v));
+        const int32_t actualDown   = json::numbers::ToUint8Clamp(vDown);
+        const int32_t actualUp     = json::numbers::ToUint8Clamp(vUp);
         CHECK(expected == actual);
         CHECK(expectedDown == actualDown);
         CHECK(expectedUp == actualUp);
     }
 
-    for (int i = 0; i <= 255; ++i)
+    for (int32_t i = 0; i <= 255; ++i)
     {
-        const double v = static_cast<double>(2 * i + 1) / 2.0;
+        const double v = static_cast<double>(i) + 0.5; // exact
+        const double vDown = NextDown(v);
+        const double vUp = NextUp(v);
         CAPTURE(v);
+        CAPTURE(vDown);
+        CAPTURE(vUp);
         const int32_t expected     = std::min(255, (i + 1) & ~1);
         const int32_t expectedDown = std::min(255, (i + 0)     );
         const int32_t expectedUp   = std::min(255, (i + 1)     );
         const int32_t actual       = json::numbers::ToUint8Clamp(v);
-        const int32_t actualDown   = json::numbers::ToUint8Clamp(NextDown(v));
-        const int32_t actualUp     = json::numbers::ToUint8Clamp(NextUp(v));
+        const int32_t actualDown   = json::numbers::ToUint8Clamp(vDown);
+        const int32_t actualUp     = json::numbers::ToUint8Clamp(vUp);
         CHECK(expected == actual);
         CHECK(expectedDown == actualDown);
         CHECK(expectedUp == actualUp);
     }
-}
-
-TEST_CASE("ToUint8Clamp special")
-{
-    constexpr double Inf = std::numeric_limits<double>::infinity();
-    constexpr double NaN = std::numeric_limits<double>::quiet_NaN();
-
-    CHECK(  0 == json::numbers::ToUint8Clamp(NaN));
-    CHECK(  0 == json::numbers::ToUint8Clamp(-Inf));
-    CHECK(255 == json::numbers::ToUint8Clamp(+Inf));
 }
