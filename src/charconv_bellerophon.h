@@ -1293,7 +1293,7 @@ inline double DoubleFromDiyFp(DiyFp x)
 
     bool const is_subnormal = (x.e == Double::MinExponent && (x.f & Double::HiddenBit) == 0);
 
-    JSON_ASSERT(x.e >= -Double::ExponentBias);
+    CC_ASSERT(x.e >= -Double::ExponentBias);
     uint64_t const E = is_subnormal ? 0 : static_cast<unsigned>(x.e + Double::ExponentBias);
     uint64_t const F = x.f & Double::SignificandMask;
 
