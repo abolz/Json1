@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <cmath>
 
 struct Test {
     double   value;
