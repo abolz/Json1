@@ -177,16 +177,15 @@ inline uint8_t ToUint8Clamp(double value)
         const uint64_t F = d.PhysicalSignificand();
         const uint64_t E = d.PhysicalExponent();
 
-        const int exponent = static_cast<int>(E) - Double::ExponentBias;
-        // 44 < -exponent <= 53
+        const auto significand = Double::HiddenBit | F;
+        const auto exponent = static_cast<int>(E) - Double::ExponentBias;
         JSON_ASSERT(exponent >= -1 - (Double::SignificandSize - 1));
         JSON_ASSERT(exponent <   8 - (Double::SignificandSize - 1));
+        // 44 < -exponent <= 53
 
         const uint64_t high = uint64_t{1} << -exponent;
         const uint64_t mask = high - 1;
         const uint64_t half = high >> 1;
-
-        const uint64_t significand = F | Double::HiddenBit;
         const uint64_t fraction = significand & mask;
 
         uint32_t t = static_cast<uint32_t>(significand >> -exponent);
@@ -244,16 +243,21 @@ inline uint64_t DoubleToSmallInt(double x, bool& is_small_int)
     if (0x3FF0000000000000ull <= d.bits && d.bits < 0x4340000000000000ull) // 1 <= x < 2^53
     {
         // x = significand * 2^exponent is a normalized floating-point number.
-        const auto significand = Double::HiddenBit | d.PhysicalSignificand();
-        const auto exponent = static_cast<int>(d.PhysicalExponent()) - Double::ExponentBias;
+        const uint64_t F = d.PhysicalSignificand();
+        const uint64_t E = d.PhysicalExponent();
+
+        const auto significand = Double::HiddenBit | F;
+        const auto exponent = static_cast<int>(E) - Double::ExponentBias;
         JSON_ASSERT(-exponent >= 0);
         JSON_ASSERT(-exponent < Double::SignificandSize);
 
         // Test whether the lower -exponent bits are 0, i.e.
         // whether the fractional part of x is 0.
-        const uint64_t value = significand >> -exponent;
-        is_small_int = (significand == (value << -exponent));
-        return value;
+        const uint64_t mask = (uint64_t{1} << -exponent) - 1;
+        const uint64_t fraction = significand & mask;
+
+        is_small_int = (fraction == 0);
+        return significand >> -exponent;
     }
     else
     {
