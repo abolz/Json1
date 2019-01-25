@@ -300,6 +300,7 @@ inline Uint64x2 ComputePow5Double(int i)
 #else // CC_OPTIMIZE_SIZE
 // sizeof(tables) = 9888 bytes
 
+// Computes 5^-i in the form required by Ryu
 inline Uint64x2 ComputePow5InvDouble(int i)
 {
     static constexpr Uint64x2 kPow5Inv[] = { // 4672 bytes
@@ -602,7 +603,7 @@ inline Uint64x2 ComputePow5InvDouble(int i)
     return kPow5Inv[i];
 }
 
-// Computes 5^-i in the form required by Ryu.
+// Computes 5^i in the form required by Ryu.
 inline Uint64x2 ComputePow5Double(int i)
 {
     static constexpr Uint64x2 kPow5[] = { // 5216 bytes
