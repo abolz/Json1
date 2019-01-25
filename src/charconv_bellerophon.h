@@ -21,9 +21,7 @@
 #pragma once
 
 #include "charconv_common.h"
-#if !CC_OPTIMIZE_SIZE
 #include "charconv_pow10.h"
-#endif
 
 namespace charconv {
 namespace bellerophon {
@@ -440,103 +438,6 @@ inline int BinaryExponentFromDecimalExponent(int k)
     return (k * 108853 - 63 * (1 << 15)) >> 15;
 }
 
-#if CC_OPTIMIZE_SIZE
-// sizeof(tables) = 340 + 128 = 468 bytes
-
-constexpr int kCachedPowersSize         =   43;
-constexpr int kCachedPowersMinDecExp    = -348;
-constexpr int kCachedPowersMaxDecExp    =  324;
-constexpr int kCachedPowersDecExpStep   =   16;
-
-inline CachedPower GetCachedPowerForIndex(int index)
-{
-    static constexpr uint64_t kSignificands[] = { // 340 bytes
-        0xFA8FD5A0081C0288, // * 2^-1220 <  10^-348
-        0x8B16FB203055AC76, // * 2^-1166 <  10^-332
-        0x9A6BB0AA55653B2D, // * 2^-1113 <  10^-316
-        0xAB70FE17C79AC6CA, // * 2^-1060 <  10^-300
-        0xBE5691EF416BD60C, // * 2^-1007 <  10^-284
-        0xD3515C2831559A83, // * 2^-954  <  10^-268
-        0xEA9C227723EE8BCB, // * 2^-901  <  10^-252
-        0x823C12795DB6CE57, // * 2^-847  <  10^-236
-        0x9096EA6F3848984F, // * 2^-794  <  10^-220
-        0xA086CFCD97BF97F4, // * 2^-741  >  10^-204
-        0xB23867FB2A35B28E, // * 2^-688  >  10^-188
-        0xC5DD44271AD3CDBA, // * 2^-635  <  10^-172
-        0xDBAC6C247D62A584, // * 2^-582  >  10^-156
-        0xF3E2F893DEC3F126, // * 2^-529  <  10^-140
-        0x87625F056C7C4A8B, // * 2^-475  <  10^-124
-        0x964E858C91BA2655, // * 2^-422  <  10^-108
-        0xA6DFBD9FB8E5B88F, // * 2^-369  >  10^-92
-        0xB94470938FA89BCF, // * 2^-316  >  10^-76
-        0xCDB02555653131B6, // * 2^-263  <  10^-60
-        0xE45C10C42A2B3B06, // * 2^-210  >  10^-44
-        0xFD87B5F28300CA0E, // * 2^-157  >  10^-28
-        0x8CBCCC096F5088CC, // * 2^-103  >  10^-12
-        0x9C40000000000000, // * 2^-50   == 10^4
-        0xAD78EBC5AC620000, // * 2^3     == 10^20
-        0xC097CE7BC90715B3, // * 2^56    <  10^36
-        0xD5D238A4ABE98068, // * 2^109   <  10^52
-        0xED63A231D4C4FB27, // * 2^162   <  10^68
-        0x83C7088E1AAB65DB, // * 2^216   <  10^84
-        0x924D692CA61BE758, // * 2^269   <  10^100
-        0xA26DA3999AEF774A, // * 2^322   >  10^116
-        0xB454E4A179DD1877, // * 2^375   <  10^132
-        0xC83553C5C8965D3D, // * 2^428   <  10^148
-        0xDE469FBD99A05FE3, // * 2^481   <  10^164
-        0xF6C69A72A3989F5C, // * 2^534   >  10^180
-        0x88FCF317F22241E2, // * 2^588   <  10^196
-        0x98165AF37B2153DF, // * 2^641   >  10^212
-        0xA8D9D1535CE3B396, // * 2^694   <  10^228
-        0xBB764C4CA7A44410, // * 2^747   >  10^244
-        0xD01FEF10A657842C, // * 2^800   <  10^260
-        0xE7109BFBA19C0C9D, // * 2^853   <  10^276
-        0x80444B5E7AA7CF85, // * 2^907   <  10^292
-        0x8E679C2F5E44FF8F, // * 2^960   <  10^308
-        0x9E19DB92B4E31BA9, // * 2^1013  <  10^324
-    };
-
-    CC_ASSERT(index >= 0);
-    CC_ASSERT(index < kCachedPowersSize);
-
-    int const k = kCachedPowersMinDecExp + index * kCachedPowersDecExpStep;
-    int const e = BinaryExponentFromDecimalExponent(k);
-    return {kSignificands[index], e, k};
-}
-
-// Returns 10^k as an exact DiyFp.
-// PRE: 1 <= k < kCachedPowersDecExpStep
-inline DiyFp GetExactPow10(int k)
-{
-    static_assert(kCachedPowersDecExpStep <= 16, "internal error");
-    static constexpr uint64_t kSignificands[16] = { // 128 bytes
-        0x8000000000000000, // * 2^-63   == 10^0 (unused)
-        0xA000000000000000, // * 2^-60   == 10^1
-        0xC800000000000000, // * 2^-57   == 10^2
-        0xFA00000000000000, // * 2^-54   == 10^3
-        0x9C40000000000000, // * 2^-50   == 10^4
-        0xC350000000000000, // * 2^-47   == 10^5
-        0xF424000000000000, // * 2^-44   == 10^6
-        0x9896800000000000, // * 2^-40   == 10^7
-        0xBEBC200000000000, // * 2^-37   == 10^8
-        0xEE6B280000000000, // * 2^-34   == 10^9
-        0x9502F90000000000, // * 2^-30   == 10^10
-        0xBA43B74000000000, // * 2^-27   == 10^11
-        0xE8D4A51000000000, // * 2^-24   == 10^12
-        0x9184E72A00000000, // * 2^-20   == 10^13
-        0xB5E620F480000000, // * 2^-17   == 10^14
-        0xE35FA931A0000000, // * 2^-14   == 10^15
-    };
-
-    CC_ASSERT(k > 0);
-    CC_ASSERT(k < kCachedPowersDecExpStep);
-
-    int const e = BinaryExponentFromDecimalExponent(k);
-    return {kSignificands[k], e};
-}
-
-#endif // !CC_OPTIMIZE_SIZE
-
 // Returns a cached power of ten x ~= 10^n such that
 //  n <= k < n + kCachedPowersDecExpStep.
 //
@@ -544,20 +445,6 @@ inline DiyFp GetExactPow10(int k)
 // PRE: k <  kCachedPowersMaxDecExp + kCachedPowersDecExpStep
 inline CachedPower GetCachedPowerForDecimalExponent(int k)
 {
-#if CC_OPTIMIZE_SIZE
-    CC_ASSERT(k >= kCachedPowersMinDecExp);
-    CC_ASSERT(k <  kCachedPowersMaxDecExp + kCachedPowersDecExpStep);
-
-    int const index = static_cast<int>( static_cast<unsigned>(-kCachedPowersMinDecExp + k) / kCachedPowersDecExpStep );
-    CC_ASSERT(index >= 0);
-    CC_ASSERT(index < kCachedPowersSize);
-
-    auto const cached = GetCachedPowerForIndex(index);
-    CC_ASSERT(k >= cached.k);
-    CC_ASSERT(k <  cached.k + kCachedPowersDecExpStep);
-
-    return cached;
-#else
     auto const pow = (k >= 0)
 		? ComputePow10SignificandForPositiveExponent(k)
 		: ComputePow10SignificandForNegativeExponent(-k);
@@ -571,7 +458,6 @@ inline CachedPower GetCachedPowerForDecimalExponent(int k)
     auto const e = BinaryExponentFromDecimalExponent(k);
 
     return {f, e, k};
-#endif
 }
 
 // Max double: 1.7976931348623157 * 10^308, which has 309 digits.
@@ -731,49 +617,6 @@ inline StrtodApproxResult StrtodApprox(char const* digits, int num_digits, int e
     auto const cached = GetCachedPowerForDecimalExponent(exponent);
     auto const cached_power = DiyFp(cached.f, cached.e);
 
-#if CC_OPTIMIZE_SIZE
-    // Not all powers-of-ten are cached.
-    // If cached.k != exponent we need to multiply 'x' by the difference first.
-    // This may introduce an additional error.
-
-    if (cached.k != exponent)
-    {
-        auto const adjustment_exponent = exponent - cached.k;
-        auto const adjustment_power = GetExactPow10(adjustment_exponent);
-
-        CC_ASSERT(IsNormalized(input.x));
-        CC_ASSERT(IsNormalized(adjustment_power));
-
-        input.x = Multiply(input.x, adjustment_power);
-        // x ~= digits * 10^adjustment_exponent
-
-        // Adjust error.
-        // The adjustment_power is exact (err_y = 0).
-        // There is hence only an additional error of (at most) 1/2.
-
-        if (num_digits + adjustment_exponent <= std::numeric_limits<uint64_t>::digits10)
-        {
-            // x and adjustment_power are exact.
-            // The product (digits * 10^adjustment_exponent) fits into an uint64_t.
-            // x * adjustment_power is therefore exact, too, and there is no additional error.
-        }
-        else
-        {
-            input.error += ULP / 2;
-
-            CC_ASSERT(input.error <= 17 * (ULP / 2));
-        }
-
-        // The result of the multiplication might not be normalized.
-        // Normalize 'x' again and scale the error.
-        Normalize(input);
-
-        // Since both factors are normalized, input.f >= 2^(q-2), and the scaling
-        // factor in the normalization step above is bounded by 2^1.
-        CC_ASSERT(input.error <= 34 * (ULP / 2));
-    }
-#endif
-
     CC_ASSERT(IsNormalized(input.x));
     CC_ASSERT(IsNormalized(cached_power));
 
@@ -793,7 +636,7 @@ inline StrtodApproxResult StrtodApprox(char const* digits, int num_digits, int e
     input.error += ULP / 2 + ULP / 2;
 #endif
 
-    CC_ASSERT(input.error <= 36 * (ULP / 2));
+    CC_ASSERT(input.error <= 18 * (ULP / 2));
 
     // The result of the multiplication might not be normalized.
     // Normalize 'x' again and scale the error.
@@ -801,7 +644,7 @@ inline StrtodApproxResult StrtodApprox(char const* digits, int num_digits, int e
 
     // Since both factors were normalized, the scaling factor in the
     // normalization step above is bounded by 2^1.
-    CC_ASSERT(input.error <= 72 * (ULP / 2));
+    CC_ASSERT(input.error <= 36 * (ULP / 2));
 
     // We now have an approximation x = f * 2^e ~= digits * 10^exponent.
     //
