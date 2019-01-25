@@ -45,13 +45,6 @@
 #define CC_ASSERT(X) assert(X)
 #endif
 
-// If enabled, save ~5KB (bellerophon) + ~9KB (ryu) of constant data,
-// such that only ~1.4KB are used.
-// Results in slightly more (and slightly slower) code, though.
-#ifndef CC_OPTIMIZE_SIZE
-#define CC_OPTIMIZE_SIZE 0
-#endif
-
 namespace charconv {
 
 //==================================================================================================
