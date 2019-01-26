@@ -157,8 +157,8 @@ inline bool operator!=(Double x, Double y) { return x.bits != y.bits; }
 //==================================================================================================
 
 struct Uint64x2 {
-    uint64_t lo;
     uint64_t hi;
+    uint64_t lo;
 };
 
 inline Uint64x2 Mul128(uint64_t a, uint64_t b)
@@ -171,11 +171,11 @@ inline Uint64x2 Mul128(uint64_t a, uint64_t b)
     uint64_t const lo = static_cast<uint64_t>(product);
     uint64_t const hi = static_cast<uint64_t>(product >> 64);
 
-    return {lo, hi};
+    return {hi, lo};
 #elif CC_HAS_64_BIT_INTRINSICS
     uint64_t hi;
     uint64_t lo = _umul128(a, b, &hi);
-    return {lo, hi};
+    return {hi, lo};
 #else
     uint32_t const aLo = static_cast<uint32_t>(a);
     uint32_t const aHi = static_cast<uint32_t>(a >> 32);
@@ -200,7 +200,7 @@ inline Uint64x2 Mul128(uint64_t a, uint64_t b)
 
     uint64_t const hi = b11 + mid1Hi + mid2Hi;
     uint64_t const lo = (uint64_t{mid2Lo} << 32) + b00Lo;
-    return {lo, hi};
+    return {hi, lo};
 #endif
 }
 
