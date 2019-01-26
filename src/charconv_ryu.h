@@ -310,7 +310,7 @@ inline DoubleToDecimalResult DoubleToDecimal(double value)
         e10 = q;
 
 		// mul = 5^-q
-        auto const mul = ComputePow10SignificandForNegativeExponent(q);
+        auto const mul = ComputePow10Significand(-q);
         MulShiftAll(mv, mp, mm, &mul, j, &vr, &vp, &vm);
 
         // 22 = floor(log_5(2^53))
@@ -352,7 +352,7 @@ inline DoubleToDecimalResult DoubleToDecimal(double value)
         e10 = -i;
 
         // mul = 5^i
-        auto const mul = ComputePow10SignificandForPositiveExponent(i);
+        auto const mul = ComputePow10Significand(i);
         MulShiftAll(mv, mp, mm, &mul, j, &vr, &vp, &vm);
 
         if (q <= 1)

@@ -426,9 +426,7 @@ inline T ReadInt(char const* str, int len)
 // PRE: k <  kCachedPowersMaxDecExp + kCachedPowersDecExpStep
 inline DiyFp GetCachedPowerForDecimalExponent(int k)
 {
-    auto const pow = (k >= 0)
-		? ComputePow10SignificandForPositiveExponent(k)
-		: ComputePow10SignificandForNegativeExponent(-k);
+    auto const pow = ComputePow10Significand(k);
     //
     // FIXME:
     //
