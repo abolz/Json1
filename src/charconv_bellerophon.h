@@ -679,74 +679,61 @@ inline StrtodApproxResult StrtodApprox(char const* digits, int num_digits, int e
 
     uint64_t const half = uint64_t{1} << (excess_bits - 1);
 
-    // Split up error into high (integral) and low (fractional) parts,
-    // since half * kULP might overflow.
-    uint32_t const error_hi = input.error / ULP;
-    uint32_t const error_lo = input.error % ULP;
-    static_cast<void>(error_lo);
-
     CC_ASSERT(input.error > 0);
 
-    // half + error_hi must not overflow.
-    // Guaranteed since error_hi <= 36 and half <= 2^63.
-    CC_ASSERT(half <= UINT64_MAX - error_hi);
+    uint64_t p1;
+    uint64_t p2;
+    if (excess_bits < 64)
+    {
+        p1 = input.x.f >> excess_bits;
+//      p2 = input.x.f & ((uint64_t{1} << excess_bits) - 1);
+        p2 = input.x.f & (2*half - 1);
+    }
+    else
+    {
+        p1 = 0;
+        p2 = input.x.f;
+    }
 
-    // We need to verify:
-    //
-    //  half >= error / ULP
-    //      <=> half >= (error_hi * ULP + error_lo) / ULP
-    //      <=> half >= error_hi + error_lo / ULP
-    //      <=> half >= error_hi && half - error_hi >= error_lo / ULP
-    //      <=> half >= error_hi && ULP * (half - error_hi) >= error_lo
-    //
-    // to make sure, that the *only* correct values are
-    // either p1 * 2^(e + n) or (p1 + 1) * 2^(e + n).
-    CC_ASSERT(half >= error_hi);
-    // Additionally we need to make sure that (half - error_hi) * ULP does not overflow
-    // in the computation below.
-    //
-    // Since ULP = 2, this can only fail if half = 2^63 and error_hi = 0.
-    //
-    // But the latter conditions can never be true at the same time:
-    //  - error_hi = 0 implies input is exact and 0 <= exponent <= 27.
-    //  - half = 2^63 implies excess_bits = 64, which in turn implies prec = 0, which
-    //    implies exponent < -1075 - 64.
-    CC_ASSERT((half - error_hi) <= UINT64_MAX / ULP);
-    CC_ASSERT((half - error_hi) * ULP >= error_lo);
-
-#if 0
-    // Note: right shift of >= bit-width is undefined.
-    uint64_t const p2 = input.x.f & (0xFFFFFFFFFFFFFFFF >> (64 - excess_bits));
-#else
-    uint64_t const p2 = (excess_bits < 64) ? (input.x.f & ((uint64_t{1} << excess_bits) - 1)) : input.x.f;
-#endif
-
-    // Truncate the significand to p = q - n bits and move the discarded bits
-    // into the (binary) exponent.
-    //
-    // Note: right shift of >= bit-width is undefined.
     DiyFp result;
-    result.f = (excess_bits < 64) ? (input.x.f >> excess_bits) : 0;
-    result.e = input.x.e + excess_bits;
+    result.f = p1;
+    result.e = input.x.e + excess_bits; // Move the discarded bits into the exponent.
 
     // Note:
     // Since error is non-zero, we can safely use '<=' and '>=' in the
     // comparisons below.
 
-    bool success;
+    // The following code assumes ULP = 2.
+    static_assert(ULP == 2, "internal error");
 
     // We need to check whether:
     //
     //  p2 * ULP >= half * ULP + error
-    //      <=> p2 * ULP >= half * ULP + (error_hi * ULP + error_lo)
-    //      <=> p2 * ULP >= (half + error_hi) * ULP + error_lo
-    //      <=> p2 >= (half + error_hi) + error_lo / ULP
+    //      <=> (p2 - half) * ULP >= error
     //
-    // But half * ULP might overflow, in case half = 2^63.
+    // But half * ULP might overflow (in case half = 2^63).
+    // So write this as
     //
-    // Since error_lo / ULP < 1, we test for p2 > half + error_hi
-    // and use the slow path in a few more cases.
-    if (p2 > half + error_hi)
+    //  p2 >= half && (p2 - half) * ULP >= error.
+    //
+    // Here, (p2 - half) * 2 will not overflow:
+    // If half <= 2^62 < 2^63, we have p2 <= 2^63 - 1, so (p2 - half) <= 2^63 - 1,
+    // and the multiplication will not overflow.
+    // If half = 2^63, we have p2 != 0, since digits is trimmed and non-zero, so
+    // (p2 - half) <= 2^64 - 1 - 2^63 = 2^63 - 1, and the multiplication will not overflow.
+    //
+    // Likewise, for the test
+    //
+    //  p2 * ULP <= half * ULP - error
+    //      <=> (half - p2) * ULP >= error
+    //
+    // since either half < 2^63 - 1 or p2 != 0.
+
+    CC_ASSERT(p2 < half || (p2 - half) <= UINT64_MAX / ULP);
+    CC_ASSERT(p2 > half || (half - p2) <= UINT64_MAX / ULP);
+
+    bool success;
+    if (p2 >= half && (p2 - half) * ULP >= input.error)
     {
         success = true;
 
@@ -765,9 +752,7 @@ inline StrtodApproxResult StrtodApprox(char const* digits, int num_digits, int e
             result.e  += 1;
         }
     }
-    // Likewise for:
-    //  p2 * ULP <= half * ULP - error <=> half >= (p2 + error_hi) + error_lo / ULP
-    else if (half > p2 + error_hi)
+    else if (half >= p2 && (half - p2) * ULP >= input.error)
     {
         success = true;
 
