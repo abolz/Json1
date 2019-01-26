@@ -110,31 +110,6 @@ inline int Log10Pow5(int e)
 constexpr int kDoublePow5InvBitLength = 128;
 constexpr int kDoublePow5BitLength = 128;
 
-inline uint64_t ShiftRight128(Uint64x2 x, int dist)
-{
-    // For the __shiftright128 intrinsic, the shift value is always modulo 64.
-    // In the current implementation of the double-precision version of Ryu, the
-    // shift value is always < 64.
-    // Check this here in case a future change requires larger shift values. In
-    // this case this function needs to be adjusted.
-    CC_ASSERT(dist >= 56); // 56: MulShiftAll fallback, 57: otherwise.
-    CC_ASSERT(dist <= 63);
-
-#if CC_HAS_UINT128
-    __extension__ using uint128_t = unsigned __int128;
-    return static_cast<uint64_t>(((uint128_t{x.hi} << 64) | x.lo) >> dist);
-#elif CC_HAS_64_BIT_INTRINSICS
-    return __shiftright128(x.lo, x.hi, static_cast<unsigned char>(dist));
-#else
-#if CC_32_BIT_PLATFORM
-    // Avoid a 64-bit shift by taking advantage of the range of shift values.
-    return (x.hi << (64 - dist)) | (static_cast<uint32_t>(x.lo >> 32) >> (dist - 32));
-#else
-    return (x.hi << (64 - dist)) | (x.lo >> dist);
-#endif
-#endif
-}
-
 // We need a 64x128-bit multiplication and a subsequent 128-bit shift.
 // Multiplication:
 //   The 64-bit factor is variable and passed in, the 128-bit factor comes
