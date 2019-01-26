@@ -132,50 +132,19 @@ inline uint64_t MulShift(uint64_t m, Uint64x2 const* mul, int j)
 #endif
 }
 
-#if 1 // CC_HAS_UINT128 || CC_HAS_64_BIT_INTRINSICS
 inline void MulShiftAll(uint64_t mv, uint64_t mp, uint64_t mm, Uint64x2 const* mul, int j, uint64_t* vr, uint64_t* vp, uint64_t* vm)
 {
+    //
+    // TODO:
+    //
+    // Optimize (at least for 32-bit platforms)?!?!
+    // As in https://github.com/ulfjack/ryu/blob/2ec9ead2400afd7ff91a563fbc46ec62984fa3d0/ryu/d2s.c#L172-L200
+    //
+
     *vr = MulShift(mv, mul, j);
     *vp = MulShift(mp, mul, j);
     *vm = MulShift(mm, mul, j);
 }
-#else
-inline void MulShiftAll(uint64_t mv, uint64_t /*mp*/, uint64_t mm, Uint64x2 const* mul, int j, uint64_t* vr, uint64_t* vp, uint64_t* vm)
-{
-    CC_ASSERT((mv >> 55) == 0); // m2 is maximum 55 bits
-
-    uint64_t const m2 = mv / 2;
-    uint32_t const mmShift = static_cast<uint32_t>(mv - mm - 1);
-
-    auto const b0 = Mul128(m2, mul->lo);
-    auto const b2 = Mul128(m2, mul->hi);
-
-    uint64_t const lo  = b0.lo;
-    uint64_t const mid = b2.lo + b0.hi;
-    uint64_t const hi  = b2.hi + (mid < b0.hi);
-    *vr = ShiftRight128({mid, hi}, j - 64 - 1);
-
-    uint64_t const lo2  = lo + mul->lo;
-    uint64_t const mid2 = mid + mul->hi + (lo2 < lo);
-    uint64_t const hi2  = hi + (mid2 < mid);
-    *vp = ShiftRight128({mid2, hi2}, j - 64 - 1);
-
-    if (mmShift == 1) {
-        uint64_t const lo3  = lo - mul->lo;
-        uint64_t const mid3 = mid - mul->hi - (lo3 > lo);
-        uint64_t const hi3  = hi - (mid3 > mid);
-        *vm = ShiftRight128({mid3, hi3}, j - 64 - 1);
-    } else {
-        uint64_t const lo3  = lo + lo;
-        uint64_t const mid3 = mid + mid + (lo3 < lo);
-        uint64_t const hi3  = hi + hi + (mid3 < mid);
-        uint64_t const lo4  = lo3 - mul->lo;
-        uint64_t const mid4 = mid3 - mul->hi - (lo4 > lo3);
-        uint64_t const hi4  = hi3 - (mid4 > mid3);
-        *vm = ShiftRight128({mid4, hi4}, j - 64);
-    }
-}
-#endif
 
 #if CC_32_BIT_PLATFORM
 
