@@ -32,6 +32,8 @@ inline size_t ArraySize(T const (&)[N])
     return N;
 }
 
+// Returns the highest 128 bits of 2^(128 + j) / 10^k,
+// where j = bitlength(k) - 1.
 inline Uint64x2 ComputePow10SignificandForNegativeExponent(int k)
 {
     static constexpr Uint64x2 kSignificands[] = { // 5584 bytes
@@ -396,7 +398,6 @@ inline Uint64x2 ComputePow10SignificandForNegativeExponent(int k)
 }
 
 // Returns the highest 128 bits of 10^k.
-// k >= 0.
 inline Uint64x2 ComputePow10SignificandForPositiveExponent(int k)
 {
     static constexpr Uint64x2 kSignificands[] = { // 5216 bytes

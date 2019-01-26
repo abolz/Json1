@@ -301,7 +301,7 @@ inline DoubleToDecimalResult DoubleToDecimal(double value)
     {
         // I tried special-casing q == 0, but there was no effect on performance.
         // q = max(0, log_10(2^e2))
-        int const q = Log10Pow2(e2) - (e2 > 3); // table index
+        int const q = Log10Pow2(e2) - (e2 > 3); // exponent
         CC_ASSERT(q >= 0);
         int const k = kDoublePow5InvBitLength + Pow5BitLength(q) - 1;
         int const j = -e2 + q + k - (q == 0); // shift
@@ -343,13 +343,13 @@ inline DoubleToDecimalResult DoubleToDecimal(double value)
         // q = max(0, log_10(5^-e2))
         int const q = Log10Pow5(-e2) - (-e2 > 1);
         CC_ASSERT(q >= 0);
-        int const i = -e2 - q; // table index
+        int const i = -e2 - q; // -exponent
         CC_ASSERT(i > 0);
         int const k = Pow5BitLength(i) - kDoublePow5BitLength;
         int const j = q - k; // shift
         CC_ASSERT(j >= 114);
 
-        e10 = e2 + q;
+        e10 = -i;
 
         // mul = 5^i
         auto const mul = ComputePow10SignificandForPositiveExponent(i);
