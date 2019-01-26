@@ -441,6 +441,17 @@ inline DiyFp GetCachedPowerForDecimalExponent(int k)
     return {f, e};
 }
 
+// Returns x * 10^exponent.
+inline DiyFp MultiplyPow10(DiyFp x, int exponent)
+{
+    auto const pow = GetCachedPowerForDecimalExponent(exponent);
+
+    CC_ASSERT(IsNormalized(x));
+    CC_ASSERT(IsNormalized(pow));
+
+    return Multiply(x, pow);
+}
+
 // Max double: 1.7976931348623157 * 10^308, which has 309 digits.
 // Any x >= 10^309 is interpreted as +infinity.
 constexpr int kDoubleMaxDecimalPower = 309;
@@ -595,12 +606,7 @@ inline StrtodApproxResult StrtodApprox(char const* digits, int num_digits, int e
     //
     //      |X*Y - z| <= 1/2 + (err_x + err_y)
 
-    auto const cached_power = GetCachedPowerForDecimalExponent(exponent);
-
-    CC_ASSERT(IsNormalized(input.x));
-    CC_ASSERT(IsNormalized(cached_power));
-
-    input.x = Multiply(input.x, cached_power);
+    input.x = MultiplyPow10(input.x, exponent);
     // x ~= digits * 10^exponent
 
     // Adjust the error.
