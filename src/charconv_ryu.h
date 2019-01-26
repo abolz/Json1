@@ -113,6 +113,7 @@ constexpr int kDoublePow5BitLength = 128;
 inline uint64_t MulShift(uint64_t m, Uint64x2 const* mul, int j)
 {
     CC_ASSERT((m >> 55) == 0); // m is maximum 55 bits
+    CC_ASSERT((BitLength(mul->hi) + 64 + 55) - j <= 64);
 
 #if CC_HAS_UINT128
     __extension__ using uint128_t = unsigned __int128;
@@ -310,8 +311,6 @@ inline DoubleToDecimalResult DoubleToDecimal(double value)
 
 		// mul = 5^-q
         auto const mul = ComputePow10SignificandForNegativeExponent(q);
-        CC_ASSERT((BitLength(mul.hi) + 64 + 55) - j <= 64);
-
         MulShiftAll(mv, mp, mm, &mul, j, &vr, &vp, &vm);
 
         // 22 = floor(log_5(2^53))
@@ -354,8 +353,6 @@ inline DoubleToDecimalResult DoubleToDecimal(double value)
 
         // mul = 5^i
         auto const mul = ComputePow10SignificandForPositiveExponent(i);
-        CC_ASSERT((BitLength(mul.hi) + 64 + 55) - j <= 64);
-
         MulShiftAll(mv, mp, mm, &mul, j, &vr, &vp, &vm);
 
         if (q <= 1)
