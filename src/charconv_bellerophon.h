@@ -419,18 +419,12 @@ inline T ReadInt(char const* str, int len)
     return value;
 }
 
-struct CachedPower { // c = f * 2^e ~= 10^k
-    uint64_t f;
-    int e; // binary exponent
-    int k; // decimal exponent
-};
-
 // Returns a cached power of ten x ~= 10^n such that
 //  n <= k < n + kCachedPowersDecExpStep.
 //
 // PRE: k >= kCachedPowersMinDecExp
 // PRE: k <  kCachedPowersMaxDecExp + kCachedPowersDecExpStep
-inline CachedPower GetCachedPowerForDecimalExponent(int k)
+inline DiyFp GetCachedPowerForDecimalExponent(int k)
 {
     auto const pow = (k >= 0)
 		? ComputePow10SignificandForPositiveExponent(k)
@@ -438,13 +432,13 @@ inline CachedPower GetCachedPowerForDecimalExponent(int k)
     //
     // FIXME:
     //
-    // This trashes 63 bits of the cached power (for now good reason).
+    // This trashes 64 bits of the cached power (for now good reason).
     // Find a way to make use of these additional bits!!!
     //
 	auto const f = pow.hi + (pow.lo >> 63); // Round, ties towards infinity.
     auto const e = BinaryExponentFromDecimalExponent(k);
 
-    return {f, e, k};
+    return {f, e};
 }
 
 // Max double: 1.7976931348623157 * 10^308, which has 309 digits.
@@ -601,8 +595,7 @@ inline StrtodApproxResult StrtodApprox(char const* digits, int num_digits, int e
     //
     //      |X*Y - z| <= 1/2 + (err_x + err_y)
 
-    auto const cached = GetCachedPowerForDecimalExponent(exponent);
-    auto const cached_power = DiyFp(cached.f, cached.e);
+    auto const cached_power = GetCachedPowerForDecimalExponent(exponent);
 
     CC_ASSERT(IsNormalized(input.x));
     CC_ASSERT(IsNormalized(cached_power));
