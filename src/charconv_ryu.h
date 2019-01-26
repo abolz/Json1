@@ -110,44 +110,6 @@ inline int Log10Pow5(int e)
 constexpr int kDoublePow5InvBitLength = 128;
 constexpr int kDoublePow5BitLength = 128;
 
-// We need a 64x128-bit multiplication and a subsequent 128-bit shift.
-// Multiplication:
-//   The 64-bit factor is variable and passed in, the 128-bit factor comes
-//   from a lookup table. We know that the 64-bit factor only has 55
-//   significant bits (i.e., the 9 topmost bits are zeros). The 128-bit
-//   factor only has 123 significant bits (i.e., the 5 topmost bits are
-//   zeros).
-// Shift:
-//   In principle, the multiplication result requires 55 + 123 = 178 bits to
-//   represent. However, we then shift this value to the right by j, which is
-//   at least j >= 114, so the result is guaranteed to fit into 178 - 114 = 64
-//   bits. This means that we only need the topmost 64 significant bits of
-//   the 64x128-bit multiplication.
-//
-// There are several ways to do this:
-// 1. Best case: the compiler exposes a 128-bit type.
-//    We perform two 64x64-bit multiplications, add the higher 64 bits of the
-//    lower result to the higher result, and shift by j - 64 bits.
-//
-//    We explicitly cast from 64-bit to 128-bit, so the compiler can tell
-//    that these are only 64-bit inputs, and can map these to the best
-//    possible sequence of assembly instructions.
-//    x86-64 machines happen to have matching assembly instructions for
-//    64x64-bit multiplications and 128-bit shifts.
-//
-// 2. Second best case: the compiler exposes intrinsics for the x86-64 assembly
-//    instructions mentioned in 1.
-//
-// 3. We only have 64x64 bit instructions that return the lower 64 bits of
-//    the result, i.e., we have to use plain C.
-//    Our inputs are less than the full width, so we have three options:
-//    a. Ignore this fact and just implement the intrinsics manually.
-//    b. Split both into 31-bit pieces, which guarantees no internal overflow,
-//       but requires extra work upfront (unless we change the lookup table).
-//    c. Split only the first factor into 31-bit pieces, which also guarantees
-//       no internal overflow, but requires extra work since the intermediate
-//       results are not perfectly aligned.
-
 inline uint64_t MulShift(uint64_t m, Uint64x2 const* mul, int j)
 {
     CC_ASSERT((m >> 55) == 0); // m is maximum 55 bits
