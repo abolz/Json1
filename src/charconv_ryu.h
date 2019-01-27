@@ -241,7 +241,7 @@ struct DoubleToDecimalResult {
 inline DoubleToDecimalResult DoubleToDecimal(double value)
 {
     CC_ASSERT(Double(value).IsFinite());
-    CC_ASSERT(value >= 0);
+    CC_ASSERT(value > 0);
 
     //
     // Step 1:
@@ -257,8 +257,6 @@ inline DoubleToDecimalResult DoubleToDecimal(double value)
     uint64_t m2;
     int e2;
     if (ieeeExponent == 0) {
-        if (ieeeMantissa == 0) // +/- 0.0
-            return {0, 0};
         m2 = ieeeMantissa;
         e2 = 1;
     } else {
