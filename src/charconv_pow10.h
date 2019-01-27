@@ -717,17 +717,4 @@ inline Uint64x2 ComputePow10Significand(int k)
     return kSignificands[k];
 }
 
-// Returns the binary exponent of a cached power for a given decimal exponent.
-inline int BinaryExponentFromDecimalExponent(int k)
-{
-    CC_ASSERT(k <=  400);
-    CC_ASSERT(k >= -400);
-
-    // log_2(10) ~= [3; 3, 9, 2, 2, 4, 6, 2, 1, 1, 3] = 254370/76573
-    // 2^15 * 254370/76573 = 108852.93980907...
-
-//  return (k * 108853) / (1 << 15) - (k < 0) - 63;
-    return (k * 108853 - 63 * (1 << 15)) >> 15;
-}
-
 } // namespace charconv
