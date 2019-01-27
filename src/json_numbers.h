@@ -511,12 +511,12 @@ namespace numbers {
 // The buffer must be large enough! (size >= 32 is sufficient.)
 inline char* NumberToString(char* buffer, int buffer_length, double value, bool force_trailing_dot_zero = true)
 {
-    using Flt = charconv::Double;
-
     JSON_ASSERT(buffer_length >= 32);
     static_cast<void>(buffer_length);
 
-    Flt const v(value);
+    using Double = charconv::Double;
+    Double const v(value);
+
     bool const is_neg = v.SignBit();
 
     if (!v.IsFinite())
