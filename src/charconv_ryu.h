@@ -79,12 +79,12 @@ inline int BitLength(uint64_t x) // DEBUG only
     return n;
 }
 
-// e == 0 ? 1 : ceil(log_2(5^e))
-inline int Pow5BitLength(int e)
+// floor(log_2(5^e))
+inline int Log2Pow5(int e)
 {
     CC_ASSERT(e >= 0);
     CC_ASSERT(e <= 1500); // Only tested for e <= 1500
-    return static_cast<int>((static_cast<uint32_t>(e) * 1217359) >> 19) + 1;
+    return static_cast<int>((static_cast<uint32_t>(e) * 1217359) >> 19);
 }
 
 // floor(log_10(2^e))
@@ -106,9 +106,6 @@ inline int Log10Pow5(int e)
 //==================================================================================================
 // IEEE double-precision implementation
 //==================================================================================================
-
-constexpr int kDoublePow5InvBitLength = 128;
-constexpr int kDoublePow5BitLength = 128;
 
 inline uint64_t MulShift(uint64_t m, Uint64x2 const* mul, int j)
 {
@@ -299,15 +296,15 @@ inline DoubleToDecimalResult DoubleToDecimal(double value)
     {
         // I tried special-casing q == 0, but there was no effect on performance.
         // q = max(0, log_10(2^e2))
-        int const q = Log10Pow2(e2) - (e2 > 3); // exponent
+        int const q = Log10Pow2(e2) - (e2 > 3); // exponent <= 0
         CC_ASSERT(q >= 0);
-        int const k = kDoublePow5InvBitLength + Pow5BitLength(q) - 1;
-        int const j = -e2 + q + k - (q == 0); // shift
+        int const k =  Log2Pow5(q) + (128 - (q == 0));
+        int const j = -e2 + q + k; // shift
         CC_ASSERT(j >= 115);
 
         e10 = q;
 
-		// mul = 5^-q
+		// mul = [2^k / 5^q] + 1
         auto const mul = ComputePow10Significand(-q);
         MulShiftAll(mv, mp, mm, &mul, j, &vr, &vp, &vm);
 
@@ -341,15 +338,15 @@ inline DoubleToDecimalResult DoubleToDecimal(double value)
         // q = max(0, log_10(5^-e2))
         int const q = Log10Pow5(-e2) - (-e2 > 1);
         CC_ASSERT(q >= 0);
-        int const i = -e2 - q; // -exponent
+        int const i = -e2 - q; // -exponent > 0
         CC_ASSERT(i > 0);
-        int const k = Pow5BitLength(i) - kDoublePow5BitLength;
+        int const k = Log2Pow5(i) + 1 - 128;
         int const j = q - k; // shift
         CC_ASSERT(j >= 114);
 
         e10 = -i;
 
-        // mul = 5^i
+        // mul = [5^(-e2 - q) / 2^k]
         auto const mul = ComputePow10Significand(i);
         MulShiftAll(mv, mp, mm, &mul, j, &vr, &vp, &vm);
 
