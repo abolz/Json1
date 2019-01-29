@@ -264,11 +264,11 @@ enum class StringClass : uint8_t {
 
 enum class Identifier : uint8_t {
     other,
-    kw_null,
-    kw_true,
-    kw_false,
-    kw_nan,      // Not a keyword, actually.
-    kw_infinity, // Not a keyword, actually.
+    null,
+    true_,
+    false_,
+    nan,
+    infinity,
 };
 
 inline Identifier ScanIdentifer(char const* next, char const* last)
@@ -277,15 +277,15 @@ inline Identifier ScanIdentifer(char const* next, char const* last)
     JSON_ASSERT(len >= 1);
 
     if (len == 4 && std::memcmp(next, "null", 4) == 0)
-        return Identifier::kw_null;
+        return Identifier::null;
     if (len == 4 && std::memcmp(next, "true", 4) == 0)
-        return Identifier::kw_true;
+        return Identifier::true_;
     if (len == 5 && std::memcmp(next, "false", 5) == 0)
-        return Identifier::kw_false;
+        return Identifier::false_;
     if (len == 3 && std::memcmp(next, "NaN", 3) == 0)
-        return Identifier::kw_nan;
+        return Identifier::nan;
     if (len == 8 && std::memcmp(next, "Infinity", 8) == 0)
-        return Identifier::kw_infinity;
+        return Identifier::infinity;
 
     return Identifier::other;
 }
@@ -954,21 +954,21 @@ ParseStatus Parser<ParseCallbacks>::ConsumePrimitive()
     case TokenKind::identifier:
         switch (ScanIdentifer(first, last))
         {
-        case Identifier::kw_null:
+        case Identifier::null:
             ec = cb.HandleNull();
             break;
-        case Identifier::kw_true:
+        case Identifier::true_:
             ec = cb.HandleTrue();
             break;
-        case Identifier::kw_false:
+        case Identifier::false_:
             ec = cb.HandleFalse();
             break;
-        case Identifier::kw_nan:
+        case Identifier::nan:
             peek.kind = TokenKind::number;
             peek.number_class = NumberClass::nan;
             ec = cb.HandleNumber(first, last, peek.number_class);
             break;
-        case Identifier::kw_infinity:
+        case Identifier::infinity:
             peek.kind = TokenKind::number;
             peek.number_class = NumberClass::pos_infinity;
             ec = cb.HandleNumber(first, last, peek.number_class);
