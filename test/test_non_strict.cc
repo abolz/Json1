@@ -4,7 +4,7 @@
 #include <cmath>
 #include <limits>
 
-TEST_CASE("Comments")
+TEST_CASE("Lenient - Comments")
 {
     std::string const inp = R"(// comment
     /* nested /* multi line */
@@ -33,7 +33,7 @@ here */
     CHECK(val["/*empty object*/"].empty());
 }
 
-TEST_CASE("Invalid block comments")
+TEST_CASE("Lenient - Invalid block comments")
 {
     std::vector<std::string> inputs = {
         "/*",
@@ -156,7 +156,7 @@ TEST_CASE("Lenient")
     REQUIRE(str_expected == str);
 }
 
-TEST_CASE("NaN/Inf")
+TEST_CASE("Lenient - NaN/Inf")
 {
     json::Mode mode = json::Mode::lenient;
     json::Value j;
