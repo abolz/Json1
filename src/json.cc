@@ -771,7 +771,7 @@ struct ParseValueCallbacks
     static constexpr int kMaxElements = 120;
     static constexpr int kMaxMembers = 120;
 
-    ParseOptions options;
+    Mode mode;
     std::vector<Value> stack;
     std::vector<String> keys;
 
@@ -798,7 +798,7 @@ struct ParseValueCallbacks
         if (nc == NumberClass::invalid)
             return ParseStatus::invalid_number;
 
-        if (!options.allow_nan_inf && !IsFinite(nc))
+        if (mode == Mode::strict && !IsFinite(nc))
             return ParseStatus::invalid_number;
 
         //if (options.parse_numbers_as_strings)
@@ -959,13 +959,13 @@ private:
     }
 };
 
-ParseResult json::parse(Value& value, char const* next, char const* last, ParseOptions const& options)
+ParseResult json::parse(Value& value, char const* next, char const* last, Mode mode)
 {
     ParseValueCallbacks cb;
 
-    cb.options = options;
+    cb.mode = mode;
 
-    auto const res = json::ParseSAX(cb, next, last);
+    auto const res = json::ParseSAX(cb, next, last, mode);
     if (res.ec == ParseStatus::success)
     {
         JSON_ASSERT(cb.stack.size() == 1);
@@ -977,12 +977,12 @@ ParseResult json::parse(Value& value, char const* next, char const* last, ParseO
     return res;
 }
 
-ParseStatus json::parse(Value& value, std::string const& str, ParseOptions const& options)
+ParseStatus json::parse(Value& value, std::string const& str, Mode mode)
 {
     char const* next = str.data();
     char const* last = str.data() + str.size();
 
-    return json::parse(value, next, last, options).ec;
+    return json::parse(value, next, last, mode).ec;
 }
 
 //==================================================================================================
@@ -1005,7 +1005,7 @@ static bool StringifyBoolean(std::string& str, bool value)
 
 static bool StringifyNumber(std::string& str, double value, StringifyOptions const& options)
 {
-    if (!options.allow_nan_inf && !std::isfinite(value))
+    if (options.mode == Mode::strict && !std::isfinite(value))
     {
         str += "null";
         return true;

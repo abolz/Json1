@@ -294,6 +294,19 @@ inline Identifier ScanIdentifer(char const* next, char const* last)
 // Lexer
 //==================================================================================================
 
+enum class Mode : uint8_t {
+    // In this mode, the parser only accepts JSON as specified in RFC 8259.
+    // This is the default.
+    strict,
+    // In this mode, the parser accepts accepts JSON as specified in RFC 8259 and additionally:
+    //  - Block comments starting with /* and ending with */ (which may not be nested),
+    //  - Line comments starting with // and ending with a new-line character,
+    //  - Trailing commas in arrays and objects,
+    //  - Unquoted keys in objects,
+    //  - Special values 'NaN' and 'Infinity' when parsing numbers,
+    lenient,
+};
+
 enum class TokenKind : uint8_t {
     unknown,
     invalid_character,
@@ -306,11 +319,10 @@ enum class TokenKind : uint8_t {
     colon,
     string,
     number,
-    //kw_null,
-    //kw_true,
-    //kw_false,
     identifier,
+    comment,
     incomplete_string,
+    incomplete_comment,
 };
 
 struct Token
@@ -334,12 +346,13 @@ private:
 public:
     void SetInput(char const* first, char const* last, bool skip_bom = true);
 
-    Token Lex();
+    Token Lex(Mode mode);
 
 private:
     Token LexString     (char const* p);
     Token LexNumber     (char const* p);
     Token LexIdentifier (char const* p);
+    Token LexComment    (char const* p);
 
     Token MakeToken(char const* p, TokenKind kind);
 };
@@ -360,10 +373,11 @@ inline void Lexer::SetInput(char const* first, char const* last, bool skip_bom)
     end = last;
 }
 
-inline Token Lexer::Lex()
+inline Token Lexer::Lex(Mode mode)
 {
     using namespace json::charclass;
 
+L_again:
     char const* p = ptr;
     for ( ; p != end && IsWhitespace(*p); ++p)
     {
@@ -413,6 +427,14 @@ inline Token Lexer::Lex()
     case '8':
     case '9':
         return LexNumber(p);
+    case '/':
+        {
+            auto const tok = LexComment(p);
+            if (mode != Mode::strict && tok.kind == TokenKind::comment)
+                goto L_again;
+
+            return tok;
+        }
     default:
         if (IsIdentifierStart(ch))
             return LexIdentifier(p);
@@ -535,6 +557,53 @@ inline Token Lexer::LexIdentifier(char const* p)
     return tok;
 }
 
+inline Token Lexer::LexComment(char const* p)
+{
+    JSON_ASSERT(p != end);
+    JSON_ASSERT(*p == '/');
+
+    TokenKind kind = TokenKind::invalid_character;
+
+    ++p; // Skip '/'
+
+    if (p != end)
+    {
+        if (*p == '/')
+        {
+            kind = TokenKind::comment;
+
+            for (++p; p != end; ++p)
+            {
+                if (*p == '\n' || *p == '\r')
+                    break;
+            }
+        }
+        else if (*p == '*')
+        {
+            kind = TokenKind::incomplete_comment;
+
+            for (++p; p != end; /**/)
+            {
+                char const ch = *p;
+                ++p;
+                if (ch == '*')
+                {
+                    if (p == end)
+                        break;
+                    if (*p == '/')
+                    {
+                        ++p;
+                        kind = TokenKind::comment;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    return MakeToken(p, kind);
+}
+
 inline Token Lexer::MakeToken(char const* p, TokenKind kind)
 {
     Token tok;
@@ -587,9 +656,10 @@ class Parser
     ParseCallbacks& cb;
     Lexer           lexer;
     Token           peek; // The next token.
+    Mode            mode;
 
 public:
-    Parser(ParseCallbacks& cb_);
+    Parser(ParseCallbacks& cb_, Mode mode);
 
     void Init(char const* next, char const* last);
 
@@ -611,8 +681,9 @@ private:
 };
 
 template <typename ParseCallbacks>
-Parser<ParseCallbacks>::Parser(ParseCallbacks& cb_)
+Parser<ParseCallbacks>::Parser(ParseCallbacks& cb_, Mode mode_)
     : cb(cb_)
+    , mode(mode_)
 {
 }
 
@@ -634,7 +705,7 @@ Token Parser<ParseCallbacks>::GetPeekToken() const
 template <typename ParseCallbacks>
 Token Parser<ParseCallbacks>::Lex()
 {
-    peek = lexer.Lex();
+    peek = lexer.Lex(mode);
     return peek;
 }
 
@@ -708,14 +779,23 @@ L_begin_object:
     {
         for (;;)
         {
-            if (peek.kind != TokenKind::string)
+            if (peek.kind == TokenKind::string)
+            {
+                JSON_ASSERT(peek.end - peek.ptr >= 2);
+                JSON_ASSERT(peek.ptr[ 0] == '"');
+                JSON_ASSERT(peek.end[-1] == '"');
+                if (Failed ec = cb.HandleKey(peek.ptr + 1, peek.end - 1, peek.string_class))
+                    return ParseStatus(ec);
+            }
+            else if (mode != Mode::strict && peek.kind == TokenKind::identifier)
+            {
+                if (Failed ec = cb.HandleKey(peek.ptr, peek.end, peek.string_class))
+                    return ParseStatus(ec);
+            }
+            else
+            {
                 return ParseStatus::expected_key;
-
-            JSON_ASSERT(peek.end - peek.ptr >= 2);
-            JSON_ASSERT(peek.ptr[ 0] == '"');
-            JSON_ASSERT(peek.end[-1] == '"');
-            if (Failed ec = cb.HandleKey(peek.ptr + 1, peek.end - 1, peek.string_class))
-                return ParseStatus(ec);
+            }
 
             // Read the token after the key.
             // This must be a ':'.
@@ -750,6 +830,8 @@ L_end_member:
                 // Read the token after the ','.
                 // This must be a key.
                 Lex();
+                if (mode != Mode::strict && peek.kind == TokenKind::r_brace)
+                    break;
             }
             else
             {
@@ -816,6 +898,8 @@ L_end_element:
                 // Read the token after the ','.
                 // This must be a JSON value.
                 Lex();
+                if (mode != Mode::strict && peek.kind == TokenKind::r_square)
+                    break;
             }
             else
             {
@@ -926,12 +1010,12 @@ struct ParseResult
 };
 
 template <typename ParseCallbacks>
-ParseResult ParseSAX(ParseCallbacks& cb, char const* next, char const* last)
+ParseResult ParseSAX(ParseCallbacks& cb, char const* next, char const* last, Mode mode)
 {
     JSON_ASSERT(next != nullptr);
     JSON_ASSERT(last != nullptr);
 
-    Parser<ParseCallbacks> parser(cb);
+    Parser<ParseCallbacks> parser(cb, mode);
 
     parser.Init(next, last);
 

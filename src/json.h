@@ -1407,19 +1407,11 @@ struct TestConversionToJson
 // parse
 //==================================================================================================
 
-struct ParseOptions
-{
-    // If true, NaN and Infinity will be parsed as numbers.
-    // Default is false.
-    // NOTE: Setting this flag to true, will accept invalid JSON.
-    bool allow_nan_inf = false;
-};
-
 // Parse the JSON value stored in [NEXT, LAST).
-ParseResult parse(Value& value, char const* next, char const* last, ParseOptions const& options = {});
+ParseResult parse(Value& value, char const* next, char const* last, Mode mode = Mode::strict);
 
 // Parse the JSON value stored in STR.
-ParseStatus parse(Value& value, std::string const& str, ParseOptions const& options = {});
+ParseStatus parse(Value& value, std::string const& str, Mode mode = Mode::strict);
 
 //==================================================================================================
 // stringify
@@ -1427,10 +1419,7 @@ ParseStatus parse(Value& value, std::string const& str, ParseOptions const& opti
 
 struct StringifyOptions
 {
-    // If true, NaN and Infinity will be strinigified as "NaN" or "Infinity", resp.
-    // Default is false.
-    // NOTE: Setting this flag to true, may result in invalid JSON.
-    bool allow_nan_inf = false;
+    Mode mode = Mode::strict;
 
     // If >= 0, pretty-print the JSON.
     // Default is < 0, that is the JSON is rendered as the shortest string possible.

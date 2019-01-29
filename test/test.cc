@@ -1543,59 +1543,22 @@ TEST_CASE("Escape special")
 
 TEST_CASE("NaN/Inf")
 {
-    SECTION("Disallowed")
-    {
-        json::Value j;
+    json::Value j;
 
-        CHECK(json::ParseStatus::invalid_number == json::parse(j, "NaN"));
-        CHECK(json::ParseStatus::invalid_number == json::parse(j, "Infinity"));
-        CHECK(json::ParseStatus::invalid_number == json::parse(j, "-NaN"));
-        CHECK(json::ParseStatus::invalid_number == json::parse(j, "-Infinity"));
+    CHECK(json::ParseStatus::invalid_number == json::parse(j, "NaN"));
+    CHECK(json::ParseStatus::invalid_number == json::parse(j, "Infinity"));
+    CHECK(json::ParseStatus::invalid_number == json::parse(j, "-NaN"));
+    CHECK(json::ParseStatus::invalid_number == json::parse(j, "-Infinity"));
 
-        CHECK(json::ParseStatus::invalid_number == json::parse(j, "+NaN"));
-        CHECK(json::ParseStatus::invalid_number == json::parse(j, "+Infinity"));
+    CHECK(json::ParseStatus::invalid_number == json::parse(j, "+NaN"));
+    CHECK(json::ParseStatus::invalid_number == json::parse(j, "+Infinity"));
 
-        CHECK(json::ParseStatus::unrecognized_identifier == json::parse(j, "Na"));
-        CHECK(json::ParseStatus::unrecognized_identifier == json::parse(j, "nan"));
-        CHECK(json::ParseStatus::unrecognized_identifier == json::parse(j, "NaNNaNNaN"));
-        CHECK(json::ParseStatus::unrecognized_identifier == json::parse(j, "Inf"));
-        CHECK(json::ParseStatus::unrecognized_identifier == json::parse(j, "InfInf"));
-        CHECK(json::ParseStatus::unrecognized_identifier == json::parse(j, "Infinit"));
-        CHECK(json::ParseStatus::unrecognized_identifier == json::parse(j, "infinity"));
-        CHECK(json::ParseStatus::unrecognized_identifier == json::parse(j, "InfinityInfinityInfinity"));
-    }
-
-    SECTION("Allowed")
-    {
-        json::ParseOptions options;
-
-        options.allow_nan_inf = true;
-
-        json::Value j;
-
-        CHECK(json::ParseStatus::success == json::parse(j, "NaN", options));
-        CHECK(j.is_number());
-        CHECK(std::isnan(j.get_number()));
-        CHECK(json::ParseStatus::success == json::parse(j, "Infinity", options));
-        CHECK(j.is_number());
-        CHECK(j.get_number() == std::numeric_limits<double>::infinity());
-        CHECK(json::ParseStatus::success == json::parse(j, "-NaN", options));
-        CHECK(j.is_number());
-        CHECK(std::isnan(j.get_number()));
-        CHECK(json::ParseStatus::success == json::parse(j, "-Infinity", options));
-        CHECK(j.is_number());
-        CHECK(j.get_number() == -std::numeric_limits<double>::infinity());
-
-        CHECK(json::ParseStatus::invalid_number == json::parse(j, "+NaN", options));
-        CHECK(json::ParseStatus::invalid_number == json::parse(j, "+Infinity", options));
-
-        CHECK(json::ParseStatus::unrecognized_identifier == json::parse(j, "Na", options));
-        CHECK(json::ParseStatus::unrecognized_identifier == json::parse(j, "nan", options));
-        CHECK(json::ParseStatus::unrecognized_identifier == json::parse(j, "NaNNaNNaN", options));
-        CHECK(json::ParseStatus::unrecognized_identifier == json::parse(j, "Inf", options));
-        CHECK(json::ParseStatus::unrecognized_identifier == json::parse(j, "InfInf", options));
-        CHECK(json::ParseStatus::unrecognized_identifier == json::parse(j, "Infinit", options));
-        CHECK(json::ParseStatus::unrecognized_identifier == json::parse(j, "infinity", options));
-        CHECK(json::ParseStatus::unrecognized_identifier == json::parse(j, "InfinityInfinityInfinity", options));
-    }
+    CHECK(json::ParseStatus::unrecognized_identifier == json::parse(j, "Na"));
+    CHECK(json::ParseStatus::unrecognized_identifier == json::parse(j, "nan"));
+    CHECK(json::ParseStatus::unrecognized_identifier == json::parse(j, "NaNNaNNaN"));
+    CHECK(json::ParseStatus::unrecognized_identifier == json::parse(j, "Inf"));
+    CHECK(json::ParseStatus::unrecognized_identifier == json::parse(j, "InfInf"));
+    CHECK(json::ParseStatus::unrecognized_identifier == json::parse(j, "Infinit"));
+    CHECK(json::ParseStatus::unrecognized_identifier == json::parse(j, "infinity"));
+    CHECK(json::ParseStatus::unrecognized_identifier == json::parse(j, "InfinityInfinityInfinity"));
 }
