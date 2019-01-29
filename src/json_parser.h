@@ -344,7 +344,7 @@ private:
     char const* end = nullptr;
 
 public:
-    void SetInput(char const* first, char const* last, bool skip_bom = true);
+    void SetInput(char const* first, char const* last);
 
     Token Lex(Mode mode);
 
@@ -357,16 +357,12 @@ private:
     Token MakeToken(char const* p, TokenKind kind);
 };
 
-inline void Lexer::SetInput(char const* first, char const* last, bool skip_bom)
+inline void Lexer::SetInput(char const* first, char const* last)
 {
-    if (skip_bom && last - first >= 3)
+    // Skip UTF-8 "BOM".
+    if (last - first >= 3 && std::memcmp(first, "\xEF\xBB\xBF", 3) == 0)
     {
-        if (static_cast<uint8_t>(first[0]) == 0xEF &&
-            static_cast<uint8_t>(first[1]) == 0xBB &&
-            static_cast<uint8_t>(first[2]) == 0xBF)
-        {
-            first += 3;
-        }
+        first += 3;
     }
 
     ptr = first;
@@ -690,7 +686,7 @@ Parser<ParseCallbacks>::Parser(ParseCallbacks& cb_, Mode mode_)
 template <typename ParseCallbacks>
 void Parser<ParseCallbacks>::Init(char const* next, char const* last)
 {
-    lexer.SetInput(next, last, /*skip_bom*/ true);
+    lexer.SetInput(next, last);
 
     // Get the first token.
     Lex();
