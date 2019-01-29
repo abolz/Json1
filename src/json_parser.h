@@ -254,7 +254,7 @@ inline ScanNumberResult ScanNumber(char const* next, char const* last)
 //==================================================================================================
 
 enum class StringClass : uint8_t {
-    plain_ascii,
+    ascii,
     needs_cleaning,
 };
 
@@ -475,7 +475,7 @@ inline Token Lexer::LexString(char const* p)
     tok.ptr = ptr;
     tok.end = p;
     tok.kind = is_incomplete ? TokenKind::incomplete_string : TokenKind::string;
-    tok.string_class = ((mask & CC_needs_cleaning) != 0) ? StringClass::needs_cleaning : StringClass::plain_ascii;
+    tok.string_class = ((mask & CC_needs_cleaning) != 0) ? StringClass::needs_cleaning : StringClass::ascii;
 //  tok.number_class = 0;
 
     ptr = p;
@@ -545,7 +545,7 @@ inline Token Lexer::LexIdentifier(char const* p)
     tok.ptr = ptr;
     tok.end = p;
     tok.kind = TokenKind::identifier;
-    tok.string_class = ((mask & CC_needs_cleaning) != 0) ? StringClass::needs_cleaning : StringClass::plain_ascii;
+    tok.string_class = ((mask & CC_needs_cleaning) != 0) ? StringClass::needs_cleaning : StringClass::ascii;
 //  tok.number_class = 0;
 
     ptr = p;
