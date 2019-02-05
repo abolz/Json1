@@ -1043,7 +1043,7 @@ ParseResult ParseSAX(ParseCallbacks& cb, char const* next, char const* last, Mod
 //    virtual json::ParseStatus HandleEndMember(size_t& count) = 0;
 //};
 //
-//json::ParseResult ParseJson(ParseCallbacks& cb, char const* next, char const* last)
+//json::ParseResult ParseJson(ParseCallbacks& cb, char const* next, char const* last, json::Mode mode = json::Mode::strict)
 //{
-//    return json::ParseSAX(cb, next, last);
+//    return json::ParseSAX(cb, next, last, mode);
 //}
