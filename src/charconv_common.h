@@ -229,4 +229,36 @@ inline uint64_t ShiftRight128(Uint64x2 x, int dist)
 #endif
 }
 
+// floor(log_2(5^e))
+inline int FloorLog2Pow5(int e)
+{
+    CC_ASSERT(e >= -1764);
+    CC_ASSERT(e <=  1763);
+    return (e * 1217359) >> 19;
+}
+
+// floor(log_2(10^e))
+inline int FloorLog2Pow10(int e)
+{
+    CC_ASSERT(e >= -1233);
+    CC_ASSERT(e <=  1232);
+    return (e * 1741647) >> 19;
+}
+
+// floor(log_10(2^e))
+inline int FloorLog10Pow2(int e)
+{
+    CC_ASSERT(e >= -2620);
+    CC_ASSERT(e <=  2620);
+    return (e * 315653) >> 20;
+}
+
+// floor(log_10(5^e))
+inline int FloorLog10Pow5(int e)
+{
+    CC_ASSERT(e >= -2620);
+    CC_ASSERT(e <=  2620);
+    return (e * 732923) >> 20;
+}
+
 } // namespace charconv

@@ -79,30 +79,6 @@ inline int BitLength(uint64_t x) // DEBUG only
     return n;
 }
 
-// floor(log_2(5^e))
-inline int Log2Pow5(int e)
-{
-    CC_ASSERT(e >= 0);
-    CC_ASSERT(e <= 1500); // Only tested for e <= 1500
-    return static_cast<int>((static_cast<uint32_t>(e) * 1217359) >> 19);
-}
-
-// floor(log_10(2^e))
-inline int Log10Pow2(int e)
-{
-    CC_ASSERT(e >= 0);
-    CC_ASSERT(e <= 1500); // Only tested for e <= 1500
-    return static_cast<int>((static_cast<uint32_t>(e) * 78913) >> 18);
-}
-
-// floor(log_10(5^e))
-inline int Log10Pow5(int e)
-{
-    CC_ASSERT(e >= 0);
-    CC_ASSERT(e <= 1500); // Only tested for e <= 1500
-    return static_cast<int>((static_cast<uint32_t>(e) * 732923) >> 20);
-}
-
 //==================================================================================================
 // IEEE double-precision implementation
 //==================================================================================================
@@ -296,9 +272,9 @@ inline DoubleToDecimalResult DoubleToDecimal(double value)
     {
         // I tried special-casing q == 0, but there was no effect on performance.
         // q = max(0, log_10(2^e2))
-        int const q = Log10Pow2(e2) - (e2 > 3); // exponent <= 0
+        int const q = FloorLog10Pow2(e2) - (e2 > 3); // exponent <= 0
         CC_ASSERT(q >= 0);
-        int const k =  Log2Pow5(q) + (128 - (q == 0));
+        int const k =  FloorLog2Pow5(q) + (128 - (q == 0));
         int const j = -e2 + q + k; // shift
         CC_ASSERT(j >= 115);
 
@@ -336,11 +312,11 @@ inline DoubleToDecimalResult DoubleToDecimal(double value)
     else
     {
         // q = max(0, log_10(5^-e2))
-        int const q = Log10Pow5(-e2) - (-e2 > 1);
+        int const q = FloorLog10Pow5(-e2) - (-e2 > 1);
         CC_ASSERT(q >= 0);
         int const i = -e2 - q; // -exponent > 0
         CC_ASSERT(i > 0);
-        int const k = Log2Pow5(i) + 1 - 128;
+        int const k = FloorLog2Pow5(i) + 1 - 128;
         int const j = q - k; // shift
         CC_ASSERT(j >= 114);
 
