@@ -32,6 +32,272 @@
 namespace json {
 
 //==================================================================================================
+// Traverse (depth-first)
+//==================================================================================================
+
+//struct TraverseCallbacksConcept {
+//    bool HandleNull        (rapidjson::Value const& value);
+//    bool HandleTrue        (rapidjson::Value const& value);
+//    bool HandleFalse       (rapidjson::Value const& value);
+//    bool HandleNumber      (rapidjson::Value const& value);
+//    bool HandleString      (rapidjson::Value const& value);
+//    bool HandleBeginArray  (rapidjson::Value const& value, rapidjson::SizeType size);
+//    bool HandleEndElement  (rapidjson::Value const& value, rapidjson::SizeType size, rapidjson::SizeType index);
+//    bool HandleEndArray    (rapidjson::Value const& value);
+//    bool HandleBeginObject (rapidjson::Value const& value, rapidjson::SizeType size);
+//    bool HandleKey         (rapidjson::Value const& value);
+//    bool HandleEndMember   (rapidjson::Value const& value, rapidjson::SizeType size, rapidjson::SizeType index);
+//    bool HandleEndObject   (rapidjson::Value const& value);
+//};
+
+#if 0
+template <typename TraverseCallbacks>
+inline bool TraverseRapidjsonDocument(TraverseCallbacks& cb, rapidjson::Value const& value)
+{
+#if 0
+    switch (value.GetType())
+    {
+    case rapidjson::kNullType:
+        return cb.HandleNull(value);
+
+    case rapidjson::kTrueType:
+        return cb.HandleTrue(value);
+
+    case rapidjson::kFalseType:
+        return cb.HandleFalse(value);
+
+    case rapidjson::kNumberType:
+        return cb.HandleNumber(value);
+
+    case rapidjson::kStringType:
+        return cb.HandleString(value);
+
+    case rapidjson::kArrayType:
+        {
+            const auto size = value.Size();
+
+            if (!cb.HandleBeginArray(value, size))
+                return false;
+
+            auto I = value.Begin();
+            const auto E = value.End();
+            if (I != E)
+            {
+                for (rapidjson::SizeType index = 0; /**/; ++index)
+                {
+                    if (!TraverseRapidjsonDocument(cb, *I))
+                        return false;
+                    if (!cb.HandleEndElement(*I, size, index))
+                        return false;
+                    if (++I == E)
+                        break;
+                }
+            }
+
+            if (!cb.HandleEndArray(value))
+                return false;
+        }
+        return true;
+
+    case rapidjson::kObjectType:
+        {
+            const auto size = value.MemberCount();
+
+            if (!cb.HandleBeginObject(value, size))
+                return false;
+
+            auto I = value.MemberBegin();
+            const auto E = value.MemberEnd();
+            if (I != E)
+            {
+                for (rapidjson::SizeType index = 0; /**/; ++index)
+                {
+                    if (!cb.HandleKey(I->name))
+                        return false;
+                    if (!TraverseRapidjsonDocument(cb, I->value))
+                        return false;
+                    if (!cb.HandleEndMember(I->value, size, index))
+                        return false;
+                    if (++I == E)
+                        break;
+                }
+            }
+
+            if (!cb.HandleEndObject(value))
+                return false;
+        }
+        return true;
+
+    default:
+        JSON_ASSERT(false && "internal error");
+        return false;
+    }
+#else
+    static constexpr uint32_t MaxDepth = 500;
+    static_assert(MaxDepth >= 1, "invalid parameter");
+
+    struct StackElement {
+        const rapidjson::Value* value;
+        rapidjson::SizeType size;
+        rapidjson::SizeType index;
+    };
+
+    uint32_t stack_size = 0;
+    StackElement stack[MaxDepth];
+
+    switch (value.GetType())
+    {
+    case rapidjson::kNullType:
+        return cb.HandleNull(value);
+    case rapidjson::kTrueType:
+        return cb.HandleTrue(value);
+    case rapidjson::kFalseType:
+        return cb.HandleFalse(value);
+    case rapidjson::kNumberType:
+        return cb.HandleNumber(value);
+    case rapidjson::kStringType:
+        return cb.HandleString(value);
+    case rapidjson::kArrayType:
+        if (!cb.HandleBeginArray(value, value.Size()))
+            return false;
+        if (value.Size() > 0) {
+            stack[stack_size++] = {&value, value.Size(), 0};
+            break;
+        }
+        return cb.HandleEndArray(value);
+    case rapidjson::kObjectType:
+        if (!cb.HandleBeginObject(value, value.MemberCount()))
+            return false;
+        if (value.MemberCount() > 0) {
+            stack[stack_size++] = {&value, value.MemberCount(), 0};
+            break;
+        }
+        return cb.HandleEndObject(value);
+    default:
+        JSON_ASSERT(false && "internal error");
+        return false;
+    }
+
+    while (stack_size != 0)
+    {
+L_dive:
+        auto& top = stack[stack_size - 1];
+        const bool is_array = top.value->IsArray();
+
+        while (top.index < top.size)
+        {
+            const rapidjson::Value* child;
+            if (is_array)
+            {
+                child = &top.value->Begin()[top.index];
+            }
+            else
+            {
+                const auto it = top.value->MemberBegin() + top.index;
+                if (!cb.HandleKey(it->name))
+                    return false;
+                child = &it->value;
+            }
+
+            ++top.index;
+
+            switch (child->GetType())
+            {
+            case rapidjson::kNullType:
+                if (!cb.HandleNull(*child))
+                    return false;
+                break;
+            case rapidjson::kTrueType:
+                if (!cb.HandleTrue(*child))
+                    return false;
+                break;
+            case rapidjson::kFalseType:
+                if (!cb.HandleFalse(*child))
+                    return false;
+                break;
+            case rapidjson::kNumberType:
+                if (!cb.HandleNumber(*child))
+                    return false;
+                break;
+            case rapidjson::kStringType:
+                if (!cb.HandleString(*child))
+                    return false;
+                break;
+            case rapidjson::kArrayType:
+                if (stack_size >= MaxDepth)
+                    return false;
+                if (!cb.HandleBeginArray(*child, child->Size()))
+                    return false;
+                if (child->Size() > 0) {
+                    stack[stack_size++] = {child, child->Size(), 0};
+                    goto L_dive;
+                }
+                if (!cb.HandleEndArray(*child))
+                    return false;
+                break;
+            case rapidjson::kObjectType:
+                if (stack_size >= MaxDepth)
+                    return false;
+                if (!cb.HandleBeginObject(*child, child->MemberCount()))
+                    return false;
+                if (child->MemberCount() > 0) {
+                    stack[stack_size++] = {child, child->MemberCount(), 0};
+                    goto L_dive;
+                }
+                if (!cb.HandleEndObject(*child))
+                    return false;
+                break;
+            default:
+                JSON_ASSERT(false && "internal error");
+                return false;
+            }
+
+            if (is_array)
+            {
+                if (!cb.HandleEndElement(*top.value, top.size, top.index - 1))
+                    return false;
+            }
+            else
+            {
+                if (!cb.HandleEndMember(*top.value, top.size, top.index - 1))
+                    return false;
+            }
+        }
+
+        if (is_array)
+        {
+            if (!cb.HandleEndArray(*top.value))
+                return false;
+        }
+        else
+        {
+            if (!cb.HandleEndObject(*top.value))
+                return false;
+        }
+
+        stack_size--;
+        if (stack_size != 0)
+        {
+            StackElement& prev = stack[stack_size - 1];
+            JSON_ASSERT(prev.index > 0);
+
+            if (prev.value->IsArray())
+            {
+                if (!cb.HandleEndElement(*prev.value, prev.size, prev.index - 1))
+                    return false;
+            }
+            else
+            {
+                if (!cb.HandleEndMember(*prev.value, prev.size, prev.index - 1))
+                    return false;
+            }
+        }
+    }
+#endif
+}
+#endif // 0
+
+//==================================================================================================
 // Parse
 //==================================================================================================
 
@@ -161,7 +427,7 @@ inline ParseResult ParseRapidjsonDocument(rapidjson::Document& document, char co
     auto gen = [&](rapidjson::Document& doc)
     {
         json::impl::RapidjsonDocumentReader cb(&doc);
-        res = json::ParseSAX(cb, next, last);
+        res = json::ParseSAX(cb, next, last, json::Mode::strict);
         return res.ec == json::ParseStatus::success;
     };
 
@@ -426,7 +692,103 @@ inline bool StringifyValue(OutputStream& out, rapidjson::Value const& value, Rap
 template <typename OutputStream>
 inline bool StringifyRapidjsonValue(OutputStream& out, rapidjson::Value const& value, RapidjsonStringifyOptions const& options = {})
 {
+#if 0
+    // FIXME:
+    // Use options!!!
+
+    struct TraverseCallbacks
+    {
+        OutputStream& out;
+        RapidjsonStringifyOptions const& options;
+
+        TraverseCallbacks(OutputStream& out_, RapidjsonStringifyOptions const& options_)
+            : out(out_)
+            , options(options_)
+        {
+        }
+
+        bool HandleNull(rapidjson::Value const& /*value*/)
+        {
+            json::impl::WriteString(out, "null", 4);
+            return true;
+        }
+
+        bool HandleTrue(rapidjson::Value const& /*value*/)
+        {
+            json::impl::WriteString(out, "true", 4);
+            return true;
+        }
+
+        bool HandleFalse(rapidjson::Value const& /*value*/)
+        {
+            json::impl::WriteString(out, "false", 5);
+            return true;
+        }
+
+        bool HandleNumber(rapidjson::Value const& value)
+        {
+            return json::impl::StringifyNumber(out, value, options);
+        }
+
+        bool HandleString(rapidjson::Value const& value)
+        {
+            return json::impl::StringifyString(out, value, options);
+        }
+
+        bool HandleBeginArray(rapidjson::Value const& /*value*/, rapidjson::SizeType /*size*/)
+        {
+            out.Put('[');
+            return true;
+        }
+
+        bool HandleEndElement(rapidjson::Value const& /*value*/, rapidjson::SizeType size, rapidjson::SizeType index)
+        {
+            JSON_ASSERT(size > 0);
+            if (index != size - 1)
+                out.Put(',');
+            return true;
+        }
+
+        bool HandleEndArray(rapidjson::Value const& /*value*/)
+        {
+            out.Put(']');
+            return true;
+        }
+
+        bool HandleBeginObject(rapidjson::Value const& /*value*/, rapidjson::SizeType /*size*/)
+        {
+            out.Put('{');
+            return true;
+        }
+
+        bool HandleKey(rapidjson::Value const& value)
+        {
+            if (!json::impl::StringifyString(out, value, options))
+                return false;
+            out.Put(':');
+            return true;
+        }
+
+        bool HandleEndMember(rapidjson::Value const& /*value*/, rapidjson::SizeType size, rapidjson::SizeType index)
+        {
+            JSON_ASSERT(size > 0);
+            if (index != size - 1)
+                out.Put(',');
+            return true;
+        }
+
+        bool HandleEndObject(rapidjson::Value const& /*value*/)
+        {
+            out.Put('}');
+            return true;
+        }
+    };
+
+    TraverseCallbacks cb(out, options);
+    return TraverseRapidjsonDocument(cb, value);
+#else
     return json::impl::StringifyValue(out, value, options, 0);
+#endif
 }
 
 } // namespace json
