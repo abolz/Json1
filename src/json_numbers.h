@@ -22,11 +22,16 @@
 
 #include "json_parser.h" // NumberClass, Options
 
-#include "charconv_bellerophon.h"
-#include "charconv_ryu.h"
-
 #include <climits>
 #include <limits>
+
+static_assert(std::numeric_limits<double>::is_iec559 &&
+              std::numeric_limits<double>::digits == 53 &&
+              std::numeric_limits<double>::max_exponent == 1024,
+    "This file requires that 'double' is an IEEE-754 double-precision implementation");
+
+#include "charconv_bellerophon.h"
+#include "charconv_ryu.h"
 
 //==================================================================================================
 // Number conversions
