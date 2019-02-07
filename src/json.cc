@@ -817,7 +817,7 @@ struct ParseValueCallbacks
 
             str.reserve(static_cast<size_t>(last - first));
 
-            auto const res = strings::UnescapeString(first, last, [&](char ch) { str.push_back(ch); });
+            auto const res = strings::UnescapeString(first, last, [&](char ch) { str.push_back(ch); }, /*allow_invalid_unicode*/ false);
             if (res.ec != strings::Status::success)
                 return ParseStatus::invalid_string;
 
@@ -876,7 +876,7 @@ struct ParseValueCallbacks
             keys.emplace_back();
             keys.back().reserve(static_cast<size_t>(last - first));
 
-            auto const res = strings::UnescapeString(first, last, [&](char ch) { keys.back().push_back(ch); });
+            auto const res = strings::UnescapeString(first, last, [&](char ch) { keys.back().push_back(ch); }, /*allow_invalid_unicode*/ false);
             if (res.ec != strings::Status::success)
                 return ParseStatus::invalid_string; // return ParseStatus::invalid_key;
         }

@@ -388,7 +388,7 @@ struct UnescapeStringResult {
 };
 
 template <typename YieldChar>
-UnescapeStringResult UnescapeString(char const* curr, char const* last, YieldChar yield, bool allow_invalid_unicode = false)
+UnescapeStringResult UnescapeString(char const* curr, char const* last, YieldChar yield, bool allow_invalid_unicode = true)
 {
     namespace unicode = json::impl::unicode;
 
@@ -536,7 +536,7 @@ struct EscapeStringResult {
 };
 
 template <typename YieldChar>
-EscapeStringResult EscapeString(char const* curr, char const* last, YieldChar yield, bool allow_invalid_unicode = false)
+EscapeStringResult EscapeString(char const* curr, char const* last, YieldChar yield, bool allow_invalid_unicode = true)
 {
     namespace unicode = json::impl::unicode;
 
