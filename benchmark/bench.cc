@@ -19,6 +19,7 @@
 #endif
 
 #include "bench_json1.h"
+#include "bench_nlohmann.h"
 #include "bench_rapidjson.h"
 
 #define REVERSE_ORDER 1
@@ -65,15 +66,15 @@ namespace rapidjson_dom_test {
     }
 }
 
-//namespace nlohmann_sax_test {
-//    void test(jsonstats& stats, const TestFile& file) {
-//        if (!nlohmann_sax_stats(stats, reinterpret_cast<char const*>(file.data), reinterpret_cast<char const*>(file.data) + file.length)) {
-//            fprintf(stderr, "rapidjson sax parse error\n");
-//            abort();
-//        }
-//    }
-//}
-//
+namespace nlohmann_sax_test {
+    void test(jsonstats& stats, const TestFile& file) {
+        if (!nlohmann_sax_stats(stats, reinterpret_cast<char const*>(file.data), reinterpret_cast<char const*>(file.data) + file.length)) {
+            fprintf(stderr, "rapidjson sax parse error\n");
+            abort();
+        }
+    }
+}
+
 //namespace nlohmann_dom_test {
 //    void test(jsonstats& stats, const TestFile& file) {
 //        if (!nlohmann_dom_stats(stats, reinterpret_cast<char const*>(file.data), reinterpret_cast<char const*>(file.data) + file.length)) {
@@ -91,13 +92,15 @@ struct TestImplementation {
 };
 
 TestImplementation test_implementations[] = {
-#if 0
+#if 1
 #if REVERSE_ORDER
     { "json1 sax", &json1_sax_test::test },
     { "rapidjson sax", &rapidjson_sax_test::test },
+    { "nlohmann_sax", &nlohmann_sax_test::test },
 #else
-    { "json1 sax", &json1_sax_test::test },
     { "rapidjson sax", &rapidjson_sax_test::test },
+    { "nlohmann_sax", &nlohmann_sax_stats::test },
+    { "json1 sax", &json1_sax_test::test },
 #endif
 #else
 #if REVERSE_ORDER

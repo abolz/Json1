@@ -220,7 +220,7 @@ bool json1_sax_stats(jsonstats& stats, char const* first, char const* last)
 {
     GenStatsCallbacks cb(stats);
 
-    auto const res = json::ParseSAX(cb, first, last);
+    auto const res = json::ParseSAX(cb, first, last, json::Mode::strict);
     return res.ec == json::ParseStatus::success;
 }
 

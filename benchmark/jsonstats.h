@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdio>
+#include <cmath>
 
 struct jsonstats {
     jsonstats()
@@ -62,11 +63,12 @@ struct jsonstats {
             && array_count == rhs.array_count
             && string_count == rhs.string_count
             && total_string_length == rhs.total_string_length
-            && total_array_length == rhs.total_array_length
-            && total_object_length == rhs.total_object_length
+            //&& total_array_length == rhs.total_array_length
+            //&& total_object_length == rhs.total_object_length
             && total_key_length == rhs.total_key_length
             // TODO: figure this out
-            //fabs(total_number_value - rhs.total_number_value) <= 0.01
+            // && fabs(total_number_value - rhs.total_number_value) <= 0.01
+            && std::round(total_number_value) == std::round(rhs.total_number_value)
             ;
     }
 
