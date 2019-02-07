@@ -229,7 +229,7 @@ inline uint64_t ShiftRight128(Uint64x2 x, int dist)
 #endif
 }
 
-// floor(log_2(5^e))
+// Returns: floor(log_2(5^e))
 inline int FloorLog2Pow5(int e)
 {
     CC_ASSERT(e >= -1764);
@@ -237,7 +237,16 @@ inline int FloorLog2Pow5(int e)
     return (e * 1217359) >> 19;
 }
 
-// floor(log_2(10^e))
+// Returns: ceil(log_2(5^e))
+inline int CeilLog2Pow5(int e)
+{
+    CC_ASSERT(e >= -1764);
+    CC_ASSERT(e <=  1763);
+    return (e * 1217359 + ((1 << 19) - 1)) >> 19;
+}
+
+// Returns: floor(log_2(10^e))
+// Equivalent to: e + FloorLog2Pow5(e)
 inline int FloorLog2Pow10(int e)
 {
     CC_ASSERT(e >= -1233);
@@ -245,7 +254,50 @@ inline int FloorLog2Pow10(int e)
     return (e * 1741647) >> 19;
 }
 
-// floor(log_10(2^e))
+// Returns: ceil(log_2(10^e))
+// Equivalent to: e + CeilLog2Pow5(e)
+inline int CeilLog2Pow10(int e)
+{
+    CC_ASSERT(e >= -1233);
+    CC_ASSERT(e <=  1232);
+    return (e * 1741647 + ((1 << 19) - 1)) >> 19;
+}
+
+// Returns: floor(log_5(2^e))
+inline int FloorLog5Pow2(int e)
+{
+    CC_ASSERT(e >= -1831);
+    CC_ASSERT(e <=  1831);
+    return (e * 225799) >> 19;
+}
+
+// Returns: ceil(log_5(2^e))
+inline int CeilLog5Pow2(int e)
+{
+    CC_ASSERT(e >= -1831);
+    CC_ASSERT(e <=  1831);
+    return (e * 225799 + ((1 << 19) - 1)) >> 19;
+}
+
+// Returns: floor(log_5(10^e))
+// Equivalent to: e + FloorLog5Pow2(e)
+inline int FloorLog5Pow10(int e)
+{
+    CC_ASSERT(e >= -1831);
+    CC_ASSERT(e <=  1831);
+    return (e * 750087) >> 19;
+}
+
+// Returns: ceil(log_5(10^e))
+// Equivalent to: e + CeilLog5Pow2(e)
+inline int CeilLog5Pow10(int e)
+{
+    CC_ASSERT(e >= -1831);
+    CC_ASSERT(e <=  1831);
+    return (e * 750087 + ((1 << 19) - 1)) >> 19;
+}
+
+// Returns: floor(log_10(2^e))
 inline int FloorLog10Pow2(int e)
 {
     CC_ASSERT(e >= -2620);
@@ -253,12 +305,28 @@ inline int FloorLog10Pow2(int e)
     return (e * 315653) >> 20;
 }
 
-// floor(log_10(5^e))
+// Returns: ceil(log_10(2^e))
+inline int CeilLog10Pow2(int e)
+{
+    CC_ASSERT(e >= -2620);
+    CC_ASSERT(e <=  2620);
+    return (e * 315653 + ((1 << 20) - 1)) >> 20;
+}
+
+// Returns: floor(log_10(5^e))
 inline int FloorLog10Pow5(int e)
 {
     CC_ASSERT(e >= -2620);
     CC_ASSERT(e <=  2620);
     return (e * 732923) >> 20;
+}
+
+// Returns: ceil(log_10(5^e))
+inline int CeilLog10Pow5(int e)
+{
+    CC_ASSERT(e >= -2620);
+    CC_ASSERT(e <=  2620);
+    return (e * 732923 + ((1 << 20) - 1)) >> 20;
 }
 
 } // namespace charconv

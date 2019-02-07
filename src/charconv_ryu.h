@@ -21,7 +21,7 @@
 #pragma once
 
 #include "charconv_common.h"
-#include "charconv_pow10.h"
+#include "charconv_pow5.h"
 
 namespace charconv {
 namespace ryu {
@@ -271,17 +271,17 @@ inline DoubleToDecimalResult DoubleToDecimal(double value)
     if (e2 >= 0)
     {
         // I tried special-casing q == 0, but there was no effect on performance.
-        // q = max(0, log_10(2^e2))
+        // q = max(0, log_10(2^e2) - 1)
         int const q = FloorLog10Pow2(e2) - (e2 > 3); // exponent <= 0
         CC_ASSERT(q >= 0);
-        int const k =  FloorLog2Pow5(q) + (128 - (q == 0));
+        int const k = CeilLog2Pow5(q) - 1 + 128;
         int const j = -e2 + q + k; // shift
         CC_ASSERT(j >= 115);
 
         e10 = q;
 
-		// mul = [2^k / 5^q] + 1
-        auto const mul = ComputePow10Significand(-q);
+        // mul = ceil(2^k / 5^q)
+        auto const mul = ComputePow5ForNegativeExponent(q);
         MulShiftAll(mv, mp, mm, &mul, j, &vr, &vp, &vm);
 
         // 22 = floor(log_5(2^53))
@@ -311,7 +311,7 @@ inline DoubleToDecimalResult DoubleToDecimal(double value)
     }
     else
     {
-        // q = max(0, log_10(5^-e2))
+        // q = max(0, log_10(5^-e2) - 1)
         int const q = FloorLog10Pow5(-e2) - (-e2 > 1);
         CC_ASSERT(q >= 0);
         int const i = -e2 - q; // -exponent > 0
@@ -322,8 +322,8 @@ inline DoubleToDecimalResult DoubleToDecimal(double value)
 
         e10 = -i;
 
-        // mul = [5^(-e2 - q) / 2^k]
-        auto const mul = ComputePow10Significand(i);
+        // mul = floor(5^i / 2^k)
+        auto const mul = ComputePow5ForPositiveExponent(i);
         MulShiftAll(mv, mp, mm, &mul, j, &vr, &vp, &vm);
 
         if (q <= 1)

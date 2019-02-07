@@ -21,7 +21,7 @@
 #pragma once
 
 #include "charconv_common.h"
-#include "charconv_pow10.h"
+#include "charconv_pow5.h"
 
 namespace charconv {
 namespace bellerophon {
@@ -426,7 +426,8 @@ inline T ReadInt(char const* str, int len)
 // PRE: k <  kCachedPowersMaxDecExp + kCachedPowersDecExpStep
 inline DiyFp GetCachedPowerForDecimalExponent(int k)
 {
-    auto const pow = ComputePow10Significand(k);
+    // 10^k = 2^k * 5^k
+    auto const pow = ComputePow5(k);
     //
     // FIXME:
     //
@@ -434,15 +435,15 @@ inline DiyFp GetCachedPowerForDecimalExponent(int k)
     // Find a way to make use of these additional bits!!!
     //
 	auto const f = pow.hi + (pow.lo >> 63); // Round, ties towards infinity.
-    auto const e = FloorLog2Pow10(k) - 63;
+    auto const e = FloorLog2Pow10(k) + 1 - 64;
 
     return {f, e};
 }
 
-// Returns x * 10^exponent.
-inline DiyFp MultiplyPow10(DiyFp x, int exponent)
+// Returns x * 10^k.
+inline DiyFp MultiplyPow10(DiyFp x, int k)
 {
-    auto const pow = GetCachedPowerForDecimalExponent(exponent);
+    auto const pow = GetCachedPowerForDecimalExponent(k);
 
     CC_ASSERT(IsNormalized(x));
     CC_ASSERT(IsNormalized(pow));
@@ -610,15 +611,7 @@ inline StrtodApproxResult StrtodApprox(char const* digits, int num_digits, int e
     // Adjust the error.
     // Since all cached powers have an error of less than 1/2 ulp, err_y = 1/2,
     // and the error is therefore less than 1/2 + (err_x + err_y).
-#if 1
-    // If 10^exponent is exact, the additional error is at most ULP/2.
-    // This makes the error analysis slightly harder (see below).
-    input.error += ULP / 2 + (0 <= exponent && exponent <= 27 ? 0 : ULP / 2);
-#else
-    // Use a safe error bound.
-    // This implies error_hi >= 1 (see below).
     input.error += ULP / 2 + ULP / 2;
-#endif
 
     CC_ASSERT(input.error <= 18 * (ULP / 2));
 
