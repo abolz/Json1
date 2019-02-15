@@ -31,7 +31,7 @@
 #define CC_32_BIT_PLATFORM 1
 #endif
 
-#if defined(__GNUC__) && defined(__SIZEOF_INT128__)
+#if defined(__SIZEOF_INT128__)
 #define CC_HAS_UINT128 1
 #elif defined(_MSC_VER) && defined(_M_X64)
 #define CC_HAS_64_BIT_INTRINSICS 1
@@ -45,6 +45,20 @@
 #define CC_ASSERT(X) assert(X)
 #endif
 
+#ifndef CC_INLINE
+#define CC_INLINE inline
+#endif
+
+#ifndef CC_FORCE_INLINE
+#if defined(__GNUC__)
+#define CC_FORCE_INLINE __attribute__((always_inline)) inline
+#elif defined(_MSC_VER)
+#define CC_FORCE_INLINE __forceinline
+#else
+#define CC_FORCE_INLINE inline
+#endif
+#endif
+
 namespace charconv {
 
 //==================================================================================================
@@ -52,7 +66,7 @@ namespace charconv {
 //==================================================================================================
 
 template <typename Dest, typename Source>
-inline Dest ReinterpretBits(Source source)
+CC_INLINE Dest ReinterpretBits(Source source)
 {
     static_assert(sizeof(Dest) == sizeof(Source), "size mismatch");
 
@@ -149,8 +163,8 @@ struct Double
     }
 };
 
-inline bool operator==(Double x, Double y) { return x.bits == y.bits; }
-inline bool operator!=(Double x, Double y) { return x.bits != y.bits; }
+CC_INLINE bool operator==(Double x, Double y) { return x.bits == y.bits; }
+CC_INLINE bool operator!=(Double x, Double y) { return x.bits != y.bits; }
 
 //==================================================================================================
 //
@@ -161,7 +175,7 @@ struct Uint64x2 {
     uint64_t lo;
 };
 
-inline Uint64x2 Mul128(uint64_t a, uint64_t b)
+CC_FORCE_INLINE Uint64x2 Mul128(uint64_t a, uint64_t b)
 {
 #if CC_HAS_UINT128
     __extension__ using uint128_t = unsigned __int128;
@@ -170,7 +184,6 @@ inline Uint64x2 Mul128(uint64_t a, uint64_t b)
 
     uint64_t const lo = static_cast<uint64_t>(product);
     uint64_t const hi = static_cast<uint64_t>(product >> 64);
-
     return {hi, lo};
 #elif CC_HAS_64_BIT_INTRINSICS
     uint64_t hi;
@@ -199,12 +212,12 @@ inline Uint64x2 Mul128(uint64_t a, uint64_t b)
     uint32_t const mid2Hi = static_cast<uint32_t>(mid2 >> 32);
 
     uint64_t const hi = b11 + mid1Hi + mid2Hi;
-    uint64_t const lo = (uint64_t{mid2Lo} << 32) + b00Lo;
+    uint64_t const lo = (uint64_t{mid2Lo} << 32) | b00Lo;
     return {hi, lo};
 #endif
 }
 
-inline uint64_t ShiftRight128(Uint64x2 x, int dist)
+CC_FORCE_INLINE uint64_t ShiftRight128(uint64_t lo, uint64_t hi, unsigned char dist)
 {
     // For the __shiftright128 intrinsic, the shift value is always modulo 64.
     // In the current implementation of the double-precision version of Ryu, the
@@ -216,21 +229,29 @@ inline uint64_t ShiftRight128(Uint64x2 x, int dist)
 
 #if CC_HAS_UINT128
     __extension__ using uint128_t = unsigned __int128;
-    return static_cast<uint64_t>(((uint128_t{x.hi} << 64) | x.lo) >> dist);
+
+    return static_cast<uint64_t>(((uint128_t{hi} << 64) | lo) >> dist);
 #elif CC_HAS_64_BIT_INTRINSICS
-    return __shiftright128(x.lo, x.hi, static_cast<unsigned char>(dist));
+    return __shiftright128(lo, hi, dist);
 #else
 #if CC_32_BIT_PLATFORM
     // Avoid a 64-bit shift by taking advantage of the range of shift values.
-    return (x.hi << (64 - dist)) | (static_cast<uint32_t>(x.lo >> 32) >> (dist - 32));
+    // We know that 0 <= 64 - dist < 32 and 0 <= dist - 32 < 32.
+    const unsigned char lshift = -dist & 31; // == (64 - dist) % 32
+    const unsigned char rshift =  dist & 31; // == (dist - 32) % 32
+#if defined(_MSC_VER) && !defined(__clang__)
+    return __ll_lshift(hi, lshift) | (static_cast<uint32_t>(lo >> 32) >> rshift);
 #else
-    return (x.hi << (64 - dist)) | (x.lo >> dist);
+    return (hi << lshift) | (static_cast<uint32_t>(lo >> 32) >> rshift);
 #endif
+#else // ^^^ CC_32_BIT_PLATFORM ^^^
+    return (hi << (64 - dist)) | (lo >> dist);
+#endif // ^^^ not CC_32_BIT_PLATFORM ^^^
 #endif
 }
 
 // Returns: floor(log_2(5^e))
-inline int FloorLog2Pow5(int e)
+CC_INLINE int FloorLog2Pow5(int e)
 {
     CC_ASSERT(e >= -1764);
     CC_ASSERT(e <=  1763);
@@ -238,7 +259,7 @@ inline int FloorLog2Pow5(int e)
 }
 
 // Returns: ceil(log_2(5^e))
-inline int CeilLog2Pow5(int e)
+CC_INLINE int CeilLog2Pow5(int e)
 {
     CC_ASSERT(e >= -1764);
     CC_ASSERT(e <=  1763);
@@ -247,7 +268,7 @@ inline int CeilLog2Pow5(int e)
 
 // Returns: floor(log_2(10^e))
 // Equivalent to: e + FloorLog2Pow5(e)
-inline int FloorLog2Pow10(int e)
+CC_INLINE int FloorLog2Pow10(int e)
 {
     CC_ASSERT(e >= -1233);
     CC_ASSERT(e <=  1232);
@@ -256,7 +277,7 @@ inline int FloorLog2Pow10(int e)
 
 // Returns: ceil(log_2(10^e))
 // Equivalent to: e + CeilLog2Pow5(e)
-inline int CeilLog2Pow10(int e)
+CC_INLINE int CeilLog2Pow10(int e)
 {
     CC_ASSERT(e >= -1233);
     CC_ASSERT(e <=  1232);
@@ -264,7 +285,7 @@ inline int CeilLog2Pow10(int e)
 }
 
 // Returns: floor(log_5(2^e))
-inline int FloorLog5Pow2(int e)
+CC_INLINE int FloorLog5Pow2(int e)
 {
     CC_ASSERT(e >= -1831);
     CC_ASSERT(e <=  1831);
@@ -272,7 +293,7 @@ inline int FloorLog5Pow2(int e)
 }
 
 // Returns: ceil(log_5(2^e))
-inline int CeilLog5Pow2(int e)
+CC_INLINE int CeilLog5Pow2(int e)
 {
     CC_ASSERT(e >= -1831);
     CC_ASSERT(e <=  1831);
@@ -281,7 +302,7 @@ inline int CeilLog5Pow2(int e)
 
 // Returns: floor(log_5(10^e))
 // Equivalent to: e + FloorLog5Pow2(e)
-inline int FloorLog5Pow10(int e)
+CC_INLINE int FloorLog5Pow10(int e)
 {
     CC_ASSERT(e >= -1831);
     CC_ASSERT(e <=  1831);
@@ -290,7 +311,7 @@ inline int FloorLog5Pow10(int e)
 
 // Returns: ceil(log_5(10^e))
 // Equivalent to: e + CeilLog5Pow2(e)
-inline int CeilLog5Pow10(int e)
+CC_INLINE int CeilLog5Pow10(int e)
 {
     CC_ASSERT(e >= -1831);
     CC_ASSERT(e <=  1831);
@@ -298,7 +319,7 @@ inline int CeilLog5Pow10(int e)
 }
 
 // Returns: floor(log_10(2^e))
-inline int FloorLog10Pow2(int e)
+CC_INLINE int FloorLog10Pow2(int e)
 {
     CC_ASSERT(e >= -2620);
     CC_ASSERT(e <=  2620);
@@ -306,7 +327,7 @@ inline int FloorLog10Pow2(int e)
 }
 
 // Returns: ceil(log_10(2^e))
-inline int CeilLog10Pow2(int e)
+CC_INLINE int CeilLog10Pow2(int e)
 {
     CC_ASSERT(e >= -2620);
     CC_ASSERT(e <=  2620);
@@ -314,7 +335,7 @@ inline int CeilLog10Pow2(int e)
 }
 
 // Returns: floor(log_10(5^e))
-inline int FloorLog10Pow5(int e)
+CC_INLINE int FloorLog10Pow5(int e)
 {
     CC_ASSERT(e >= -2620);
     CC_ASSERT(e <=  2620);
@@ -322,7 +343,7 @@ inline int FloorLog10Pow5(int e)
 }
 
 // Returns: ceil(log_10(5^e))
-inline int CeilLog10Pow5(int e)
+CC_INLINE int CeilLog10Pow5(int e)
 {
     CC_ASSERT(e >= -2620);
     CC_ASSERT(e <=  2620);

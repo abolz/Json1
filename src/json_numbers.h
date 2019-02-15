@@ -28,7 +28,7 @@
 static_assert(std::numeric_limits<double>::is_iec559 &&
               std::numeric_limits<double>::digits == 53 &&
               std::numeric_limits<double>::max_exponent == 1024,
-    "This file requires that 'double' is an IEEE-754 double-precision implementation");
+    "This file requires an IEEE-754 double-precision implementation");
 
 #include "charconv_bellerophon.h"
 #include "charconv_ryu.h"
@@ -349,7 +349,7 @@ inline int PrintDecimalDigits(char* buf, uint64_t output)
     {
         JSON_ASSERT(i > 8);
         uint64_t const q = charconv::ryu::Div1e8(output);
-        uint32_t const r = static_cast<uint32_t>(output - 100000000 * q);
+        uint32_t const r = charconv::ryu::Mod1e8(output, q);
         output = q;
         i -= 8;
         Utoa_8Digits(buf + i, r);
