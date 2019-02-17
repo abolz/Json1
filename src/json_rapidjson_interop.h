@@ -343,7 +343,7 @@ struct RapidjsonDocumentReader
 
     ParseStatus HandleString(char const* first, char const* last, StringClass sc)
     {
-        if (sc == StringClass::needs_cleaning)
+        if (sc != StringClass::clean)
         {
             std::string str;
             str.reserve(static_cast<size_t>(last - first));
@@ -398,7 +398,7 @@ struct RapidjsonDocumentReader
 
     ParseStatus HandleKey(char const* first, char const* last, StringClass sc)
     {
-        if (sc == StringClass::needs_cleaning)
+        if (sc != StringClass::clean)
         {
             std::string str;
             str.reserve(static_cast<size_t>(last - first));

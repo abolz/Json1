@@ -811,7 +811,7 @@ struct ParseValueCallbacks
 
     ParseStatus HandleString(char const* first, char const* last, StringClass string_class)
     {
-        if (string_class == StringClass::needs_cleaning)
+        if (string_class != StringClass::clean)
         {
             String str;
 
@@ -871,7 +871,7 @@ struct ParseValueCallbacks
 
     ParseStatus HandleKey(char const* first, char const* last, StringClass string_class)
     {
-        if (string_class == StringClass::needs_cleaning)
+        if (string_class != StringClass::clean)
         {
             keys.emplace_back();
             keys.back().reserve(static_cast<size_t>(last - first));

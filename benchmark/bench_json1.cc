@@ -100,7 +100,7 @@ private:
     static ParseStatus AddStringLength(size_t& dest, char const* first, char const* last, StringClass sc)
     {
         intptr_t len = 0;
-        if (sc == StringClass::needs_cleaning)
+        if (sc != StringClass::clean)
         {
             auto const res = json::strings::UnescapeString(first, last, [&](char) { ++len; }, /*allow_invalid_unicode*/ false);
             if (res.ec != json::strings::Status::success) {
