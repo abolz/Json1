@@ -75,6 +75,32 @@ matrix:
         - COMPILER=g++-7
         - CONFIGURATION=debug
         - CXXFLAGS="-std=c++17"
+    - os: linux
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-8
+      compiler: gcc
+      env:
+        - COMPILER=g++-8
+        - CONFIGURATION=release
+        - CXXFLAGS="-std=c++17 -fsanitize=undefined"
+        - LINKFLAGS="-fsanitize=undefined"
+    - os: linux
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-8
+      compiler: gcc
+      env:
+        - COMPILER=g++-8
+        - CONFIGURATION=debug
+        - CXXFLAGS="-std=c++17 -fsanitize=undefined"
+        - LINKFLAGS="-fsanitize=undefined"
     - os: osx
       compiler: clang
       env:
