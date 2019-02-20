@@ -309,15 +309,3 @@ TEST_CASE("ToUint8Clamp boundaries")
         CHECK(expectedUp == actualUp);
     }
 }
-
-TEST_CASE("Test UBSan 1")
-{
-    volatile uint32_t x = 0xFFFFFFFFu;
-    CHECK(static_cast<int32_t>(x) == -1);
-}
-
-TEST_CASE("Test UBSan 2")
-{
-    volatile int32_t x = -1;
-    CHECK((x >> 1) == -1);
-}
