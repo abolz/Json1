@@ -87,7 +87,7 @@ matrix:
         - COMPILER=g++-8
         - CONFIGURATION=release
         - CXXFLAGS="-std=c++17 -fsanitize=undefined"
-        - LINKFLAGS="-fsanitize=undefined"
+        - LINKFLAGS="-fuse-ld=gold -fsanitize=undefined"
     - os: linux
       addons:
         apt:
@@ -100,7 +100,7 @@ matrix:
         - COMPILER=g++-8
         - CONFIGURATION=debug
         - CXXFLAGS="-std=c++17 -fsanitize=undefined"
-        - LINKFLAGS="-fsanitize=undefined"
+        - LINKFLAGS="-fuse-ld=gold -fsanitize=undefined"
     - os: osx
       compiler: clang
       env:
