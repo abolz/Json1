@@ -391,11 +391,20 @@ inline int CountLeadingZeros64(uint64_t x)
 }
 
 // Normalize x
+inline void Normalize(DiyFp& x)
+{
+    int const s = CountLeadingZeros64(x.f);
+
+    x.f <<= s;
+    x.e  -= s;
+}
+
+// Normalize input.x
 // and scale the error, so that the error is in ULP(x)
 inline void Normalize(DiyFpWithError& num)
 {
     int const s = CountLeadingZeros64(num.x.f);
-
+    CC_ASSERT(s < 32);
     CC_ASSERT(((num.error << s) >> s) == num.error);
 
     num.x.f   <<= s;
@@ -558,12 +567,19 @@ inline StrtodApproxResult StrtodApprox(char const* digits, int num_digits, int e
         input.x.f += (DigitValue(digits[read_digits]) >= 5);
         // The error is <= 1/2 ULP.
         input.error = ULP / 2;
+
+        // Normalize x and scale the error, such that 'error' is in ULP(x).
+        Normalize(input);
     }
+    else
+    {
+        CC_ASSERT(input.error == 0);
 
-    // x = f * 2^0
-
-    // Normalize x and scale the error, such that 'error' is in ULP(x).
-    Normalize(input);
+        // The error is == 0.
+        // Only scale input.x to avoid UB when shifting a 32-bit unsigned integer
+        // by more than 32 bits.
+        Normalize(input.x);
+    }
 
     // If the input is exact, error == 0.
     // If the input is inexact, we have read 19 digits, i.e., f >= 10^(19-1) > 2^59.
