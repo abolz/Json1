@@ -80,14 +80,14 @@ matrix:
       env:
         - COMPILER=clang++
         - CONFIGURATION=release
-        - CXXFLAGS="-std=c++14 -stdlib=libc++ -fsanitize=undefined -fno-sanitize-recover=undefined"
+        - CXXFLAGS="-std=c++14 -stdlib=libc++ -fsanitize=undefined -fsanitize=signed-integer-overflow -fno-sanitize-recover=undefined"
         - LINKFLAGS="-fsanitize=undefined"
     - os: osx
       compiler: clang
       env:
         - COMPILER=clang++
         - CONFIGURATION=debug
-        - CXXFLAGS="-std=c++14 -stdlib=libc++ -fsanitize=undefined -fno-sanitize-recover=undefined"
+        - CXXFLAGS="-std=c++14 -stdlib=libc++ -fsanitize=undefined -fsanitize=signed-integer-overflow -fno-sanitize-recover=undefined"
         - LINKFLAGS="-fsanitize=undefined"
 
 before_install:
