@@ -22,16 +22,11 @@
 
 #include "json_parser.h" // NumberClass, Options
 
-#include <climits>
-#include <limits>
-
-static_assert(std::numeric_limits<double>::is_iec559 &&
-              std::numeric_limits<double>::digits == 53 &&
-              std::numeric_limits<double>::max_exponent == 1024,
-    "This file requires an IEEE-754 double-precision implementation");
-
 #include "charconv_bellerophon.h"
 #include "charconv_ryu.h"
+
+#include <climits>
+#include <limits>
 
 //==================================================================================================
 // Number conversions
@@ -96,6 +91,9 @@ inline uint32_t ToUint32(double value)
 
     return d.SignBit() ? 0 - bits32 : bits32;
 }
+
+// TODO:
+// Technically, casting unsigned to signed integers is implementation-defined (if out of range).
 
 inline int32_t ToInt32(double value)
 {

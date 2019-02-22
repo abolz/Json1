@@ -27,6 +27,11 @@
 #include <limits>
 #include <type_traits>
 
+static_assert(std::numeric_limits<double>::is_iec559 &&
+              std::numeric_limits<double>::digits == 53 &&
+              std::numeric_limits<double>::max_exponent == 1024,
+    "The strtod/dtoa implementation requires an IEEE-754 double-precision implementation");
+
 #if defined(_M_IX86) || defined(_M_ARM) || defined(__i386__) || defined(__arm__)
 #define CC_32_BIT_PLATFORM 1
 #endif
@@ -249,6 +254,9 @@ CC_FORCE_INLINE uint64_t ShiftRight128(uint64_t lo, uint64_t hi, unsigned char d
 #endif // ^^^ not CC_32_BIT_PLATFORM ^^^
 #endif
 }
+
+// TODO:
+// Technically, right shifting negative integers is implementation-defined.
 
 // Returns: floor(log_2(5^e))
 CC_INLINE int FloorLog2Pow5(int e)
