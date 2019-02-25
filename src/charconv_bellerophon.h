@@ -391,17 +391,19 @@ inline int CountLeadingZeros64(uint64_t x)
 }
 
 // Normalize x
-inline void Normalize(DiyFp& x)
+inline int Normalize(DiyFp& x)
 {
     int const s = CountLeadingZeros64(x.f);
 
     x.f <<= s;
     x.e  -= s;
+
+    return s;
 }
 
 // Normalize input.x
 // and scale the error, so that the error is in ULP(x)
-inline void Normalize(DiyFpWithError& num)
+inline int Normalize(DiyFpWithError& num)
 {
     int const s = CountLeadingZeros64(num.x.f);
     CC_ASSERT(s < 32);
@@ -410,6 +412,8 @@ inline void Normalize(DiyFpWithError& num)
     num.x.f   <<= s;
     num.x.e    -= s;
     num.error <<= s;
+
+    return s;
 }
 
 template <typename T>
@@ -512,6 +516,9 @@ inline double DoubleFromDiyFp(DiyFp x)
     return Double((E << Double::PhysicalSignificandSize) | F).Value();
 }
 
+// Maximum number of decimal digits in |significand|.
+constexpr int kMaxDigitsInSignificand = 19;
+
 struct StrtodApproxResult {
     double value;
     bool is_correct;
@@ -520,25 +527,26 @@ struct StrtodApproxResult {
 // Use DiyFp's to approximate a number of the "D * 10^exponent".
 //
 // |num_digits| is the number of decimal digits in "D".
-// |significand| contains the most significant |num_digits_in_significand| decimal digits of D and must be rounded (towards +infinity).
-// |num_digits_in_significand| must be <= 19.
+// |significand| contains the most significant decimal digits of D and must be rounded (towards +infinity)
+// if num_digits >= kMaxDigitsInSignificand.
 //
-// If the function returns true then |return.value| is the correct double.
+// If |return.is_correct| is true, then |return.value| is the correct double.
 // Otherwise |return.value| is either the correct double or the double that is just
 // below the correct double.
 //
 // PRE: |num_digits| + |exponent| must not overflow.
 // PRE: |num_digits| + |exponent| <= kDoubleMaxDecimalPower
 // PRE: |num_digits| + |exponent| >  kDoubleMinDecimalPower
-inline StrtodApproxResult StrtodApprox(uint64_t significand, int num_digits_in_significand, int num_digits, int exponent)
+inline StrtodApproxResult StrtodApprox(uint64_t significand, int num_digits, int exponent)
 {
     static_assert(DiyFp::SignificandSize == 64,
         "We use uint64's. This only works if the DiyFp uses uint64's too.");
 
     CC_ASSERT(significand != 0);
-    CC_ASSERT(num_digits_in_significand > 0);
+//  CC_ASSERT(num_digits_in_significand > 0);
+//  CC_ASSERT(num_digits_in_significand <= 19);
     CC_ASSERT(num_digits > 0);
-    CC_ASSERT(num_digits_in_significand <= num_digits);
+//  CC_ASSERT(num_digits_in_significand <= num_digits);
     CC_ASSERT(num_digits + exponent <= kDoubleMaxDecimalPower);
     CC_ASSERT(num_digits + exponent >  kDoubleMinDecimalPower);
 //  CC_ASSERT(num_digits            <= kDoubleMaxSignificantDigits);
@@ -566,7 +574,8 @@ inline StrtodApproxResult StrtodApprox(uint64_t significand, int num_digits_in_s
     // We don't want to deal with fractions and therefore work with a common denominator.
     constexpr uint32_t ULP = 2;
 
-    if (num_digits_in_significand < num_digits)
+//  if (num_digits_in_significand < num_digits)
+    if (num_digits > kMaxDigitsInSignificand)
     {
         // We assume |significand| is rounded (towards +infinity),
         // so the error is <= 1/2 ULP.
@@ -574,6 +583,9 @@ inline StrtodApproxResult StrtodApprox(uint64_t significand, int num_digits_in_s
 
         // Normalize x and scale the error, such that 'error' is in ULP(x).
         Normalize(input);
+
+        // Move the remaining decimals into the (decimal) exponent.
+        exponent += num_digits - kMaxDigitsInSignificand;
     }
     else
     {
@@ -589,9 +601,6 @@ inline StrtodApproxResult StrtodApprox(uint64_t significand, int num_digits_in_s
     // If the input is inexact, we have read 19 digits, i.e., f >= 10^(19-1) > 2^59.
     // The scaling factor in the normalization step above therefore is <= 2^(63-59) = 2^4.
     CC_ASSERT(input.error <= 16 * (ULP / 2));
-
-    // Move the remaining decimals into the (decimal) exponent.
-    exponent += num_digits - num_digits_in_significand;
 
     // Let x and y be normalized floating-point numbers
     //
@@ -1234,7 +1243,7 @@ inline double DigitsToDouble(char const* digits, int num_digits, int exponent, b
     }
 
     // Read up to 19 digits of the significand.
-    const int num_digits_in_significand = Min(num_digits, std::numeric_limits<uint64_t>::digits10);
+    const int num_digits_in_significand = Min(num_digits, kMaxDigitsInSignificand);
 
     uint64_t significand = ReadInt<uint64_t>(digits, num_digits_in_significand);
     if (num_digits_in_significand < num_digits)
@@ -1244,7 +1253,7 @@ inline double DigitsToDouble(char const* digits, int num_digits, int exponent, b
     }
 
     // Compute an approximation to digits * 10^exponent using the most significant digits.
-    const StrtodApproxResult guess = StrtodApprox(significand, num_digits_in_significand, num_digits, exponent);
+    const StrtodApproxResult guess = StrtodApprox(significand, num_digits, exponent);
     if (guess.is_correct)
     {
         return guess.value;
