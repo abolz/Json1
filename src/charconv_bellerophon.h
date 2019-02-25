@@ -517,24 +517,31 @@ struct StrtodApproxResult {
     bool is_correct;
 };
 
-// Use DiyFp's to approximate digits * 10^exponent.
+// Use DiyFp's to approximate a number of the "D * 10^exponent".
 //
-// If the function returns true then 'result' is the correct double.
-// Otherwise 'result' is either the correct double or the double that is just
+// |num_digits| is the number of decimal digits in "D".
+// |significand| contains the most significant |num_digits_in_significand| decimal digits of D and must be rounded (towards +infinity).
+// |num_digits_in_significand| must be <= 19.
+//
+// If the function returns true then |return.value| is the correct double.
+// Otherwise |return.value| is either the correct double or the double that is just
 // below the correct double.
 //
-// PRE: num_digits + exponent <= kDoubleMaxDecimalPower
-// PRE: num_digits + exponent >  kDoubleMinDecimalPower
-inline StrtodApproxResult StrtodApprox(char const* digits, int num_digits, int exponent)
+// PRE: |num_digits| + |exponent| must not overflow.
+// PRE: |num_digits| + |exponent| <= kDoubleMaxDecimalPower
+// PRE: |num_digits| + |exponent| >  kDoubleMinDecimalPower
+inline StrtodApproxResult StrtodApprox(uint64_t significand, int num_digits_in_significand, int num_digits, int exponent)
 {
     static_assert(DiyFp::SignificandSize == 64,
         "We use uint64's. This only works if the DiyFp uses uint64's too.");
 
+    CC_ASSERT(significand != 0);
+    CC_ASSERT(num_digits_in_significand > 0);
     CC_ASSERT(num_digits > 0);
-    CC_ASSERT(DigitValue(digits[0]) > 0);
-//  CC_ASSERT(DigitValue(digits[num_digits - 1]) > 0);
+    CC_ASSERT(num_digits_in_significand <= num_digits);
     CC_ASSERT(num_digits + exponent <= kDoubleMaxDecimalPower);
     CC_ASSERT(num_digits + exponent >  kDoubleMinDecimalPower);
+//  CC_ASSERT(num_digits            <= kDoubleMaxSignificantDigits);
 
     // Compute an approximation 'input' for B = digits * 10^exponent using DiyFp's.
     // And keep track of the error.
@@ -545,11 +552,9 @@ inline StrtodApproxResult StrtodApprox(char const* digits, int num_digits, int e
     //                       x
     //                       ~= (f * 2^e) * 10^exponent
 
-    int const read_digits = Min(num_digits, std::numeric_limits<uint64_t>::digits10);
-
     DiyFpWithError input;
 
-    input.x.f = ReadInt<uint64_t>(digits, read_digits);
+    input.x.f = significand;
     input.x.e = 0;
     input.error = 0;
 
@@ -561,11 +566,10 @@ inline StrtodApproxResult StrtodApprox(char const* digits, int num_digits, int e
     // We don't want to deal with fractions and therefore work with a common denominator.
     constexpr uint32_t ULP = 2;
 
-    if (read_digits < num_digits)
+    if (num_digits_in_significand < num_digits)
     {
-        // Round.
-        input.x.f += (DigitValue(digits[read_digits]) >= 5);
-        // The error is <= 1/2 ULP.
+        // We assume |significand| is rounded (towards +infinity),
+        // so the error is <= 1/2 ULP.
         input.error = ULP / 2;
 
         // Normalize x and scale the error, such that 'error' is in ULP(x).
@@ -587,7 +591,7 @@ inline StrtodApproxResult StrtodApprox(char const* digits, int num_digits, int e
     CC_ASSERT(input.error <= 16 * (ULP / 2));
 
     // Move the remaining decimals into the (decimal) exponent.
-    exponent += num_digits - read_digits;
+    exponent += num_digits - num_digits_in_significand;
 
     // Let x and y be normalized floating-point numbers
     //
@@ -777,30 +781,6 @@ inline StrtodApproxResult StrtodApprox(char const* digits, int num_digits, int e
     return {DoubleFromDiyFp(result), success};
 }
 
-inline StrtodApproxResult ComputeGuess(char const* digits, int num_digits, int exponent)
-{
-    CC_ASSERT(num_digits > 0);
-    CC_ASSERT(num_digits <= kDoubleMaxSignificantDigits);
-    CC_ASSERT(DigitValue(digits[0]) > 0);
-//  CC_ASSERT(DigitValue(digits[num_digits - 1]) > 0);
-
-    // Any v >= 10^309 is interpreted as +Infinity.
-    if (num_digits + exponent > kDoubleMaxDecimalPower)
-    {
-        // Overflow.
-        return {std::numeric_limits<double>::infinity(), true};
-    }
-
-    // Any v <= 10^-324 is interpreted as 0.
-    if (num_digits + exponent <= kDoubleMinDecimalPower)
-    {
-        // Underflow.
-        return {0.0, true};
-    }
-
-    return StrtodApprox(digits, num_digits, exponent);
-}
-
 //--------------------------------------------------------------------------------------------------
 // StrtodBignum
 //--------------------------------------------------------------------------------------------------
@@ -905,6 +885,87 @@ inline void AssignDecimalInteger(DiyInt& x, char const* digits, int num_digits)
     }
 }
 
+CC_NEVER_INLINE int AssignDecimalFraction(DiyInt& x, char const* next, char const* last, int& exponent)
+{
+    // digits, stored in [next, last) is of the form "xxx.yyy"
+    // This function removes the decimal point, leading and trailing zeros, and adjusts the exponent.
+    // Then assigns the decimal integer "xxxyyy" to |x|.
+
+    CC_ASSERT(next != last);
+
+    char digits[kDoubleMaxSignificantDigits + 1];
+    int num_digits = 0;
+    bool zero_tail = true;
+
+    // Skip leading zeros in "xxx"
+    while (next != last && *next == '0')
+    {
+        ++next;
+    }
+
+// int
+
+    while (next != last && IsDigit(*next))
+    {
+        if (num_digits < kDoubleMaxSignificantDigits)
+        {
+            digits[num_digits] = *next;
+            ++num_digits;
+        }
+        else
+        {
+            ++exponent;
+            zero_tail &= (*next == '0');
+        }
+        ++next;
+    }
+
+// frac
+
+    if (next != last && *next == '.')
+    {
+        ++next;
+
+        if (num_digits == 0)
+        {
+            // 0.yyy
+            // Skip leading zeros in "yyy" and adjust the exponent
+            while (next != last && *next == '0')
+            {
+                --exponent;
+                ++next;
+            }
+        }
+
+        while (next != last && IsDigit(*next))
+        {
+            if (num_digits < kDoubleMaxSignificantDigits)
+            {
+                digits[num_digits] = *next;
+                ++num_digits;
+                --exponent;
+            }
+            else
+            {
+                zero_tail &= (*next == '0');
+            }
+            ++next;
+        }
+    }
+
+    const int result = num_digits;
+    if (!zero_tail)
+    {
+        digits[num_digits] = '1';
+        ++num_digits;
+        --exponent;
+    }
+
+    AssignDecimalInteger(x, digits, num_digits);
+
+    return result;
+}
+
 inline void MulPow2(DiyInt& x, int exp) // aka left-shift
 {
     CC_ASSERT(x.size >= 0);
@@ -994,29 +1055,10 @@ inline int Compare(DiyInt const& lhs, DiyInt const& rhs)
     return 0;
 }
 
-// Compare digits * 10^exponent with v = f * 2^e.
-//
-// PRE: num_digits + exponent <= kDoubleMaxDecimalPower
-// PRE: num_digits + exponent >  kDoubleMinDecimalPower
-// PRE: num_digits            <= kDoubleMaxSignificantDigits
-inline int CompareBufferWithDiyFp(char const* digits, int num_digits, int exponent, bool nonzero_tail, DiyFp v)
+// Compare (lhs * 10^lhs_decimal_exponent) with (rhs * 2^rhs_binary_exponent).
+// Modifies lhs and/or rhs.
+inline int MulCompare(DiyInt& lhs, int lhs_decimal_exponent, DiyInt& rhs, int rhs_binary_exponent)
 {
-    CC_ASSERT(num_digits > 0);
-    CC_ASSERT(num_digits + exponent <= kDoubleMaxDecimalPower);
-    CC_ASSERT(num_digits + exponent >  kDoubleMinDecimalPower);
-    CC_ASSERT(num_digits            <= kDoubleMaxSignificantDigits);
-
-    DiyInt lhs;
-    DiyInt rhs;
-
-    AssignDecimalInteger(lhs, digits, num_digits);
-    if (nonzero_tail)
-    {
-        MulAddU32(lhs, 10, 1);
-        exponent--;
-    }
-    AssignU64(rhs, v.f);
-
     CC_ASSERT(lhs.size <= (2555 + 31) / 32); // bits <= log_2(10^769) = 2555
     CC_ASSERT(rhs.size <= (  64 + 31) / 32); // bits <= 64
 
@@ -1025,24 +1067,24 @@ inline int CompareBufferWithDiyFp(char const* digits, int num_digits, int expone
     int lhs_exp2 = 0;
     int rhs_exp2 = 0;
 
-    if (exponent >= 0)
+    if (lhs_decimal_exponent >= 0)
     {
-        lhs_exp5 += exponent;
-        lhs_exp2 += exponent;
+        lhs_exp5 += lhs_decimal_exponent;
+        lhs_exp2 += lhs_decimal_exponent;
     }
     else
     {
-        rhs_exp5 -= exponent;
-        rhs_exp2 -= exponent;
+        rhs_exp5 -= lhs_decimal_exponent;
+        rhs_exp2 -= lhs_decimal_exponent;
     }
 
-    if (v.e >= 0)
+    if (rhs_binary_exponent >= 0)
     {
-        rhs_exp2 += v.e;
+        rhs_exp2 += rhs_binary_exponent;
     }
     else
     {
-        lhs_exp2 -= v.e;
+        lhs_exp2 -= rhs_binary_exponent;
     }
 
 #if 1
@@ -1104,6 +1146,32 @@ inline int CompareBufferWithDiyFp(char const* digits, int num_digits, int expone
     return Compare(lhs, rhs);
 }
 
+// Compare digits * 10^exponent with v = f * 2^e.
+//
+// PRE: num_digits + exponent <= kDoubleMaxDecimalPower
+// PRE: num_digits + exponent >  kDoubleMinDecimalPower
+// PRE: num_digits            <= kDoubleMaxSignificantDigits
+inline int CompareBufferWithDiyFp(char const* digits, int num_digits, int exponent, bool nonzero_tail, DiyFp v)
+{
+    CC_ASSERT(num_digits > 0);
+    CC_ASSERT(num_digits + exponent <= kDoubleMaxDecimalPower);
+    CC_ASSERT(num_digits + exponent >  kDoubleMinDecimalPower);
+    CC_ASSERT(num_digits            <= kDoubleMaxSignificantDigits);
+
+    DiyInt lhs;
+    DiyInt rhs;
+
+    AssignDecimalInteger(lhs, digits, num_digits);
+    if (nonzero_tail)
+    {
+        MulAddU32(lhs, 10, 1);
+        exponent--;
+    }
+    AssignU64(rhs, v.f);
+
+    return MulCompare(lhs, exponent, rhs, v.e);
+}
+
 //--------------------------------------------------------------------------------------------------
 // DigitsToDouble
 //--------------------------------------------------------------------------------------------------
@@ -1153,7 +1221,30 @@ inline double DigitsToDouble(char const* digits, int num_digits, int exponent, b
         return 0;
     }
 
-    auto const guess = ComputeGuess(digits, num_digits, exponent);
+    // Any v >= 10^309 is interpreted as +Infinity.
+    if (num_digits + exponent > kDoubleMaxDecimalPower)
+    {
+        return std::numeric_limits<double>::infinity();
+    }
+
+    // Any v <= 10^-324 is interpreted as 0.
+    if (num_digits + exponent <= kDoubleMinDecimalPower)
+    {
+        return 0.0;
+    }
+
+    // Read up to 19 digits of the significand.
+    const int num_digits_in_significand = Min(num_digits, std::numeric_limits<uint64_t>::digits10);
+
+    uint64_t significand = ReadInt<uint64_t>(digits, num_digits_in_significand);
+    if (num_digits_in_significand < num_digits)
+    {
+        // Round towards +infinity.
+        significand += (DigitValue(digits[num_digits_in_significand]) >= 5);
+    }
+
+    // Compute an approximation to digits * 10^exponent using the most significant digits.
+    const StrtodApproxResult guess = StrtodApprox(significand, num_digits_in_significand, num_digits, exponent);
     if (guess.is_correct)
     {
         return guess.value;

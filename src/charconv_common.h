@@ -54,14 +54,15 @@ static_assert(std::numeric_limits<double>::is_iec559 &&
 #define CC_INLINE inline
 #endif
 
-#ifndef CC_FORCE_INLINE
 #if defined(__GNUC__)
 #define CC_FORCE_INLINE __attribute__((always_inline)) inline
+#define CC_NEVER_INLINE __attribute__((noinline)) inline
 #elif defined(_MSC_VER)
 #define CC_FORCE_INLINE __forceinline
+#define CC_NEVER_INLINE __declspec(noinline) inline
 #else
 #define CC_FORCE_INLINE inline
-#endif
+#define CC_NEVER_INLINE inline
 #endif
 
 namespace charconv {
