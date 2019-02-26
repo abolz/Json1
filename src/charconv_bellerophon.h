@@ -113,6 +113,7 @@ inline T ReadInt(char const* str, int len)
 
     for (int i = 0; i < len; ++i)
     {
+        CC_ASSERT(IsDigit(str[i]));
         uint8_t const digit = static_cast<uint8_t>(str[i] - '0');
         value = 10 * value + digit;
     }
