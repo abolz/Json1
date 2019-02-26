@@ -117,9 +117,7 @@ inline bool IsSeparator(char ch)
 enum class NumberClass : uint8_t {
     invalid,
     integer,
-    integer_with_exponent,
     decimal,
-    decimal_with_exponent,
     nan,
     pos_infinity,
     neg_infinity,
@@ -127,15 +125,7 @@ enum class NumberClass : uint8_t {
 
 inline bool IsFinite(NumberClass nc)
 {
-    switch (nc) {
-    case NumberClass::integer:
-    case NumberClass::integer_with_exponent:
-    case NumberClass::decimal:
-    case NumberClass::decimal_with_exponent:
-        return true;
-    default:
-        return false;
-    }
+    return nc == NumberClass::integer || nc == NumberClass::decimal;
 }
 
 struct ScanNumberResult
@@ -242,9 +232,9 @@ inline ScanNumberResult ScanNumber(char const* next, char const* last)
         }
     }
 
-    NumberClass const nc = has_decimal_point
-        ? (has_exponent ? NumberClass::decimal_with_exponent : NumberClass::decimal)
-        : (has_exponent ? NumberClass::integer_with_exponent : NumberClass::integer);
+    NumberClass const nc = has_decimal_point || has_exponent
+        ? NumberClass::decimal
+        : NumberClass::integer;
 
     return {next, nc};
 }
