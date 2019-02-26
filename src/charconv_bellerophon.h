@@ -76,6 +76,16 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // all the digits.
 constexpr int kDoubleMaxSignificantDigits = 767 + 1;
 
+// Max double: 1.7976931348623157 * 10^308, which has 309 digits.
+// Any x >= 10^309 is interpreted as +infinity.
+constexpr int kDoubleMaxDecimalPower = 309;
+
+// Min non-zero double: 4.9406564584124654 * 10^-324
+// Any x <= 10^-324 is interpreted as 0.
+// Note that 2.5e-324 (despite being smaller than the min double) will be read
+// as non-zero (equal to the min non-zero double).
+constexpr int kDoubleMinDecimalPower = -324;
+
 inline constexpr int Min(int x, int y) { return y < x ? y : x; }
 inline constexpr int Max(int x, int y) { return y < x ? x : y; }
 
@@ -92,6 +102,22 @@ inline int DigitValue(char ch)
 {
     CC_ASSERT(IsDigit(ch));
     return ch - '0';
+}
+
+template <typename T>
+inline T ReadInt(char const* str, int len)
+{
+    CC_ASSERT(len <= std::numeric_limits<T>::digits10);
+
+    T value = 0;
+
+    for (int i = 0; i < len; ++i)
+    {
+        uint8_t const digit = static_cast<uint8_t>(str[i] - '0');
+        value = 10 * value + digit;
+    }
+
+    return value;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -416,22 +442,6 @@ inline int Normalize(DiyFpWithError& num)
     return s;
 }
 
-template <typename T>
-inline T ReadInt(char const* str, int len)
-{
-    CC_ASSERT(len <= std::numeric_limits<T>::digits10);
-
-    T value = 0;
-
-    for (int i = 0; i < len; ++i)
-    {
-        uint8_t const digit = static_cast<uint8_t>(str[i] - '0');
-        value = 10 * value + digit;
-    }
-
-    return value;
-}
-
 // Returns a cached power of ten x ~= 10^n such that
 //  n <= k < n + kCachedPowersDecExpStep.
 //
@@ -463,16 +473,6 @@ inline DiyFp MultiplyPow10(DiyFp x, int k)
 
     return Multiply(x, pow);
 }
-
-// Max double: 1.7976931348623157 * 10^308, which has 309 digits.
-// Any x >= 10^309 is interpreted as +infinity.
-constexpr int kDoubleMaxDecimalPower = 309;
-
-// Min non-zero double: 4.9406564584124654 * 10^-324
-// Any x <= 10^-324 is interpreted as 0.
-// Note that 2.5e-324 (despite being smaller than the min double) will be read
-// as non-zero (equal to the min non-zero double).
-constexpr int kDoubleMinDecimalPower = -324;
 
 // Returns the significand size for a given order of magnitude.
 //
