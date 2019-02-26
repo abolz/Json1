@@ -378,45 +378,6 @@ struct DiyFpWithError // value = (x.f + delta) * 2^x.e, where |delta| <= error
     constexpr DiyFpWithError(DiyFp x_, uint32_t error_) : x(x_), error(error_) {}
 };
 
-// Returns the number of leading 0-bits in x, starting at the most significant
-// bit position.
-// If x is 0, the result is undefined.
-inline int CountLeadingZeros64(uint64_t x)
-{
-    CC_ASSERT(x != 0);
-
-#if defined(_MSC_VER) && (defined(_M_ARM) || defined(_M_ARM64)) && !defined(__clang__)
-
-    return static_cast<int>(_CountLeadingZeros64(x));
-
-#elif defined(_MSC_VER) && defined(_M_X64) && !defined(__clang__)
-
-    return static_cast<int>(__lzcnt64(x));
-
-#elif defined(_MSC_VER) && defined(_M_IX86) && !defined(__clang__)
-
-    int lz = static_cast<int>( __lzcnt(static_cast<uint32_t>(x >> 32)) );
-    if (lz == 32) {
-        lz += static_cast<int>( __lzcnt(static_cast<uint32_t>(x)) );
-    }
-    return lz;
-
-#elif defined(__GNUC__) || defined(__clang__)
-
-    return __builtin_clzll(x);
-
-#else
-
-    int lz = 0;
-    while ((x >> 63) == 0) {
-        x <<= 1;
-        ++lz;
-    }
-    return lz;
-
-#endif
-}
-
 // Normalize x
 inline int Normalize(DiyFp& x)
 {

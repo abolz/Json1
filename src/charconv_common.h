@@ -225,6 +225,9 @@ CC_FORCE_INLINE Uint64x2 Mul128(uint64_t a, uint64_t b)
 
 CC_FORCE_INLINE uint64_t ShiftRight128(uint64_t lo, uint64_t hi, unsigned char dist)
 {
+    // TODO:
+    // Move into charconv_ryu? The 32-bit path actually requires dist >= 32...
+
     // For the __shiftright128 intrinsic, the shift value is always modulo 64.
     // In the current implementation of the double-precision version of Ryu, the
     // shift value is always < 64.
@@ -253,6 +256,44 @@ CC_FORCE_INLINE uint64_t ShiftRight128(uint64_t lo, uint64_t hi, unsigned char d
 #else // ^^^ CC_32_BIT_PLATFORM ^^^
     return (hi << (64 - dist)) | (lo >> dist);
 #endif // ^^^ not CC_32_BIT_PLATFORM ^^^
+#endif
+}
+
+// Returns the number of leading 0-bits in x, starting at the most significant bit position.
+// If x is 0, the result is undefined.
+CC_FORCE_INLINE int CountLeadingZeros64(uint64_t x)
+{
+    CC_ASSERT(x != 0);
+
+#if defined(_MSC_VER) && (defined(_M_ARM) || defined(_M_ARM64)) && !defined(__clang__)
+
+    return static_cast<int>(_CountLeadingZeros64(x));
+
+#elif defined(_MSC_VER) && defined(_M_X64) && !defined(__clang__)
+
+    return static_cast<int>(__lzcnt64(x));
+
+#elif defined(_MSC_VER) && defined(_M_IX86) && !defined(__clang__)
+
+    int lz = static_cast<int>( __lzcnt(static_cast<uint32_t>(x >> 32)) );
+    if (lz == 32) {
+        lz += static_cast<int>( __lzcnt(static_cast<uint32_t>(x)) );
+    }
+    return lz;
+
+#elif defined(__GNUC__) || defined(__clang__)
+
+    return __builtin_clzll(x);
+
+#else
+
+    int lz = 0;
+    while ((x >> 63) == 0) {
+        x <<= 1;
+        ++lz;
+    }
+    return lz;
+
 #endif
 }
 
