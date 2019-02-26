@@ -456,6 +456,10 @@ inline Token Lexer::LexString(char const* p)
 
     JSON_ASSERT(p == end || *p == '"');
 
+    StringClass const sc = (mask & CC_needs_cleaning) != 0
+        ? StringClass::needs_cleaning
+        : StringClass::clean;
+
     bool const is_incomplete = (p == end);
     if (!is_incomplete)
         ++p; // Skip '"'
@@ -465,7 +469,7 @@ inline Token Lexer::LexString(char const* p)
     tok.ptr = ptr;
     tok.end = p;
     tok.kind = is_incomplete ? TokenKind::incomplete_string : TokenKind::string;
-    tok.string_class = ((mask & CC_needs_cleaning) != 0) ? StringClass::needs_cleaning : StringClass::clean;
+    tok.string_class = sc;
 //  tok.number_class = 0;
 
     ptr = p;
@@ -478,10 +482,9 @@ inline Token Lexer::LexNumber(char const* p)
     using json::charclass::IsSeparator;
 
     ScanNumberResult const res = json::ScanNumber(p, end);
-
     p = res.next;
-    NumberClass nc = res.number_class;
 
+    NumberClass nc = res.number_class;
     if (nc == NumberClass::invalid || (p != end && !IsSeparator(*p)))
     {
         // Invalid number,
