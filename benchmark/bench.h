@@ -1,5 +1,8 @@
 #pragma once
 
+#define BENCH_RAPIDJSON_DOCUMENT 1
+#define BENCH_COLLECT_STATS 0
+
 #include <cstddef>
 #include <cstdio>
 #include <cmath>

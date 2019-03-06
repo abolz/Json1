@@ -1,6 +1,6 @@
 #pragma once
 
-#include "jsonstats.h"
+#include "bench.h"
 #include "../src/json.h"
 
 inline void traverse(jsonstats& stats, const json::Value& v)

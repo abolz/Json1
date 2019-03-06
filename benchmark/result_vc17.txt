@@ -1,40 +1,48 @@
 ---
-json1 sax           test_data/apache_builds.json                 0.35 ms (  351.53 MB/sec)
-rapidjson sax       test_data/apache_builds.json                 0.95 ms (  127.46 MB/sec) --- x2.8
-nlohmann_sax        test_data/apache_builds.json                 1.12 ms (  107.98 MB/sec) --- x3.3
+simdjson dom        test_data/jsonexamples/mini/apache_builds.json                  0.090 MB     0.13 ms (  0.696153 GB/sec)
+json1 dom           test_data/jsonexamples/mini/apache_builds.json                  0.090 MB     0.45 ms (  0.200619 GB/sec) --- x3.47
+sajson dom          test_data/jsonexamples/mini/apache_builds.json                  0.090 MB     0.29 ms (  0.309192 GB/sec) --- x2.25
 ---
-json1 sax           test_data/allthethings.json                 11.08 ms (  394.24 MB/sec)
-rapidjson sax       test_data/allthethings.json                 35.52 ms (  122.96 MB/sec) --- x3.2
-nlohmann_sax        test_data/allthethings.json                 38.91 ms (  112.22 MB/sec) --- x3.5
+simdjson dom        test_data/jsonexamples/mini/canada.json                         1.993 MB     8.39 ms (  0.237545 GB/sec)
+json1 dom           test_data/jsonexamples/mini/canada.json                         1.993 MB    22.37 ms (  0.089092 GB/sec) --- x2.67
+sajson dom          test_data/jsonexamples/mini/canada.json                         1.993 MB    17.34 ms (  0.114983 GB/sec) --- x2.07
 ---
-json1 sax           test_data/twitter.json                       2.85 ms (  216.87 MB/sec)
-rapidjson sax       test_data/twitter.json                       4.92 ms (  125.30 MB/sec) --- x1.7
-nlohmann_sax        test_data/twitter.json                       5.93 ms (  104.13 MB/sec) --- x2.1
+simdjson dom        test_data/jsonexamples/mini/citm_catalog.json                   0.477 MB     2.29 ms (  0.208361 GB/sec)
+json1 dom           test_data/jsonexamples/mini/citm_catalog.json                   0.477 MB     4.48 ms (  0.106523 GB/sec) --- x1.96
+sajson dom          test_data/jsonexamples/mini/citm_catalog.json                   0.477 MB     3.14 ms (  0.151732 GB/sec) --- x1.37
 ---
-json1 sax           test_data/sample.json                        2.69 ms (  243.54 MB/sec)
-rapidjson sax       test_data/sample.json                        3.70 ms (  176.97 MB/sec) --- x1.4
-nlohmann_sax        test_data/sample.json                        5.54 ms (  118.45 MB/sec) --- x2.1
+simdjson dom        test_data/jsonexamples/mini/github_events.json                  0.051 MB     0.06 ms (  0.796365 GB/sec)
+json1 dom           test_data/jsonexamples/mini/github_events.json                  0.051 MB     0.25 ms (  0.202182 GB/sec) --- x3.94
+sajson dom          test_data/jsonexamples/mini/github_events.json                  0.051 MB     0.15 ms (  0.329889 GB/sec) --- x2.41
 ---
-json1 sax           test_data/update-center.json                 2.01 ms (  398.66 MB/sec)
-rapidjson sax       test_data/update-center.json                 6.08 ms (  132.09 MB/sec) --- x3.0
-nlohmann_sax        test_data/update-center.json                 6.96 ms (  115.41 MB/sec) --- x3.5
+simdjson dom        test_data/jsonexamples/mini/gsoc-2018.json                      2.928 MB     5.70 ms (  0.513339 GB/sec)
+json1 dom           test_data/jsonexamples/mini/gsoc-2018.json                      2.928 MB    17.65 ms (  0.165892 GB/sec) --- x3.09
+sajson dom          test_data/jsonexamples/mini/gsoc-2018.json                      2.928 MB    11.34 ms (  0.258227 GB/sec) --- x1.99
 ---
-json1 sax           test_data/canada.json                       20.00 ms (  107.36 MB/sec)
-rapidjson sax       test_data/canada.json                       22.61 ms (   94.93 MB/sec) --- x1.1
-nlohmann_sax        test_data/canada.json                       72.72 ms (   29.52 MB/sec) --- x3.6
+simdjson dom        test_data/jsonexamples/mini/instruments.json                    0.103 MB     0.25 ms (  0.411464 GB/sec)
+json1 dom           test_data/jsonexamples/mini/instruments.json                    0.103 MB     1.04 ms (  0.099586 GB/sec) --- x4.13
+sajson dom          test_data/jsonexamples/mini/instruments.json                    0.103 MB     0.53 ms (  0.196737 GB/sec) --- x2.09
 ---
-json1 sax           test_data/mesh.json                          8.61 ms (  174.80 MB/sec)
-rapidjson sax       test_data/mesh.json                          9.78 ms (  153.76 MB/sec) --- x1.1
-nlohmann_sax        test_data/mesh.json                         29.75 ms (   50.56 MB/sec) --- x3.5
+simdjson dom        test_data/jsonexamples/mini/marine_ik.json                      1.762 MB    14.04 ms (  0.125519 GB/sec)
+json1 dom           test_data/jsonexamples/mini/marine_ik.json                      1.762 MB    31.80 ms (  0.055403 GB/sec) --- x2.27
+sajson dom          test_data/jsonexamples/mini/marine_ik.json                      1.762 MB    24.99 ms (  0.070505 GB/sec) --- x1.78
 ---
-json1 sax           test_data/citm_catalog.json                  4.49 ms (  377.81 MB/sec)
-rapidjson sax       test_data/citm_catalog.json                 10.04 ms (  168.89 MB/sec) --- x2.2
-nlohmann_sax        test_data/citm_catalog.json                 15.32 ms (  110.66 MB/sec) --- x3.4
+simdjson dom        test_data/jsonexamples/mini/mesh.json                           0.613 MB     3.45 ms (  0.177425 GB/sec)
+json1 dom           test_data/jsonexamples/mini/mesh.json                           0.613 MB     8.11 ms (  0.075600 GB/sec) --- x2.35
+sajson dom          test_data/jsonexamples/mini/mesh.json                           0.613 MB     5.69 ms (  0.107700 GB/sec) --- x1.65
 ---
-json1 sax           test_data/instruments.json                   0.84 ms (  251.54 MB/sec)
-rapidjson sax       test_data/instruments.json                   1.53 ms (  136.99 MB/sec) --- x1.8
-nlohmann_sax        test_data/instruments.json                   2.39 ms (   87.79 MB/sec) --- x2.9
+simdjson dom        test_data/jsonexamples/mini/numbers.json                        0.143 MB     0.48 ms (  0.296145 GB/sec)
+json1 dom           test_data/jsonexamples/mini/numbers.json                        0.143 MB     1.42 ms (  0.100754 GB/sec) --- x2.94
+sajson dom          test_data/jsonexamples/mini/numbers.json                        0.143 MB     0.69 ms (  0.208390 GB/sec) --- x1.42
 ---
-json1 sax           test_data/github_events.json                 0.18 ms (  336.86 MB/sec)
-rapidjson sax       test_data/github_events.json                 0.53 ms (  116.88 MB/sec) --- x2.9
-nlohmann_sax        test_data/github_events.json                 0.58 ms (  106.41 MB/sec) --- x3.2
+simdjson dom        test_data/jsonexamples/mini/random.json                         0.440 MB     1.65 ms (  0.266296 GB/sec)
+json1 dom           test_data/jsonexamples/mini/random.json                         0.440 MB     4.84 ms (  0.090998 GB/sec) --- x2.93
+sajson dom          test_data/jsonexamples/mini/random.json                         0.440 MB     2.61 ms (  0.168594 GB/sec) --- x1.58
+---
+simdjson dom        test_data/jsonexamples/mini/twitter.json                        0.446 MB     1.20 ms (  0.370552 GB/sec)
+json1 dom           test_data/jsonexamples/mini/twitter.json                        0.446 MB     3.50 ms (  0.127335 GB/sec) --- x2.91
+sajson dom          test_data/jsonexamples/mini/twitter.json                        0.446 MB     1.58 ms (  0.282819 GB/sec) --- x1.31
+---
+simdjson dom        test_data/jsonexamples/mini/update-center.json                  0.508 MB     1.31 ms (  0.387252 GB/sec)
+json1 dom           test_data/jsonexamples/mini/update-center.json                  0.508 MB     2.75 ms (  0.185095 GB/sec) --- x2.09
+sajson dom          test_data/jsonexamples/mini/update-center.json                  0.508 MB     2.47 ms (  0.205549 GB/sec) --- x1.88

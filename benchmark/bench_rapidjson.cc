@@ -1,6 +1,4 @@
 #include "bench_rapidjson.h"
-#include "jsonstats.h"
-#include "traverse.h"
 
 #include "../ext/rapidjson/document.h"
 #include "../ext/rapidjson/reader.h"
@@ -9,7 +7,6 @@
 
 #include <vector>
 
-#define USE_RAPIDJSON_DOCUMENT 1
 #define USE_MEMSTREAM 1
 #define USE_ITERATIVE_PARSER 0
 
@@ -110,7 +107,7 @@ struct GenStatsHandler : public rapidjson::BaseReaderHandler<>
     }
 };
 
-#if !USE_RAPIDJSON_DOCUMENT
+#if !BENCH_RAPIDJSON_DOCUMENT
 struct ParseValueHandler : public rapidjson::BaseReaderHandler<>
 {
     std::vector<json::Value> stack;
@@ -239,7 +236,8 @@ private:
 } // namespace
 
 static constexpr int kParseFlags
-    = rapidjson::kParseFullPrecisionFlag
+    = 0
+    //| rapidjson::kParseFullPrecisionFlag
     | rapidjson::kParseStopWhenDoneFlag
     | rapidjson::kParseValidateEncodingFlag
 #if USE_ITERATIVE_PARSER
@@ -273,7 +271,7 @@ bool rapidjson_dom_stats(jsonstats& stats, char const* first, char const* last)
     static_cast<void>(last);
 #endif
 
-#if USE_RAPIDJSON_DOCUMENT
+#if BENCH_RAPIDJSON_DOCUMENT
     rapidjson::Document doc;
     doc.ParseStream<kParseFlags>(is);
 
@@ -281,8 +279,8 @@ bool rapidjson_dom_stats(jsonstats& stats, char const* first, char const* last)
         return false;
     }
 
-    GenStatsHandler handler(stats);
-    doc.Accept(handler);
+    //GenStatsHandler handler(stats);
+    //doc.Accept(handler);
 
     return true;
 #else
@@ -294,7 +292,9 @@ bool rapidjson_dom_stats(jsonstats& stats, char const* first, char const* last)
         return false;
     }
 
+#if BENCH_COLLECT_STATS
     traverse(stats, handler.stack.back());
+#endif
     return true;
 #endif
 }

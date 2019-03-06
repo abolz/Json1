@@ -1,18 +1,16 @@
 #include "bench_json1.h"
-#include "jsonstats.h"
-#include "traverse.h"
 
-#include "../src/json.h"
 #include "../src/json_parser.h"
 #include "../src/json_strings.h"
 #include "../src/json_numbers.h"
 
-#define USE_RAPIDJSON_DOCUMENT 1
-
-#if USE_RAPIDJSON_DOCUMENT
+#if BENCH_RAPIDJSON_DOCUMENT
 #include "../ext/rapidjson/document.h"
 #include "../ext/rapidjson/stringbuffer.h"
 #include "../src/json_rapidjson_interop.h"
+#else
+#include "../src/json.h"
+#include "traverse.h"
 #endif
 
 using namespace json;
@@ -43,12 +41,21 @@ struct GenStatsCallbacks
         return {};
     }
 
+#if JSON_PARSE_NUMBERS_AS_DOUBLE
+    ParseStatus HandleNumber(double value, NumberClass /*nc*/)
+    {
+        ++stats.number_count;
+        stats.total_number_value += value;
+        return {};
+    }
+#else
     ParseStatus HandleNumber(char const* first, char const* last, NumberClass nc)
     {
         ++stats.number_count;
         stats.total_number_value += json::numbers::StringToNumber(first, last, nc);
         return {};
     }
+#endif
 
     ParseStatus HandleString(char const* first, char const* last, StringClass sc)
     {
@@ -117,7 +124,7 @@ private:
     }
 };
 
-#if USE_RAPIDJSON_DOCUMENT
+#if BENCH_RAPIDJSON_DOCUMENT
 struct RapidjsonStatsHandler
 {
     jsonstats& stats;
@@ -226,7 +233,7 @@ bool json1_sax_stats(jsonstats& stats, char const* first, char const* last)
 
 bool json1_dom_stats(jsonstats& stats, char const* first, char const* last)
 {
-#if USE_RAPIDJSON_DOCUMENT
+#if BENCH_RAPIDJSON_DOCUMENT
     rapidjson::Document doc;
 
     auto const res = ParseRapidjsonDocument(doc, first, last);
@@ -234,8 +241,10 @@ bool json1_dom_stats(jsonstats& stats, char const* first, char const* last)
         return false;
     }
 
+#if BENCH_COLLECT_STATS
     RapidjsonStatsHandler handler(stats);
     doc.Accept(handler);
+#endif
 
     return true;
 #else
@@ -246,7 +255,9 @@ bool json1_dom_stats(jsonstats& stats, char const* first, char const* last)
         return false;
     }
 
+#if BENCH_COLLECT_STATS
     traverse(stats, value);
+#endif
     return true;
 #endif
 }
