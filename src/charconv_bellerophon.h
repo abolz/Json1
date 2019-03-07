@@ -1205,13 +1205,11 @@ inline double DigitsToDouble(char const* digits, int num_digits, int exponent, b
     }
 
     // Read up to 19 digits of the significand.
-    const int num_digits_in_significand = Min(num_digits, kMaxDigitsInSignificand);
-
-    uint64_t significand = ReadInt<uint64_t>(digits, num_digits_in_significand);
-    if (num_digits_in_significand < num_digits)
+    uint64_t significand = ReadInt<uint64_t>(digits, Min(num_digits, kMaxDigitsInSignificand));
+    if (num_digits > kMaxDigitsInSignificand)
     {
         // Round towards +infinity.
-        significand += (DigitValue(digits[num_digits_in_significand]) >= 5);
+        significand += (digits[kMaxDigitsInSignificand] >= '5');
     }
 
     // Compute an approximation to digits * 10^exponent using the most significant digits.
