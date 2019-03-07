@@ -29,6 +29,17 @@
 #define JSON_ASSERT(X) assert(X)
 #endif
 
+#if defined(__GNUC__)
+#define JSON_FORCE_INLINE __attribute__((always_inline)) inline
+#define JSON_NEVER_INLINE __attribute__((noinline)) inline
+#elif defined(_MSC_VER)
+#define JSON_FORCE_INLINE __forceinline
+#define JSON_NEVER_INLINE __declspec(noinline) inline
+#else
+#define JSON_FORCE_INLINE inline
+#define JSON_NEVER_INLINE inline
+#endif
+
 namespace json {
 
 //==================================================================================================
@@ -546,7 +557,7 @@ inline Token Lexer::LexIdentifier(char const* p)
     return tok;
 }
 
-inline Token Lexer::LexComment(char const* p)
+JSON_NEVER_INLINE Token Lexer::LexComment(char const* p)
 {
     JSON_ASSERT(p != end);
     JSON_ASSERT(*p == '/');
