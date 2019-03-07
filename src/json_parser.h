@@ -20,10 +20,15 @@
 
 #pragma once
 
+#define JSON_PARSER_CONVERT_NUMBERS 0
+
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#if JSON_PARSER_CONVERT_NUMBERS
+#include <limits>
+#endif
 
 #ifndef JSON_ASSERT
 #define JSON_ASSERT(X) assert(X)
@@ -344,7 +349,9 @@ struct Token
 
 class Lexer
 {
-private:
+#if JSON_PARSER_CONVERT_NUMBERS
+public:                                                                         // HACK
+#endif
     char const* ptr = nullptr;
     char const* end = nullptr;
 
@@ -356,6 +363,15 @@ public:
     Token Lex(TokenKind kind);
 
     void Skip(TokenKind kind);
+
+    //Token LexString();
+
+    //template <typename Yield1, typename YieldN>
+    //Token LexAndUnescapeString(Yield1 yield, YieldN yield_n);
+
+    //Token LexNumber();
+
+    //Token LexAndConvertNumber(double& value);
 
 private:
     Token LexString     (char const* p);
@@ -569,7 +585,7 @@ JSON_FORCE_INLINE Token Lexer::LexNumber(char const* p)
     p = res.next;
 
     NumberClass nc = res.number_class;
-    if (nc == NumberClass::invalid || (p != end && !IsSeparator(*p)))
+    if (p != end && !IsSeparator(*p))
     {
         // Invalid number,
         // or valid number with trailing garbage, which is also an invalid number.
@@ -578,7 +594,7 @@ JSON_FORCE_INLINE Token Lexer::LexNumber(char const* p)
         // Skip everything which looks like a number.
         // For slightly nicer error messages.
         // Everything which is not whitespace or punctuation will be skipped.
-        for ( ; p != end && !IsSeparator(*p); ++p)
+        for (++p; p != end && !IsSeparator(*p); ++p)
         {
         }
     }
@@ -752,6 +768,10 @@ private:
     ParseStatus ConsumeString();
     ParseStatus ConsumeNumber();
     ParseStatus ConsumeIdentifier();
+
+#if JSON_PARSER_CONVERT_NUMBERS
+    ParseStatus InvalidNumber();
+#endif
 
     TokenKind Peek(); // idemp
 
@@ -1094,13 +1114,328 @@ ParseStatus Parser<ParseCallbacks>::ConsumeString()
     return cb.HandleString(curr.ptr + 1, curr.end - 1, curr.string_class);
 }
 
+#if JSON_PARSER_CONVERT_NUMBERS
+namespace impl {
+
+struct ParsedNumber {
+    uint64_t significand = 0;
+    int      num_digits = 0;
+    int      exponent_adjust = 0;
+    int      parsed_exponent = 0;
+    int      parsed_exponent_digits = 0;
+    bool     is_neg = false;
+};
+
+JSON_FORCE_INLINE ScanNumberResult ParseNumber(char const* next, char const* last, ParsedNumber& number)
+{
+    using json::charclass::IsDigit;
+
+    if (next == last)
+        return {next, NumberClass::invalid};
+
+// [-]
+
+    if (*next == '-')
+    {
+        number.is_neg = true;
+
+        ++next;
+        if (next == last)
+            return {next, NumberClass::invalid};
+    }
+
+// int
+
+    if (*next == '0')
+    {
+        ++next;
+        if (next == last)
+            return {next, NumberClass::integer};
+        if (IsDigit(*next))
+            return {next, NumberClass::invalid};
+    }
+    else if (IsDigit(*next)) // non '0'
+    {
+        for (;;)
+        {
+            if (number.num_digits < 19)
+            {
+                number.significand = 10 * number.significand + static_cast<uint8_t>(*next - '0');
+            }
+            ++number.num_digits;
+            ++next;
+            if (next == last)
+                return {next, NumberClass::integer};
+            if (!IsDigit(*next))
+                break;
+        }
+    }
+    else if (last - next >= 3 && std::memcmp(next, "NaN", 3) == 0)
+    {
+        return {next + 3, NumberClass::nan};
+    }
+    else if (last - next >= 8 && std::memcmp(next, "Infinity", 8) == 0)
+    {
+        return {next + 8, number.is_neg ? NumberClass::neg_infinity : NumberClass::pos_infinity};
+    }
+    else
+    {
+        return {next, NumberClass::invalid};
+    }
+
+// frac
+
+    JSON_ASSERT(next != last);
+
+    bool const has_decimal_point = (*next == '.');
+    if (has_decimal_point)
+    {
+        ++next;
+        if (next == last || !IsDigit(*next))
+            return {next, NumberClass::invalid};
+
+        if (number.num_digits == 0)
+        {
+            while (*next == '0')
+            {
+                --number.exponent_adjust;
+                ++next;
+                if (next == last)
+                    return {next, NumberClass::decimal}; // Actually: 0.0...000
+            }
+        }
+
+        JSON_ASSERT(next != last);
+        if (IsDigit(*next))
+        {
+            for (;;)
+            {
+                if (number.num_digits < 19)
+                {
+                    number.significand = 10 * number.significand + static_cast<uint8_t>(*next - '0');
+                }
+                ++number.num_digits;
+                --number.exponent_adjust;
+                ++next;
+                if (next == last)
+                    return {next, NumberClass::decimal};
+                if (!IsDigit(*next))
+                    break;
+            }
+        }
+    }
+
+// exp
+
+    JSON_ASSERT(next != last);
+
+    bool const has_exponent = (*next == 'e' || *next == 'E');
+    if (has_exponent)
+    {
+        ++next;
+        if (next == last)
+            return {next, NumberClass::invalid};
+
+        bool const exp_is_neg = (*next == '-');
+        if (exp_is_neg || *next == '+')
+        {
+            ++next;
+            if (next == last)
+                return {next, NumberClass::invalid};
+        }
+
+        if (!IsDigit(*next))
+            return {next, NumberClass::invalid};
+
+        // Skip leading zeros in the exponent.
+        // The exponent is always a decimal number.
+        while (*next == '0')
+        {
+            ++next;
+            if (next == last)
+                return {next, NumberClass::decimal};
+        }
+
+        for (;;)
+        {
+            JSON_ASSERT(next != last);
+            if (!IsDigit(*next))
+                break;
+            if (number.parsed_exponent_digits < 8)
+            {
+                number.parsed_exponent = 10 * number.parsed_exponent + (*next - '0');
+            }
+            ++number.parsed_exponent_digits;
+            ++next;
+            if (next == last)
+                break;
+        }
+
+        if (exp_is_neg)
+            number.parsed_exponent = -number.parsed_exponent;
+    }
+
+    NumberClass const nc = has_decimal_point || has_exponent
+        ? NumberClass::decimal
+        : NumberClass::integer;
+
+    return {next, nc};
+}
+
+// NB: Ignore sign!
+JSON_FORCE_INLINE double ConvertFiniteParsedNumber(ParsedNumber const& number)
+{
+    static constexpr double kPow10[] = { // 2472 bytes
+        1e+000, 1e+001, 1e+002, 1e+003, 1e+004, 1e+005, 1e+006, 1e+007,
+        1e+008, 1e+009, 1e+010, 1e+011, 1e+012, 1e+013, 1e+014, 1e+015,
+        1e+016, 1e+017, 1e+018, 1e+019, 1e+020, 1e+021, 1e+022, 1e+023,
+        1e+024, 1e+025, 1e+026, 1e+027, 1e+028, 1e+029, 1e+030, 1e+031,
+        1e+032, 1e+033, 1e+034, 1e+035, 1e+036, 1e+037, 1e+038, 1e+039,
+        1e+040, 1e+041, 1e+042, 1e+043, 1e+044, 1e+045, 1e+046, 1e+047,
+        1e+048, 1e+049, 1e+050, 1e+051, 1e+052, 1e+053, 1e+054, 1e+055,
+        1e+056, 1e+057, 1e+058, 1e+059, 1e+060, 1e+061, 1e+062, 1e+063,
+        1e+064, 1e+065, 1e+066, 1e+067, 1e+068, 1e+069, 1e+070, 1e+071,
+        1e+072, 1e+073, 1e+074, 1e+075, 1e+076, 1e+077, 1e+078, 1e+079,
+        1e+080, 1e+081, 1e+082, 1e+083, 1e+084, 1e+085, 1e+086, 1e+087,
+        1e+088, 1e+089, 1e+090, 1e+091, 1e+092, 1e+093, 1e+094, 1e+095,
+        1e+096, 1e+097, 1e+098, 1e+099, 1e+100, 1e+101, 1e+102, 1e+103,
+        1e+104, 1e+105, 1e+106, 1e+107, 1e+108, 1e+109, 1e+110, 1e+111,
+        1e+112, 1e+113, 1e+114, 1e+115, 1e+116, 1e+117, 1e+118, 1e+119,
+        1e+120, 1e+121, 1e+122, 1e+123, 1e+124, 1e+125, 1e+126, 1e+127,
+        1e+128, 1e+129, 1e+130, 1e+131, 1e+132, 1e+133, 1e+134, 1e+135,
+        1e+136, 1e+137, 1e+138, 1e+139, 1e+140, 1e+141, 1e+142, 1e+143,
+        1e+144, 1e+145, 1e+146, 1e+147, 1e+148, 1e+149, 1e+150, 1e+151,
+        1e+152, 1e+153, 1e+154, 1e+155, 1e+156, 1e+157, 1e+158, 1e+159,
+        1e+160, 1e+161, 1e+162, 1e+163, 1e+164, 1e+165, 1e+166, 1e+167,
+        1e+168, 1e+169, 1e+170, 1e+171, 1e+172, 1e+173, 1e+174, 1e+175,
+        1e+176, 1e+177, 1e+178, 1e+179, 1e+180, 1e+181, 1e+182, 1e+183,
+        1e+184, 1e+185, 1e+186, 1e+187, 1e+188, 1e+189, 1e+190, 1e+191,
+        1e+192, 1e+193, 1e+194, 1e+195, 1e+196, 1e+197, 1e+198, 1e+199,
+        1e+200, 1e+201, 1e+202, 1e+203, 1e+204, 1e+205, 1e+206, 1e+207,
+        1e+208, 1e+209, 1e+210, 1e+211, 1e+212, 1e+213, 1e+214, 1e+215,
+        1e+216, 1e+217, 1e+218, 1e+219, 1e+220, 1e+221, 1e+222, 1e+223,
+        1e+224, 1e+225, 1e+226, 1e+227, 1e+228, 1e+229, 1e+230, 1e+231,
+        1e+232, 1e+233, 1e+234, 1e+235, 1e+236, 1e+237, 1e+238, 1e+239,
+        1e+240, 1e+241, 1e+242, 1e+243, 1e+244, 1e+245, 1e+246, 1e+247,
+        1e+248, 1e+249, 1e+250, 1e+251, 1e+252, 1e+253, 1e+254, 1e+255,
+        1e+256, 1e+257, 1e+258, 1e+259, 1e+260, 1e+261, 1e+262, 1e+263,
+        1e+264, 1e+265, 1e+266, 1e+267, 1e+268, 1e+269, 1e+270, 1e+271,
+        1e+272, 1e+273, 1e+274, 1e+275, 1e+276, 1e+277, 1e+278, 1e+279,
+        1e+280, 1e+281, 1e+282, 1e+283, 1e+284, 1e+285, 1e+286, 1e+287,
+        1e+288, 1e+289, 1e+290, 1e+291, 1e+292, 1e+293, 1e+294, 1e+295,
+        1e+296, 1e+297, 1e+298, 1e+299, 1e+300, 1e+301, 1e+302, 1e+303,
+        1e+304, 1e+305, 1e+306, 1e+307, 1e+308,
+    };
+
+    if (number.parsed_exponent_digits > 8)
+    {
+        // Exponents larger than 99999999 are considered to be +inf.
+        if (number.parsed_exponent < 0)
+            return 0.0;
+        else
+            return std::numeric_limits<double>::infinity();
+    }
+
+    int num_digits = number.num_digits;
+    int exponent = number.parsed_exponent + number.exponent_adjust;
+
+    if (num_digits + exponent <= -324)
+    {
+        // Any v <= 10^-324 is interpreted as 0.
+        return 0.0;
+    }
+
+    if (num_digits + exponent > 309)
+    {
+        // Any v >= 10^309 is interpreted as +Infinity.
+        return std::numeric_limits<double>::infinity();
+    }
+
+    // Move least significant digits into the exponent.
+    if (number.num_digits > 19)
+    {
+        exponent += number.num_digits - 19;
+    }
+
+    JSON_ASSERT(exponent <=  308);
+    JSON_ASSERT(exponent >= -342);
+
+    if (exponent >= 0)
+        return static_cast<double>(number.significand) * kPow10[exponent];
+    else if (exponent >= -308)
+        return static_cast<double>(number.significand) / kPow10[-exponent];
+    else
+        return static_cast<double>(number.significand) / 1e+308 / kPow10[-exponent - 308];
+}
+
+JSON_FORCE_INLINE double ConvertParsedNumber(ParsedNumber const& number, NumberClass nc)
+{
+    switch (nc)
+    {
+    case NumberClass::invalid:
+        return 0.0;
+    case NumberClass::nan:
+        return std::numeric_limits<double>::quiet_NaN();
+    case NumberClass::neg_infinity:
+        return -std::numeric_limits<double>::infinity();
+    case NumberClass::pos_infinity:
+        return +std::numeric_limits<double>::infinity();
+    }
+
+    double value = /*(nc == NumberClass::integer) ? static_cast<double>(number.significand) :*/ ConvertFiniteParsedNumber(number);
+    return number.is_neg ? -value : value;
+}
+
+} // namespace impl
+#endif // ^^^ JSON_PARSER_CONVERT_NUMBERS ^^^
+
 template <typename ParseCallbacks>
 ParseStatus Parser<ParseCallbacks>::ConsumeNumber()
 {
+#if JSON_PARSER_CONVERT_NUMBERS
+    using json::charclass::IsSeparator;
+
+    char const* next = lexer.ptr;                                               // HACK
+    char const* last = lexer.end;                                               // HACK
+
+    json::impl::ParsedNumber number;
+    ScanNumberResult snr = json::impl::ParseNumber(next, last, number);
+    next = snr.next;
+
+    NumberClass nc = snr.number_class;
+    if (next != last && !IsSeparator(*next))
+    {
+        // Invalid number,
+        // or valid number with trailing garbage, which is also an invalid number.
+        nc = NumberClass::invalid;
+
+        // Skip everything which looks like a number.
+        // For slightly nicer error messages.
+        // Everything which is not whitespace or punctuation will be skipped.
+        for (++next; next != last && !IsSeparator(*next); ++next)
+        {
+        }
+    }
+
+    JSON_ASSERT(curr.kind == TokenKind::discarded);
+
+    curr.ptr = lexer.ptr;                                                       // HACK
+    curr.end = next;
+    curr.kind = TokenKind::number;
+//  curr.string_class = 0;
+    curr.number_class = nc;
+
+    lexer.ptr = next;                                                           // HACK
+
+    peek = TokenKind::discarded;
+
+    return cb.HandleNumber(json::impl::ConvertParsedNumber(number, nc), nc);
+#else
     Lex(TokenKind::number);
     JSON_ASSERT(curr.kind == TokenKind::number);
 
     return cb.HandleNumber(curr.ptr, curr.end, curr.number_class);
+#endif
 }
 
 template <typename ParseCallbacks>
@@ -1123,15 +1458,34 @@ ParseStatus Parser<ParseCallbacks>::ConsumeIdentifier()
     case Identifier::nan:
         curr.kind = TokenKind::number;
         curr.number_class = NumberClass::nan;
+#if JSON_PARSER_CONVERT_NUMBERS
+        return cb.HandleNumber(std::numeric_limits<double>::quiet_NaN(), NumberClass::nan);
+#else
         return cb.HandleNumber(curr.ptr, curr.end, curr.number_class);
+#endif
     case Identifier::infinity:
         curr.kind = TokenKind::number;
         curr.number_class = NumberClass::pos_infinity;
+#if JSON_PARSER_CONVERT_NUMBERS
+        return cb.HandleNumber(std::numeric_limits<double>::infinity(), NumberClass::pos_infinity);
+#else
         return cb.HandleNumber(curr.ptr, curr.end, curr.number_class);
+#endif
     default:
         return ParseStatus::unrecognized_identifier;
     }
 }
+
+#if JSON_PARSER_CONVERT_NUMBERS
+template <typename ParseCallbacks>
+JSON_NEVER_INLINE ParseStatus Parser<ParseCallbacks>::InvalidNumber()
+{
+    Lex(TokenKind::number);
+    JSON_ASSERT(curr.kind == TokenKind::number);
+
+    return cb.HandleNumber(0.0, curr.number_class);
+}
+#endif
 
 template <typename ParseCallbacks>
 JSON_FORCE_INLINE TokenKind Parser<ParseCallbacks>::Peek()
@@ -1211,7 +1565,11 @@ ParseResult ParseSAX(ParseCallbacks& cb, char const* next, char const* last, Mod
 //    virtual json::ParseStatus HandleNull() = 0;
 //    virtual json::ParseStatus HandleTrue() = 0;
 //    virtual json::ParseStatus HandleFalse() = 0;
+//#if JSON_PARSER_CONVERT_NUMBERS
+//    virtual json::ParseStatus HandleNumber(double value, json::NumberClass nc) = 0;
+//#else
 //    virtual json::ParseStatus HandleNumber(char const* first, char const* last, json::NumberClass nc) = 0;
+//#endif
 //    virtual json::ParseStatus HandleString(char const* first, char const* last, json::StringClass sc) = 0;
 //    virtual json::ParseStatus HandleKey(char const* first, char const* last, json::StringClass sc) = 0;
 //    virtual json::ParseStatus HandleBeginArray() = 0;
