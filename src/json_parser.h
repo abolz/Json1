@@ -69,8 +69,8 @@ inline uint32_t CharClass(char ch)
         A  = CC_identifier_start,
         P  = CC_punctuation,
         C  = CC_needs_cleaning,
-        ID = I|A,
-        BS = I|A|C|S,   // backslash
+        Id = I|A,
+        Bs = I|A|C|S,   // backslash
         U8 = I|A|C,     // >= 0x80
     };
 
@@ -84,13 +84,13 @@ inline uint32_t CharClass(char ch)
     //  0     1     2     3     4     5     6     7     8     9     :     ;     <     =     >     ?
         D|I,  D|I,  D|I,  D|I,  D|I,  D|I,  D|I,  D|I,  D|I,  D|I,  P,    0,    0,    0,    0,    0,
     //  @     A     B     C     D     E     F     G     H     I     J     K     L     M     N     O
-        0,    ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,
+        0,    Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,
     //  P     Q     R     S     T     U     V     W     X     Y     Z     [     \     ]     ^     _
-        ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   P,    BS,   P,    0,    ID,
+        Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   P,    Bs,   P,    0,    Id,
     //  `     a     b     c     d     e     f     g     h     i     j     k     l     m     n     o
-        0,    ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,
+        0,    Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,
     //  p     q     r     s     t     u     v     w     x     y     z     {     |     }     ~     DEL
-        ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   ID,   P,    0,    P,    0,    0,
+        Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   P,    0,    P,    0,    0,
         U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,
         U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,
         U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,   U8,
