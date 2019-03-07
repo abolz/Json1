@@ -5,6 +5,8 @@
 /bin/
 /build/
 /ext/
+/lib/
+/micro-benchmark/
 /obj/
 /scratch/
 /test_data/
