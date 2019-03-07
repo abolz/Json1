@@ -334,8 +334,8 @@ struct RapidjsonDocumentReader
 
     ParseStatus HandleNumber(char const* first, char const* last, NumberClass nc)
     {
-        // TODO:
-        // nc == NumberClass::integer
+        if (nc == NumberClass::invalid)
+            return ParseStatus::invalid_number;
 
         doc->Double(json::numbers::StringToNumber(first, last, nc));
         return {};

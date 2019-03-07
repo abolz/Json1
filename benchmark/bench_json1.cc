@@ -41,21 +41,15 @@ struct GenStatsCallbacks
         return {};
     }
 
-#if JSON_PARSE_NUMBERS_AS_DOUBLE
-    ParseStatus HandleNumber(double value, NumberClass /*nc*/)
-    {
-        ++stats.number_count;
-        stats.total_number_value += value;
-        return {};
-    }
-#else
     ParseStatus HandleNumber(char const* first, char const* last, NumberClass nc)
     {
+        if (nc == NumberClass::invalid)
+            return ParseStatus::invalid_number;
+
         ++stats.number_count;
         stats.total_number_value += json::numbers::StringToNumber(first, last, nc);
         return {};
     }
-#endif
 
     ParseStatus HandleString(char const* first, char const* last, StringClass sc)
     {
