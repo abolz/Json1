@@ -1,48 +1,48 @@
 ---
-simdjson dom        test_data/jsonexamples/mini/apache_builds.json                  0.090 MB     0.11 ms (  0.837793 GB/sec)
-json1 dom           test_data/jsonexamples/mini/apache_builds.json                  0.090 MB     0.38 ms (  0.238215 GB/sec) --- x3.52
-sajson dom          test_data/jsonexamples/mini/apache_builds.json                  0.090 MB     0.21 ms (  0.421195 GB/sec) --- x1.99
+simdjson dom        test_data/jsonexamples/mini/apache_builds.json                  0.090 MB     0.11 ms (  0.838997 GB/sec)
+json1 dom           test_data/jsonexamples/mini/apache_builds.json                  0.090 MB     0.36 ms (  0.249140 GB/sec) --- x3.37
+sajson dom          test_data/jsonexamples/mini/apache_builds.json                  0.090 MB     0.22 ms (  0.408508 GB/sec) --- x2.05
 ---
-simdjson dom        test_data/jsonexamples/mini/canada.json                           nan MB     8.20 ms (  0.242995 GB/sec)
-json1 dom           test_data/jsonexamples/mini/canada.json                         1.993 MB    15.34 ms (  0.129963 GB/sec) --- x1.87
-sajson dom          test_data/jsonexamples/mini/canada.json                         1.993 MB    12.28 ms (  0.162369 GB/sec) --- x1.50
+simdjson dom        test_data/jsonexamples/mini/canada.json                           nan MB     8.21 ms (  0.242874 GB/sec)
+json1 dom           test_data/jsonexamples/mini/canada.json                         1.993 MB    15.21 ms (  0.131055 GB/sec) --- x1.85
+sajson dom          test_data/jsonexamples/mini/canada.json                         1.993 MB    12.41 ms (  0.160675 GB/sec) --- x1.51
 ---
-simdjson dom        test_data/jsonexamples/mini/citm_catalog.json                   0.477 MB     2.06 ms (  0.231385 GB/sec)
-json1 dom           test_data/jsonexamples/mini/citm_catalog.json                   0.477 MB     2.40 ms (  0.198827 GB/sec) --- x1.16
-sajson dom          test_data/jsonexamples/mini/citm_catalog.json                   0.477 MB     2.47 ms (  0.193341 GB/sec) --- x1.20
+simdjson dom        test_data/jsonexamples/mini/citm_catalog.json                   0.477 MB     2.09 ms (  0.227809 GB/sec)
+json1 dom           test_data/jsonexamples/mini/citm_catalog.json                   0.477 MB     2.28 ms (  0.208845 GB/sec) --- x1.09
+sajson dom          test_data/jsonexamples/mini/citm_catalog.json                   0.477 MB     2.49 ms (  0.191310 GB/sec) --- x1.19
 ---
-simdjson dom        test_data/jsonexamples/mini/github_events.json                  0.051 MB     0.05 ms (  0.955382 GB/sec)
-json1 dom           test_data/jsonexamples/mini/github_events.json                  0.051 MB     0.22 ms (  0.234834 GB/sec) --- x4.07
-sajson dom          test_data/jsonexamples/mini/github_events.json                  0.051 MB     0.12 ms (  0.435422 GB/sec) --- x2.19
+simdjson dom        test_data/jsonexamples/mini/github_events.json                  0.051 MB     0.05 ms (  0.951699 GB/sec)
+json1 dom           test_data/jsonexamples/mini/github_events.json                  0.051 MB     0.20 ms (  0.249381 GB/sec) --- x3.82
+sajson dom          test_data/jsonexamples/mini/github_events.json                  0.051 MB     0.12 ms (  0.431795 GB/sec) --- x2.20
 ---
-simdjson dom        test_data/jsonexamples/mini/gsoc-2018.json                      2.928 MB     5.52 ms (  0.530633 GB/sec)
-json1 dom           test_data/jsonexamples/mini/gsoc-2018.json                      2.928 MB    17.17 ms (  0.170544 GB/sec) --- x3.11
-sajson dom          test_data/jsonexamples/mini/gsoc-2018.json                      2.928 MB     8.57 ms (  0.341633 GB/sec) --- x1.55
+simdjson dom        test_data/jsonexamples/mini/gsoc-2018.json                      2.928 MB     5.56 ms (  0.526711 GB/sec)
+json1 dom           test_data/jsonexamples/mini/gsoc-2018.json                      2.928 MB    15.85 ms (  0.184665 GB/sec) --- x2.85
+sajson dom          test_data/jsonexamples/mini/gsoc-2018.json                      2.928 MB     8.60 ms (  0.340393 GB/sec) --- x1.55
 ---
-simdjson dom        test_data/jsonexamples/mini/instruments.json                    0.103 MB     0.19 ms (  0.553306 GB/sec)
-json1 dom           test_data/jsonexamples/mini/instruments.json                    0.103 MB     0.54 ms (  0.192296 GB/sec) --- x2.88
-sajson dom          test_data/jsonexamples/mini/instruments.json                    0.103 MB     0.35 ms (  0.293285 GB/sec) --- x1.89
+simdjson dom        test_data/jsonexamples/mini/instruments.json                    0.103 MB     0.19 ms (  0.550414 GB/sec)
+json1 dom           test_data/jsonexamples/mini/instruments.json                    0.103 MB     0.50 ms (  0.205773 GB/sec) --- x2.67
+sajson dom          test_data/jsonexamples/mini/instruments.json                    0.103 MB     0.36 ms (  0.290109 GB/sec) --- x1.90
 ---
-simdjson dom        test_data/jsonexamples/mini/marine_ik.json                        nan MB    11.85 ms (  0.148712 GB/sec)
-json1 dom           test_data/jsonexamples/mini/marine_ik.json                      1.762 MB    16.50 ms (  0.106781 GB/sec) --- x1.39
-sajson dom          test_data/jsonexamples/mini/marine_ik.json                      1.762 MB    19.76 ms (  0.089182 GB/sec) --- x1.67
+simdjson dom        test_data/jsonexamples/mini/marine_ik.json                        nan MB    11.88 ms (  0.148309 GB/sec)
+json1 dom           test_data/jsonexamples/mini/marine_ik.json                      1.762 MB    15.07 ms (  0.116888 GB/sec) --- x1.27
+sajson dom          test_data/jsonexamples/mini/marine_ik.json                      1.762 MB    19.77 ms (  0.089093 GB/sec) --- x1.66
 ---
-simdjson dom        test_data/jsonexamples/mini/mesh.json                             nan MB     3.08 ms (  0.199088 GB/sec)
-json1 dom           test_data/jsonexamples/mini/mesh.json                           0.613 MB     3.99 ms (  0.153796 GB/sec) --- x1.29
-sajson dom          test_data/jsonexamples/mini/mesh.json                           0.613 MB     4.49 ms (  0.136418 GB/sec) --- x1.46
+simdjson dom        test_data/jsonexamples/mini/mesh.json                             nan MB     3.06 ms (  0.200516 GB/sec)
+json1 dom           test_data/jsonexamples/mini/mesh.json                           0.613 MB     4.02 ms (  0.152571 GB/sec) --- x1.31
+sajson dom          test_data/jsonexamples/mini/mesh.json                           0.613 MB     4.75 ms (  0.129012 GB/sec) --- x1.55
 ---
-simdjson dom        test_data/jsonexamples/mini/numbers.json                          nan MB     0.47 ms (  0.305064 GB/sec)
-json1 dom           test_data/jsonexamples/mini/numbers.json                        0.143 MB     0.81 ms (  0.176476 GB/sec) --- x1.73
-sajson dom          test_data/jsonexamples/mini/numbers.json                        0.143 MB     0.42 ms (  0.342213 GB/sec) --- x0.89
+simdjson dom        test_data/jsonexamples/mini/numbers.json                          nan MB     0.47 ms (  0.301416 GB/sec)
+json1 dom           test_data/jsonexamples/mini/numbers.json                        0.143 MB     0.78 ms (  0.183241 GB/sec) --- x1.64
+sajson dom          test_data/jsonexamples/mini/numbers.json                        0.143 MB     0.41 ms (  0.345184 GB/sec) --- x0.87
 ---
-simdjson dom        test_data/jsonexamples/mini/random.json                         0.440 MB     1.55 ms (  0.284278 GB/sec)
-json1 dom           test_data/jsonexamples/mini/random.json                         0.440 MB     3.18 ms (  0.138253 GB/sec) --- x2.06
-sajson dom          test_data/jsonexamples/mini/random.json                         0.440 MB     2.19 ms (  0.200995 GB/sec) --- x1.41
+simdjson dom        test_data/jsonexamples/mini/random.json                         0.440 MB     1.55 ms (  0.283284 GB/sec)
+json1 dom           test_data/jsonexamples/mini/random.json                         0.440 MB     3.15 ms (  0.139683 GB/sec) --- x2.03
+sajson dom          test_data/jsonexamples/mini/random.json                         0.440 MB     2.25 ms (  0.195995 GB/sec) --- x1.45
 ---
-simdjson dom        test_data/jsonexamples/mini/twitter.json                          nan MB     1.12 ms (  0.399088 GB/sec)
-json1 dom           test_data/jsonexamples/mini/twitter.json                        0.446 MB     2.37 ms (  0.187738 GB/sec) --- x2.13
-sajson dom          test_data/jsonexamples/mini/twitter.json                        0.446 MB     1.25 ms (  0.356513 GB/sec) --- x1.12
+simdjson dom        test_data/jsonexamples/mini/twitter.json                          nan MB     1.12 ms (  0.397528 GB/sec)
+json1 dom           test_data/jsonexamples/mini/twitter.json                        0.446 MB     2.24 ms (  0.198707 GB/sec) --- x2.00
+sajson dom          test_data/jsonexamples/mini/twitter.json                        0.446 MB     1.23 ms (  0.363648 GB/sec) --- x1.09
 ---
-simdjson dom        test_data/jsonexamples/mini/update-center.json                  0.508 MB     1.20 ms (  0.424445 GB/sec)
-json1 dom           test_data/jsonexamples/mini/update-center.json                  0.508 MB     2.36 ms (  0.215397 GB/sec) --- x1.97
-sajson dom          test_data/jsonexamples/mini/update-center.json                  0.508 MB     2.15 ms (  0.236938 GB/sec) --- x1.79
+simdjson dom        test_data/jsonexamples/mini/update-center.json                  0.508 MB     1.17 ms (  0.433463 GB/sec)
+json1 dom           test_data/jsonexamples/mini/update-center.json                  0.508 MB     2.21 ms (  0.230067 GB/sec) --- x1.88
+sajson dom          test_data/jsonexamples/mini/update-center.json                  0.508 MB     2.02 ms (  0.251552 GB/sec) --- x1.72
