@@ -139,7 +139,7 @@ TestImplementation test_implementations[] = {
 #if REVERSE_ORDER
     { "simdjson dom", &simdjson_dom_test::test },
     { "json1 dom", &json1_dom_test::test },
-    //{ "rapidjson dom", &rapidjson_dom_test::test },
+    { "rapidjson dom", &rapidjson_dom_test::test },
     { "sajson dom", &sajson_dom_test::test },
     //{ "nlohmann dom", &nlohmann_dom_test::test },
 #else
@@ -182,6 +182,7 @@ const char* benchmark_files[] = {
 #endif
 
 #if 0
+    "test_data/jsonexamples/tiny0.json",
     "test_data/jsonexamples/tiny1.json",
     "test_data/jsonexamples/tiny2.json",
     "test_data/jsonexamples/tiny3.json",
@@ -270,7 +271,7 @@ static inline double Var2(Timing const& t)
 #endif
 
 // the input buf should be readable up to buf + SIMDJSON_PADDING
-static constexpr size_t SIMDJSON_PADDING = (256 / 8);
+static constexpr size_t SIMDJSON_PADDING = 64; // (256 / 8);
 
 // PRE: align == 2^n
 static inline void* mem_aligned_alloc(size_t num_bytes, size_t align)

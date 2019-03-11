@@ -244,7 +244,7 @@ TEST_CASE("Invalid UTF-8")
         char const* last = test.input.data() + test.input.size();
 
         std::string str;
-        auto const res = json::strings::UnescapeString(next, last, [&](char ch) { str += ch; }, /*allow_invalid_unicode*/ true);
+        auto const res = json::strings::UnescapeString(next, last, /*allow_invalid_unicode*/ true, [&](char ch) { str += ch; });
         CHECK(res.ec == json::strings::Status::success);
         CHECK(res.ptr == last);
 
@@ -260,7 +260,7 @@ TEST_CASE("Invalid UTF-8 (Unicode 11.0)")
         CAPTURE(ToPrintableString(expected));
 
         std::string output;
-        json::strings::EscapeString(input.data(), input.data() + input.size(), [&](char ch) { output.push_back(ch); }, /*allow_invalid_unicode*/ true);
+        json::strings::EscapeString(input.data(), input.data() + input.size(), /*allow_invalid_unicode*/ true, [&](char ch) { output.push_back(ch); });
         CAPTURE(ToPrintableString(output));
 
         CHECK(output == expected);

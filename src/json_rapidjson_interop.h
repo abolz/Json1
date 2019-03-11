@@ -348,7 +348,7 @@ struct RapidjsonDocumentReader
             std::string str;
             str.reserve(static_cast<size_t>(last - first));
 
-            auto const res = json::strings::UnescapeString(first, last, [&](char ch) { str.push_back(ch); });
+            auto const res = json::strings::UnescapeString(first, last, /*allow_invalid_unicode*/ false, [&](char ch) { str.push_back(ch); });
             if (res.ec != json::strings::Status::success) {
                 return ParseStatus::invalid_string;
             }
@@ -398,23 +398,7 @@ struct RapidjsonDocumentReader
 
     ParseStatus HandleKey(char const* first, char const* last, StringClass sc)
     {
-        if (sc != StringClass::clean)
-        {
-            std::string str;
-            str.reserve(static_cast<size_t>(last - first));
-
-            auto const res = json::strings::UnescapeString(first, last, [&](char ch) { str.push_back(ch); });
-            if (res.ec != json::strings::Status::success) {
-                return ParseStatus::invalid_string;
-            }
-
-            doc->Key(str.data(), static_cast<rapidjson::SizeType>(str.size()), /*copy*/ true);
-        }
-        else
-        {
-            doc->Key(first, static_cast<rapidjson::SizeType>(last - first), /*copy*/ kCopyCleanStrings);
-        }
-        return {};
+        return HandleString(first, last, sc);
     }
 };
 

@@ -387,8 +387,8 @@ struct UnescapeStringResult {
     Status ec;
 };
 
-template <typename YieldChar>
-UnescapeStringResult UnescapeString(char const* curr, char const* last, YieldChar yield, bool allow_invalid_unicode = true)
+template <typename Yield1, typename YieldN>
+UnescapeStringResult UnescapeString(char const* curr, char const* last, bool allow_invalid_unicode, Yield1 yield, YieldN yield_n)
 {
     namespace unicode = json::impl::unicode;
 
@@ -399,14 +399,6 @@ UnescapeStringResult UnescapeString(char const* curr, char const* last, YieldCha
                 break;
         }
         return f;
-    };
-
-    auto yield_n = [&](char const* p, intptr_t n)
-    {
-        for (intptr_t i = 0; i < n; ++i) {
-            yield(p[i]);
-        }
-        return p + n;
     };
 
     for (;;)
@@ -506,7 +498,13 @@ UnescapeStringResult UnescapeString(char const* curr, char const* last, YieldCha
             switch (res.ec)
             {
             case unicode::DecodeUTF8SequenceStatus::success:
-                yield_n(f, curr - f);
+                JSON_ASSERT(curr - f >= 2);
+                JSON_ASSERT(curr - f <= 4);
+                switch (curr - f) {
+                case 2: yield_n(f, 2); break;
+                case 3: yield_n(f, 3); break;
+                case 4: yield_n(f, 4); break;
+                }
                 break;
 
             case unicode::DecodeUTF8SequenceStatus::invalid_utf8_encoding:
@@ -530,13 +528,27 @@ UnescapeStringResult UnescapeString(char const* curr, char const* last, YieldCha
     return {curr, Status::success};
 }
 
+template <typename Yield1>
+UnescapeStringResult UnescapeString(char const* curr, char const* last, bool allow_invalid_unicode, Yield1 yield)
+{
+    auto yield_n = [&](char const* p, intptr_t n)
+    {
+        for (intptr_t i = 0; i < n; ++i) {
+            yield(p[i]);
+        }
+        return p + n;
+    };
+
+    return json::strings::UnescapeString(curr, last, allow_invalid_unicode, yield, yield_n);
+}
+
 struct EscapeStringResult {
     char const* ptr;
     Status ec;
 };
 
-template <typename YieldChar>
-EscapeStringResult EscapeString(char const* curr, char const* last, YieldChar yield, bool allow_invalid_unicode = true)
+template <typename Yield1, typename YieldN>
+EscapeStringResult EscapeString(char const* curr, char const* last, bool allow_invalid_unicode, Yield1 yield, YieldN yield_n)
 {
     namespace unicode = json::impl::unicode;
 
@@ -549,14 +561,6 @@ EscapeStringResult EscapeString(char const* curr, char const* last, YieldChar yi
                 break;
         }
         return f;
-    };
-
-    auto yield_n = [&](char const* p, intptr_t n)
-    {
-        for (intptr_t i = 0; i < n; ++i) {
-            yield(p[i]);
-        }
-        return p + n;
     };
 
     char const* const first = curr;
@@ -619,7 +623,13 @@ EscapeStringResult EscapeString(char const* curr, char const* last, YieldChar yi
                     break;
                 default:
                     // The UTF-8 sequence is valid. No need to re-encode.
-                    yield_n(f, curr - f);
+                    JSON_ASSERT(curr - f >= 2);
+                    JSON_ASSERT(curr - f <= 4);
+                    switch (curr - f) {
+                    case 2: yield_n(f, 2); break;
+                    case 3: yield_n(f, 3); break;
+                    case 4: yield_n(f, 4); break;
+                    }
                     break;
                 }
                 break;
@@ -670,6 +680,20 @@ EscapeStringResult EscapeString(char const* curr, char const* last, YieldChar yi
     }
 
     return {curr, Status::success};
+}
+
+template <typename Yield1>
+EscapeStringResult EscapeString(char const* curr, char const* last, bool allow_invalid_unicode, Yield1 yield)
+{
+    auto yield_n = [&](char const* p, intptr_t n)
+    {
+        for (intptr_t i = 0; i < n; ++i) {
+            yield(p[i]);
+        }
+        return p + n;
+    };
+
+    return json::strings::EscapeString(curr, last, allow_invalid_unicode, yield, yield_n);
 }
 
 } // namespace strings
