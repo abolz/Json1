@@ -139,7 +139,7 @@ TestImplementation test_implementations[] = {
 #if REVERSE_ORDER
     { "simdjson dom", &simdjson_dom_test::test },
     { "json1 dom", &json1_dom_test::test },
-    { "rapidjson dom", &rapidjson_dom_test::test },
+    //{ "rapidjson dom", &rapidjson_dom_test::test },
     { "sajson dom", &sajson_dom_test::test },
     //{ "nlohmann dom", &nlohmann_dom_test::test },
 #else
@@ -276,34 +276,13 @@ static constexpr size_t SIMDJSON_PADDING = 64; // (256 / 8);
 // PRE: align == 2^n
 static inline void* mem_aligned_alloc(size_t num_bytes, size_t align)
 {
-#if _MSC_VER
-    return ::_aligned_malloc(num_bytes, align);
-#else
     return ::_mm_malloc(num_bytes, align);
-#endif
 }
-
-// // Note:
-// // It is an error to reallocate memory and change the alignment of a block.
-// // PRE: align == 2^n
-// static inline void* mem_aligned_realloc(void* ptr, size_t num_bytes, size_t align)
-// {
-// #if _MSC_VER
-//     return ::_aligned_realloc(ptr, num_bytes, align);
-// #else
-//     assert(!"not implemented yet");
-//     return nullptr;
-// #endif
-// }
 
 static inline void mem_aligned_free(void* ptr)
 {
     assert(ptr != nullptr);
-#if _MSC_VER
-    ::_aligned_free(ptr);
-#else
     ::_mm_free(ptr);
-#endif
 }
 
 struct AlignedDeleter {
