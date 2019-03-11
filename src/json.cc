@@ -793,19 +793,6 @@ struct ParseValueCallbacks
         return {};
     }
 
-#if JSON_PARSER_CONVERT_NUMBERS
-    ParseStatus HandleNumber(double value, NumberClass nc)
-    {
-        if (nc == NumberClass::invalid)
-            return ParseStatus::invalid_number;
-
-        if (mode == Mode::strict && !IsFinite(nc))
-            return ParseStatus::invalid_number;
-
-        stack.emplace_back(value);
-        return {};
-    }
-#else
     ParseStatus HandleNumber(char const* first, char const* last, NumberClass nc)
     {
         if (nc == NumberClass::invalid)
@@ -821,7 +808,6 @@ struct ParseValueCallbacks
 
         return {};
     }
-#endif
 
     ParseStatus HandleString(char const* first, char const* last, StringClass string_class)
     {
