@@ -817,7 +817,7 @@ struct ParseValueCallbacks
 
             str.reserve(static_cast<size_t>(last - first));
 
-            auto const res = strings::UnescapeString(first, last, /*allow_invalid_unicode*/ false, [&](char ch) { str.push_back(ch); });
+            auto const res = strings::UnescapeString(first, last, /*allow_invalid_unicode*/ mode != Mode::strict, [&](char ch) { str.push_back(ch); });
             if (res.ec != strings::Status::success)
                 return ParseStatus::invalid_string;
 
@@ -876,7 +876,7 @@ struct ParseValueCallbacks
             keys.emplace_back();
             keys.back().reserve(static_cast<size_t>(last - first));
 
-            auto const res = strings::UnescapeString(first, last, /*allow_invalid_unicode*/ false, [&](char ch) { keys.back().push_back(ch); });
+            auto const res = strings::UnescapeString(first, last, /*allow_invalid_unicode*/ mode != Mode::strict, [&](char ch) { keys.back().push_back(ch); });
             if (res.ec != strings::Status::success)
                 return ParseStatus::invalid_string; // return ParseStatus::invalid_key;
         }
@@ -1018,7 +1018,7 @@ static bool StringifyNumber(std::string& str, double value, StringifyOptions con
     return true;
 }
 
-static bool StringifyString(std::string& str, String const& value, StringifyOptions const& /*options*/)
+static bool StringifyString(std::string& str, String const& value, StringifyOptions const& options)
 {
     bool success = true;
 
@@ -1028,7 +1028,7 @@ static bool StringifyString(std::string& str, String const& value, StringifyOpti
     char const* const last = value.data() + value.size();
     if (next != last)
     {
-        auto const res = strings::EscapeString(next, last, /*allow_invalid_unicode*/ false, [&](char ch) { str += ch; });
+        auto const res = strings::EscapeString(next, last, /*allow_invalid_unicode*/ options.mode != Mode::strict, [&](char ch) { str += ch; });
         success = res.ec == strings::Status::success;
     }
 
