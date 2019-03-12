@@ -20,10 +20,24 @@
 
 #pragma once
 
+//#define JSON_USE_SSE2 1
+#ifndef JSON_USE_SSE2
+#if defined(__SSE_2__) || defined(_M_X64)
+#define JSON_USE_SSE2 1
+#endif
+#endif
+
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+
+#if JSON_USE_SSE2
+#if _MSC_VER
+#include <intrin.h>
+#endif
+#include <emmintrin.h>
+#endif
 
 #ifndef JSON_ASSERT
 #define JSON_ASSERT(X) assert(X)
@@ -41,6 +55,30 @@
 #endif
 
 namespace json {
+
+namespace impl {
+namespace intrinsics {
+    // Returns the number of trailing 0-bits in X, starting at the least significant bit position.
+    // If X is 0, the result is undefined.
+    inline int bsf32(uint32_t x)
+    {
+#if _MSC_VER
+        unsigned long index;
+        _BitScanForward(&index, x);
+        return (int)index;
+#else
+        return __builtin_ctz(x);
+#endif
+    }
+
+    // Returns the number of trailing 0-bits in X, starting at the least significant bit position.
+    // If X is 0, the result is undefined.
+    inline int bsf32(int32_t x)
+    {
+        return json::impl::intrinsics::bsf32(static_cast<uint32_t>(x));
+    }
+} // namespace intrinsics
+} // namespace impl
 
 //==================================================================================================
 // CharClass
@@ -344,7 +382,6 @@ struct Token
 
 class Lexer
 {
-private:
     char const* ptr = nullptr;
     char const* end = nullptr;
 
@@ -382,7 +419,7 @@ inline void Lexer::SetInput(char const* first, char const* last)
     end = last;
 }
 
-JSON_FORCE_INLINE TokenKind Lexer::Peek(Mode mode)
+inline TokenKind Lexer::Peek(Mode mode)
 {
     enum : uint8_t {
         Ic = static_cast<uint8_t>(TokenKind::invalid_character),
@@ -458,7 +495,7 @@ JSON_FORCE_INLINE TokenKind Lexer::Peek(Mode mode)
     }
 }
 
-JSON_FORCE_INLINE Token Lexer::Lex(TokenKind kind)
+inline Token Lexer::Lex(TokenKind kind)
 {
     char const* p = ptr;
     switch (kind)
@@ -493,7 +530,7 @@ JSON_FORCE_INLINE Token Lexer::Lex(TokenKind kind)
     return MakeToken(p, kind);
 }
 
-JSON_FORCE_INLINE void Lexer::Skip(TokenKind kind)
+inline void Lexer::Skip(TokenKind kind)
 {
 #ifndef NDEBUG
     switch (kind)
@@ -516,8 +553,111 @@ JSON_FORCE_INLINE void Lexer::Skip(TokenKind kind)
     ++ptr;
 }
 
-JSON_FORCE_INLINE Token Lexer::LexString(char const* p)
+inline Token Lexer::LexString(char const* p)
 {
+#if JSON_USE_SSE2
+    using namespace json::charclass;
+
+    JSON_ASSERT(p != end);
+    JSON_ASSERT(*p == '"');
+
+    ++p; // Skip '"'
+
+    const __m128i quotes = _mm_set1_epi8('"');
+    const __m128i backslashes = _mm_set1_epi8('\\');
+    const __m128i spaces = _mm_set1_epi8(' ');
+
+    auto SkipFast = [&](char const* f, char const* l)
+    {
+        for ( ; l - f >= 16; f += 16)
+        {
+            const __m128i bytes = _mm_loadu_si128(reinterpret_cast<const __m128i*>(f));
+            const __m128i mask_quotes = _mm_cmpeq_epi8(quotes, bytes);
+            const __m128i mask_backslashes = _mm_cmpeq_epi8(backslashes, bytes);
+            const __m128i mask_spaces = _mm_cmpgt_epi8(spaces, bytes);
+            const __m128i mask = _mm_or_si128(mask_quotes, _mm_or_si128(mask_backslashes, mask_spaces));
+            const int32_t mmask = _mm_movemask_epi8(mask);
+            if (mmask != 0)
+            {
+                return f + json::impl::intrinsics::bsf32(mmask);
+            }
+        }
+        for ( ; f != l; ++f)
+        {
+            if ('"' == *f || '\\' == *f || ' ' > static_cast<int8_t>(*f))
+                break;
+        }
+        return f;
+    };
+
+    auto SkipFaster = [&](char const* f, char const* l)
+    {
+        for ( ; l - f >= 16; f += 16)
+        {
+            const __m128i bytes = _mm_loadu_si128(reinterpret_cast<const __m128i*>(f));
+            const __m128i mask_quotes = _mm_cmpeq_epi8(quotes, bytes);
+            const __m128i mask_backslashes = _mm_cmpeq_epi8(backslashes, bytes);
+            const __m128i mask = _mm_or_si128(mask_quotes, mask_backslashes);
+            const int32_t mmask = _mm_movemask_epi8(mask);
+            if (mmask != 0)
+            {
+                return f + json::impl::intrinsics::bsf32(mmask);
+            }
+        }
+        for ( ; f != l; ++f)
+        {
+            if ('"' == *f || '\\' == *f)
+                break;
+        }
+        return f;
+    };
+
+    StringClass sc = StringClass::clean;
+
+    p = SkipFast(p, end);
+    if (p != end && *p != '"')
+    {
+        sc = StringClass::needs_cleaning;
+
+        if (*p == '\\')
+        {
+            ++p; // skip '\'
+            if (p != end)
+                ++p; // skip escaped char
+        }
+
+        for (;;)
+        {
+            p = SkipFaster(p, end);
+            if (p == end || *p == '"')
+                break;
+
+            JSON_ASSERT(*p == '\\');
+            ++p; // skip '\'
+            if (p == end)
+                break;
+            ++p; // skip escaped char
+        }
+    }
+
+    JSON_ASSERT(p == end || *p == '"');
+
+    bool const is_incomplete = (p == end);
+    if (!is_incomplete)
+        ++p; // Skip '"'
+
+    Token tok;
+
+    tok.ptr = ptr;
+    tok.end = p;
+    tok.kind = is_incomplete ? TokenKind::incomplete_string : TokenKind::string;
+    tok.string_class = sc;
+//  tok.number_class = 0;
+
+    ptr = p;
+
+    return tok;
+#else // ^^^ JSON_USE_SSE2 ^^^
     using namespace json::charclass;
 
     JSON_ASSERT(p != end);
@@ -559,9 +699,10 @@ JSON_FORCE_INLINE Token Lexer::LexString(char const* p)
     ptr = p;
 
     return tok;
+#endif // ^^^ not JSON_USE_SSE2 ^^^
 }
 
-JSON_FORCE_INLINE Token Lexer::LexNumber(char const* p)
+inline Token Lexer::LexNumber(char const* p)
 {
     using json::charclass::IsSeparator;
 
@@ -596,7 +737,7 @@ JSON_FORCE_INLINE Token Lexer::LexNumber(char const* p)
     return tok;
 }
 
-JSON_FORCE_INLINE Token Lexer::LexIdentifier(char const* p)
+inline Token Lexer::LexIdentifier(char const* p)
 {
     using namespace json::charclass;
 
@@ -605,7 +746,7 @@ JSON_FORCE_INLINE Token Lexer::LexIdentifier(char const* p)
     JSON_ASSERT(IsIdentifierBody(*p));
 
     // Don't skip identifier start here.
-    // Might have the set needs_cleaning flag below.
+    // Might have to set needs_cleaning flag below.
 
     uint32_t mask = 0;
     while (p != end)
@@ -676,7 +817,7 @@ JSON_NEVER_INLINE char const* Lexer::SkipComment(char const* p, char const* end)
     return nullptr;
 }
 
-JSON_FORCE_INLINE Token Lexer::MakeToken(char const* p, TokenKind kind)
+inline Token Lexer::MakeToken(char const* p, TokenKind kind)
 {
     Token tok;
 
@@ -763,27 +904,27 @@ private:
 };
 
 template <typename ParseCallbacks>
-Parser<ParseCallbacks>::Parser(ParseCallbacks& cb_, Mode mode_)
+inline Parser<ParseCallbacks>::Parser(ParseCallbacks& cb_, Mode mode_)
     : cb(cb_)
     , mode(mode_)
 {
 }
 
 template <typename ParseCallbacks>
-void Parser<ParseCallbacks>::Init(char const* next, char const* last)
+inline void Parser<ParseCallbacks>::Init(char const* next, char const* last)
 {
     lexer.SetInput(next, last);
 }
 
 template <typename ParseCallbacks>
-Token Parser<ParseCallbacks>::GetPeekToken()
+inline Token Parser<ParseCallbacks>::GetPeekToken()
 {
     JSON_ASSERT(curr.kind != TokenKind::discarded);
     return curr;
 }
 
 template <typename ParseCallbacks>
-ParseStatus Parser<ParseCallbacks>::Parse()
+inline ParseStatus Parser<ParseCallbacks>::Parse()
 {
     ParseStatus ec = ParseValue();
 
@@ -811,7 +952,7 @@ ParseStatus Parser<ParseCallbacks>::Parse()
 }
 
 template <typename ParseCallbacks>
-ParseStatus Parser<ParseCallbacks>::ParseValue()
+inline ParseStatus Parser<ParseCallbacks>::ParseValue()
 {
     struct StackElement {
         size_t count; // number of elements or members in the current array resp. object
@@ -1051,7 +1192,7 @@ L_end_structured:
 }
 
 template <typename ParseCallbacks>
-JSON_FORCE_INLINE ParseStatus Parser<ParseCallbacks>::ConsumePrimitive(TokenKind kind)
+inline ParseStatus Parser<ParseCallbacks>::ConsumePrimitive(TokenKind kind)
 {
     JSON_ASSERT(curr.kind == TokenKind::discarded);
     JSON_ASSERT(peek == kind);
@@ -1078,7 +1219,7 @@ JSON_FORCE_INLINE ParseStatus Parser<ParseCallbacks>::ConsumePrimitive(TokenKind
 }
 
 template <typename ParseCallbacks>
-ParseStatus Parser<ParseCallbacks>::ConsumeString()
+inline ParseStatus Parser<ParseCallbacks>::ConsumeString()
 {
     Lex(TokenKind::string);
     JSON_ASSERT(curr.kind == TokenKind::string || curr.kind == TokenKind::incomplete_string);
@@ -1095,7 +1236,7 @@ ParseStatus Parser<ParseCallbacks>::ConsumeString()
 }
 
 template <typename ParseCallbacks>
-ParseStatus Parser<ParseCallbacks>::ConsumeNumber()
+inline ParseStatus Parser<ParseCallbacks>::ConsumeNumber()
 {
     Lex(TokenKind::number);
     JSON_ASSERT(curr.kind == TokenKind::number);
@@ -1104,7 +1245,7 @@ ParseStatus Parser<ParseCallbacks>::ConsumeNumber()
 }
 
 template <typename ParseCallbacks>
-ParseStatus Parser<ParseCallbacks>::ConsumeIdentifier()
+inline ParseStatus Parser<ParseCallbacks>::ConsumeIdentifier()
 {
     Lex(TokenKind::identifier);
     JSON_ASSERT(curr.kind == TokenKind::identifier);
@@ -1134,7 +1275,7 @@ ParseStatus Parser<ParseCallbacks>::ConsumeIdentifier()
 }
 
 template <typename ParseCallbacks>
-JSON_FORCE_INLINE TokenKind Parser<ParseCallbacks>::Peek()
+inline TokenKind Parser<ParseCallbacks>::Peek()
 {
     //JSON_ASSERT(curr.kind == TokenKind::discarded);
     //JSON_ASSERT(peek == TokenKind::discarded);
@@ -1146,7 +1287,7 @@ JSON_FORCE_INLINE TokenKind Parser<ParseCallbacks>::Peek()
 }
 
 template <typename ParseCallbacks>
-JSON_FORCE_INLINE TokenKind Parser<ParseCallbacks>::Lex(TokenKind kind)
+inline TokenKind Parser<ParseCallbacks>::Lex(TokenKind kind)
 {
     JSON_ASSERT(curr.kind == TokenKind::discarded);
     JSON_ASSERT(kind != TokenKind::discarded);
@@ -1158,14 +1299,14 @@ JSON_FORCE_INLINE TokenKind Parser<ParseCallbacks>::Lex(TokenKind kind)
 }
 
 template <typename ParseCallbacks>
-JSON_FORCE_INLINE void Parser<ParseCallbacks>::Discard()
+inline void Parser<ParseCallbacks>::Discard()
 {
     curr.kind = TokenKind::discarded;
     peek = TokenKind::discarded;
 }
 
 template <typename ParseCallbacks>
-JSON_FORCE_INLINE void Parser<ParseCallbacks>::Skip(TokenKind kind)
+inline void Parser<ParseCallbacks>::Skip(TokenKind kind)
 {
     lexer.Skip(kind);
     Discard();
@@ -1185,7 +1326,7 @@ struct ParseResult
 };
 
 template <typename ParseCallbacks>
-ParseResult ParseSAX(ParseCallbacks& cb, char const* next, char const* last, Mode mode)
+inline ParseResult ParseSAX(ParseCallbacks& cb, char const* next, char const* last, Mode mode)
 {
     JSON_ASSERT(next != nullptr);
     JSON_ASSERT(last != nullptr);
@@ -1208,10 +1349,18 @@ ParseResult ParseSAX(ParseCallbacks& cb, char const* next, char const* last, Mod
 
 //struct ParseCallbacks
 //{
+//#if JSON_PARSER_CONVERT_STRINGS
+//    virtual char* AllocString(size_t max_len) = 0;
+//#endif
+//
 //    virtual json::ParseStatus HandleNull() = 0;
 //    virtual json::ParseStatus HandleTrue() = 0;
 //    virtual json::ParseStatus HandleFalse() = 0;
+//#if JSON_PARSER_CONVERT_NUMBERS
+//    virtual json::ParseStatus HandleNumber(double value, json::NumberClass nc) = 0;
+//#else
 //    virtual json::ParseStatus HandleNumber(char const* first, char const* last, json::NumberClass nc) = 0;
+//#endif
 //    virtual json::ParseStatus HandleString(char const* first, char const* last, json::StringClass sc) = 0;
 //    virtual json::ParseStatus HandleKey(char const* first, char const* last, json::StringClass sc) = 0;
 //    virtual json::ParseStatus HandleBeginArray() = 0;

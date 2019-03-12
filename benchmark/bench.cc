@@ -126,29 +126,17 @@ struct TestImplementation {
 
 TestImplementation test_implementations[] = {
 #if 0
-#if REVERSE_ORDER
     { "json1 sax", &json1_sax_test::test },
     { "rapidjson sax", &rapidjson_sax_test::test },
+    //{ "rapidjson sax", &rapidjson_sax_test::test },
+    //{ "nlohmann sax", &nlohmann_sax_test::test },
     { "nlohmann sax", &nlohmann_sax_test::test },
 #else
-    { "nlohmann sax", &nlohmann_sax_stats::test },
-    { "rapidjson sax", &rapidjson_sax_test::test },
-    { "json1 sax", &json1_sax_test::test },
-#endif
-#else
-#if REVERSE_ORDER
-    { "simdjson dom", &simdjson_dom_test::test },
     { "json1 dom", &json1_dom_test::test },
+    { "sajson dom", &sajson_dom_test::test },
     //{ "rapidjson dom", &rapidjson_dom_test::test },
-    { "sajson dom", &sajson_dom_test::test },
     //{ "nlohmann dom", &nlohmann_dom_test::test },
-#else
-    { "nlohmann dom", &nlohmann_dom_test::test },
-    { "sajson dom", &sajson_dom_test::test },
-    { "rapidjson dom", &rapidjson_dom_test::test },
-    { "json1 dom", &json1_dom_test::test },
     { "simdjson dom", &simdjson_dom_test::test },
-#endif
 #endif
 };
 
@@ -368,11 +356,7 @@ void benchmark(const char* filename) {
         if (first) {
             printf("\n");
         } else {
-#if REVERSE_ORDER
-            printf(" --- x%.2f\n", mean / reference);
-#else
             printf(" --- x%.2f\n", reference / mean);
-#endif
         }
         fflush(stdout);
 
