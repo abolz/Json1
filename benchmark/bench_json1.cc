@@ -15,6 +15,8 @@
 #include "traverse.h"
 #endif
 
+#define USE_STRING_BUFFER 0
+
 using namespace json;
 
 namespace {
@@ -137,15 +139,18 @@ using RapidjsonDocument = rapidjson::Document;
 
 struct RapidjsonDocumentReader
 {
-    static constexpr bool kCopyCleanStrings = true;
-
     RapidjsonDocument* doc;
+#if USE_STRING_BUFFER
     char* string_buffer;
+#endif
 
     RapidjsonDocumentReader(RapidjsonDocument* doc_, char* string_buffer_)
         : doc(doc_)
+#if USE_STRING_BUFFER
         , string_buffer(string_buffer_)
+#endif
     {
+        static_cast<void>(string_buffer_);
     }
 
     ParseStatus HandleNull()
@@ -188,28 +193,7 @@ struct RapidjsonDocumentReader
 
     ParseStatus HandleString(char const* first, char const* last, StringClass sc)
     {
-        if (sc != StringClass::clean)
-        {
-            char* str = string_buffer; // static_cast<char*>(doc->GetAllocator().Malloc(static_cast<size_t>(last - first)));
-
-            intptr_t len = 0;
-            auto const res = json::strings::UnescapeString(first, last, /*allow_invalid_unicode*/ false,
-                [&](char ch) { str[len++] =ch; },
-                [&](char const* p, intptr_t n) { std::memcpy(str + len, p, static_cast<size_t>(n)); len += n; });
-
-            if (res.ec != json::strings::Status::success)
-                return ParseStatus::invalid_string;
-
-            string_buffer += len;
-
-            doc->String(str, static_cast<rapidjson::SizeType>(len), /*copy*/ false);
-        }
-        else
-        {
-            doc->String(first, static_cast<rapidjson::SizeType>(last - first), /*copy*/ kCopyCleanStrings);
-
-        }
-        return {};
+        return HandleStringImpl(first, last, sc);
     }
 
     ParseStatus HandleBeginArray()
@@ -248,6 +232,12 @@ struct RapidjsonDocumentReader
 
     ParseStatus HandleKey(char const* first, char const* last, StringClass sc)
     {
+        return HandleStringImpl(first, last, sc);
+    }
+
+    JSON_FORCE_INLINE ParseStatus HandleStringImpl(char const* first, char const* last, StringClass sc)
+    {
+#if USE_STRING_BUFFER
         if (sc != StringClass::clean)
         {
             char* str = string_buffer; // static_cast<char*>(doc->GetAllocator().Malloc(static_cast<size_t>(last - first)));
@@ -267,8 +257,29 @@ struct RapidjsonDocumentReader
         }
         else
         {
-            doc->String(first, static_cast<rapidjson::SizeType>(last - first), /*copy*/ kCopyCleanStrings);
+            doc->String(first, static_cast<rapidjson::SizeType>(last - first), /*copy*/ true);
         }
+#else
+        if (sc != StringClass::clean)
+        {
+            char* str = static_cast<char*>(doc->GetAllocator().Malloc(static_cast<size_t>(last - first)));
+
+            intptr_t len = 0;
+            auto const res = json::strings::UnescapeString(first, last, /*allow_invalid_unicode*/ false,
+                [&](char ch) { str[len++] =ch; },
+                [&](char const* p, intptr_t n) { std::memcpy(str + len, p, static_cast<size_t>(n)); len += n; });
+
+            if (res.ec != json::strings::Status::success) {
+                return ParseStatus::invalid_string;
+            }
+
+            doc->String(str, static_cast<rapidjson::SizeType>(len), /*copy*/ false);
+        }
+        else
+        {
+            doc->String(first, static_cast<rapidjson::SizeType>(last - first), /*copy*/ true);
+        }
+#endif
         return {};
     }
 };
@@ -401,12 +412,17 @@ struct FreeDeleter {
 bool json1_dom_stats(jsonstats& stats, char const* first, char const* last)
 {
 #if BENCH_RAPIDJSON_DOCUMENT
+#if USE_STRING_BUFFER
     size_t const doc_len = static_cast<size_t>(last - first);
-    std::unique_ptr<char, FreeDeleter> string_buffer( (char*)malloc(doc_len), FreeDeleter{} );
+    std::unique_ptr<char, FreeDeleter> string_buffer_( (char*)malloc(doc_len), FreeDeleter{} );
+    char* string_buffer = string_buffer_.get();
+#else
+    char* string_buffer = nullptr;
+#endif
 
     RapidjsonDocument doc;
 
-    auto const res = ParseRapidjsonDocument(doc, string_buffer.get(), first, last);
+    auto const res = ParseRapidjsonDocument(doc, string_buffer, first, last);
     if (res.ec != ParseStatus::success) {
         return false;
     }

@@ -129,7 +129,7 @@ const auto SECONDS_PER_TEST = std::chrono::seconds(6);
 
 TestImplementation test_implementations[] = {
     { "Json1", &json1_dom_test::test },
-    //{ "simdjson", &simdjson_dom_test::test },
+    { "simdjson", &simdjson_dom_test::test },
     { "sajson", &sajson_dom_test::test },
     { "RapidJSON", &rapidjson_dom_test::test },
     //{ "nlohmann", &nlohmann_dom_test::test },
@@ -137,99 +137,34 @@ TestImplementation test_implementations[] = {
 
 const char* benchmark_files[] = {
 #if 0
-// bench other:
-    //"test_data/truenull.json",
-    //"test_data/whitespace.json",
-
-// strings:
-    //"test_data/apache_builds.json",
-    "test_data/allthethings.json",
-    "test_data/twitter.json",
-    "test_data/sample.json",
-    //"test_data/update-center.json",
-
-// numbers:
-    //"test_data/floats.json",
-    ////"test_data/signed_ints.json",
-    ////"test_data/unsigned_ints.json",
-    //"test_data/canada.json",
-    //"test_data/mesh.json",
-
-// strings + numbers:
-    //"test_data/citm_catalog.json",
-    //"test_data/instruments.json",
-    //"test_data/github_events.json",
-
-//// small files:
-//    //"test_data/svg_menu.json",
-#endif
-
-#if 0
-    "test_data/jsonexamples/tiny0.json",
-    "test_data/jsonexamples/tiny1.json",
-    "test_data/jsonexamples/tiny2.json",
-    "test_data/jsonexamples/tiny3.json",
-    "test_data/jsonexamples/tiny4.json",
-    "test_data/jsonexamples/tiny5.json",
-    "test_data/jsonexamples/tiny6.json",
-#endif
-#if 0
-    "test_data/jsonexamples/apache_builds.json",
-    "test_data/jsonexamples/canada.json",
-    "test_data/jsonexamples/citm_catalog.json",
-    "test_data/jsonexamples/github_events.json",
-    "test_data/jsonexamples/gsoc-2018.json",
-    "test_data/jsonexamples/instruments.json",
-    "test_data/jsonexamples/marine_ik.json",
-    "test_data/jsonexamples/mesh.json",
-    "test_data/jsonexamples/mesh.pretty.json",
-    "test_data/jsonexamples/numbers.json",
-    "test_data/jsonexamples/random.json",
-    "test_data/jsonexamples/twitter.json",
-    "test_data/jsonexamples/twitterescaped.json",
-    "test_data/jsonexamples/update-center.json",
-#endif
-#if 0
-    "test_data/jsonexamples/apache_builds.json",
-    "test_data/jsonexamples/canada.json",
-    "test_data/jsonexamples/citm_catalog.json",
-    "test_data/jsonexamples/github_events.json",
-    "test_data/jsonexamples/gsoc-2018.json",
-    "test_data/jsonexamples/instruments.json",
-    "test_data/jsonexamples/marine_ik.json",
-    "test_data/jsonexamples/mesh.json",
-    "test_data/jsonexamples/numbers.json",
-    "test_data/jsonexamples/random.json",
-    "test_data/jsonexamples/twitter.json",
-    "test_data/jsonexamples/update-center.json",
+    "test_data/examples/apache_builds.json",
+    "test_data/examples/canada.json",
+    "test_data/examples/citm_catalog.json",
+    "test_data/examples/github_events.json",
+    "test_data/examples/gsoc-2018.json",
+    "test_data/examples/instruments.json",
+    "test_data/examples/marine_ik.json",
+    "test_data/examples/mesh.json",
+    "test_data/examples/mesh.pretty.json",
+    "test_data/examples/numbers.json",
+    "test_data/examples/random.json",
+    "test_data/examples/twitter.json",
+    "test_data/examples/twitterescaped.json",
+    "test_data/examples/update-center.json",
 #endif
 #if 1
-    "test_data/jsonexamples/mini/apache_builds.json",
-    "test_data/jsonexamples/mini/canada.json",
-    "test_data/jsonexamples/mini/citm_catalog.json",
-    "test_data/jsonexamples/mini/github_events.json",
-    "test_data/jsonexamples/mini/gsoc-2018.json",
-    "test_data/jsonexamples/mini/instruments.json",
-    "test_data/jsonexamples/mini/marine_ik.json",
-    "test_data/jsonexamples/mini/mesh.json",
-    "test_data/jsonexamples/mini/numbers.json",
-    "test_data/jsonexamples/mini/random.json",
-    "test_data/jsonexamples/mini/twitter.json",
-    "test_data/jsonexamples/mini/update-center.json",
-#endif
-#if 0
-    "test_data/jsonexamples/mini_ascii/apache_builds.json",
-    "test_data/jsonexamples/mini_ascii/canada.json",
-    "test_data/jsonexamples/mini_ascii/citm_catalog.json",
-    "test_data/jsonexamples/mini_ascii/github_events.json",
-    "test_data/jsonexamples/mini_ascii/gsoc-2018.json",
-    "test_data/jsonexamples/mini_ascii/instruments.json",
-    "test_data/jsonexamples/mini_ascii/marine_ik.json",
-    "test_data/jsonexamples/mini_ascii/mesh.json",
-    "test_data/jsonexamples/mini_ascii/numbers.json",
-    "test_data/jsonexamples/mini_ascii/random.json",
-    "test_data/jsonexamples/mini_ascii/twitter.json",
-    "test_data/jsonexamples/mini_ascii/update-center.json",
+    "test_data/examples/minified/apache_builds.json",
+    "test_data/examples/minified/canada.json",
+    "test_data/examples/minified/citm_catalog.json",
+    "test_data/examples/minified/github_events.json",
+    "test_data/examples/minified/gsoc-2018.json",
+    "test_data/examples/minified/instruments.json",
+    "test_data/examples/minified/marine_ik.json",
+    "test_data/examples/minified/mesh.json",
+    "test_data/examples/minified/numbers.json",
+    "test_data/examples/minified/random.json",
+    "test_data/examples/minified/twitter.json",
+    "test_data/examples/minified/update-center.json",
 #endif
 };
 
