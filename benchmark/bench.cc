@@ -124,20 +124,15 @@ struct TestImplementation {
     TestFunction func;
 };
 
+const auto SECONDS_PER_WARMUP = std::chrono::seconds(2);
+const auto SECONDS_PER_TEST = std::chrono::seconds(6);
+
 TestImplementation test_implementations[] = {
-#if 0
-    { "json1 sax", &json1_sax_test::test },
-    { "rapidjson sax", &rapidjson_sax_test::test },
-    //{ "rapidjson sax", &rapidjson_sax_test::test },
-    //{ "nlohmann sax", &nlohmann_sax_test::test },
-    { "nlohmann sax", &nlohmann_sax_test::test },
-#else
-    { "json1 dom", &json1_dom_test::test },
-    { "sajson dom", &sajson_dom_test::test },
-    //{ "rapidjson dom", &rapidjson_dom_test::test },
-    //{ "nlohmann dom", &nlohmann_dom_test::test },
-    { "simdjson dom", &simdjson_dom_test::test },
-#endif
+    { "Json1", &json1_dom_test::test },
+    //{ "simdjson", &simdjson_dom_test::test },
+    { "sajson", &sajson_dom_test::test },
+    { "RapidJSON", &rapidjson_dom_test::test },
+    //{ "nlohmann", &nlohmann_dom_test::test },
 };
 
 const char* benchmark_files[] = {
@@ -194,6 +189,20 @@ const char* benchmark_files[] = {
     "test_data/jsonexamples/twitterescaped.json",
     "test_data/jsonexamples/update-center.json",
 #endif
+#if 0
+    "test_data/jsonexamples/apache_builds.json",
+    "test_data/jsonexamples/canada.json",
+    "test_data/jsonexamples/citm_catalog.json",
+    "test_data/jsonexamples/github_events.json",
+    "test_data/jsonexamples/gsoc-2018.json",
+    "test_data/jsonexamples/instruments.json",
+    "test_data/jsonexamples/marine_ik.json",
+    "test_data/jsonexamples/mesh.json",
+    "test_data/jsonexamples/numbers.json",
+    "test_data/jsonexamples/random.json",
+    "test_data/jsonexamples/twitter.json",
+    "test_data/jsonexamples/update-center.json",
+#endif
 #if 1
     "test_data/jsonexamples/mini/apache_builds.json",
     "test_data/jsonexamples/mini/canada.json",
@@ -208,6 +217,20 @@ const char* benchmark_files[] = {
     "test_data/jsonexamples/mini/twitter.json",
     "test_data/jsonexamples/mini/update-center.json",
 #endif
+#if 0
+    "test_data/jsonexamples/mini_ascii/apache_builds.json",
+    "test_data/jsonexamples/mini_ascii/canada.json",
+    "test_data/jsonexamples/mini_ascii/citm_catalog.json",
+    "test_data/jsonexamples/mini_ascii/github_events.json",
+    "test_data/jsonexamples/mini_ascii/gsoc-2018.json",
+    "test_data/jsonexamples/mini_ascii/instruments.json",
+    "test_data/jsonexamples/mini_ascii/marine_ik.json",
+    "test_data/jsonexamples/mini_ascii/mesh.json",
+    "test_data/jsonexamples/mini_ascii/numbers.json",
+    "test_data/jsonexamples/mini_ascii/random.json",
+    "test_data/jsonexamples/mini_ascii/twitter.json",
+    "test_data/jsonexamples/mini_ascii/update-center.json",
+#endif
 };
 
 template<typename T, size_t L>
@@ -216,9 +239,6 @@ size_t array_length(T(&)[L]) {
 }
 
 using Clock = std::chrono::steady_clock;
-
-const auto SECONDS_PER_WARMUP = std::chrono::seconds(4);
-const auto SECONDS_PER_TEST = std::chrono::seconds(4);
 
 #if 0
 struct Timing
@@ -290,6 +310,10 @@ void benchmark(const char* filename) {
     assert(slength >= 0);
     const size_t length = static_cast<size_t>(slength);
 
+    printf("File: %s\n", filename);
+    printf("Size: %llu\n", (uint64_t)length);
+    //printf("Size: %llu B = %.2f KB = %.2f MB\n", (uint64_t)length, length / 1024.0, length / (1024.0 * 1024.0));
+
     AlignedPointer contents(reinterpret_cast<char*>(mem_aligned_alloc(length + SIMDJSON_PADDING, 64)));
 
     fseek(fh, 0, SEEK_SET);
@@ -345,26 +369,33 @@ void benchmark(const char* filename) {
 
         auto const mean = std::chrono::duration<double>(end - start).count() / static_cast<double>(parses);
 
-        const double MB = static_cast<double>(length) / 1024.0 / 1024.0;
-        const double MBPerSec = MB / mean;
+        //const double MB = static_cast<double>(length) / 1024.0 / 1024.0;
+        //const double MBPerSec = MB / mean;
+        const double GBPerSec = (length / (1024.0 * 1024.0 * 1024.0)) / mean;
 
         if (first) {
             reference = mean;
         }
 
-        printf("%-20s%-60s %8.3f MB %8.2f ms (%10.6f GB/sec)", implementation.name, filename, MB/1.0, 1000.0*mean, MBPerSec/1000.0);
+        printf("Test: %-20s %8.2f ms --- %8.6f GB/sec", implementation.name, 1000.0*mean, GBPerSec);
         if (first) {
             printf("\n");
         } else {
-            printf(" --- x%.2f\n", reference / mean);
+            printf(" --- x %.2f = 1 / %.2f\n", reference / mean, mean / reference);
         }
         fflush(stdout);
 
         first = false;
+        //reference = mean;
     }
 }
 
-int main(int argc, const char** argv) {
+int main(int argc, const char** argv)
+{
+#ifdef _WIN32
+    SetThreadAffinityMask(GetCurrentThread(), 1);
+#endif
+
     if (argc <= 1) {
         for (size_t i = 0; i < array_length(benchmark_files); ++i) {
             fprintf(stderr, "---\n");

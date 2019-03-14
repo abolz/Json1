@@ -53,7 +53,7 @@ static void GenStats(jsonstats& stats, ParsedJson::iterator& it)
         return;
     case '"':
         ++stats.string_count;
-        stats.total_string_length += strlen(it.get_string());
+        stats.total_string_length += it.get_string_length();
         return;
     case '[':
         ++stats.array_count;
@@ -72,13 +72,13 @@ static void GenStats(jsonstats& stats, ParsedJson::iterator& it)
         if (it.down()) {
             ++stats.total_object_length;
             ++stats.key_count;
-            stats.total_key_length += strlen(it.get_string());
+            stats.total_key_length += it.get_string_length();
             it.next();
             GenStats(stats, it);
             while (it.next()) {
                 ++stats.total_object_length;
                 ++stats.key_count;
-                stats.total_key_length += strlen(it.get_string());
+                stats.total_key_length += it.get_string_length();
                 it.next();
                 GenStats(stats, it);
             }

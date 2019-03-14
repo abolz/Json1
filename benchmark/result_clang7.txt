@@ -1,0 +1,84 @@
+---
+File: test_data/jsonexamples/mini/apache_builds.json
+Size: 94660
+Test: Json1                    0.16 ms --- 0.557554 GB/sec
+Test: simdjson                 0.14 ms --- 0.632087 GB/sec --- x 1.13 = 1 / 0.88
+Test: sajson                   0.21 ms --- 0.421348 GB/sec --- x 0.76 = 1 / 1.32
+Test: RapidJSON                0.77 ms --- 0.114209 GB/sec --- x 0.20 = 1 / 4.88
+---
+File: test_data/jsonexamples/mini/canada.json
+Size: 2090234
+Test: Json1                    6.93 ms --- 0.280879 GB/sec
+Test: simdjson                 8.13 ms --- 0.239420 GB/sec --- x 0.85 = 1 / 1.17
+Test: sajson                  15.08 ms --- 0.129086 GB/sec --- x 0.46 = 1 / 2.18
+Test: RapidJSON                9.21 ms --- 0.211256 GB/sec --- x 0.75 = 1 / 1.33
+---
+File: test_data/jsonexamples/mini/citm_catalog.json
+Size: 500299
+Test: Json1                    1.41 ms --- 0.330968 GB/sec
+Test: simdjson                 2.30 ms --- 0.202392 GB/sec --- x 0.61 = 1 / 1.64
+Test: sajson                   2.53 ms --- 0.184197 GB/sec --- x 0.56 = 1 / 1.80
+Test: RapidJSON                3.50 ms --- 0.132936 GB/sec --- x 0.40 = 1 / 2.49
+---
+File: test_data/jsonexamples/mini/github_events.json
+Size: 53329
+Test: Json1                    0.08 ms --- 0.642796 GB/sec
+Test: simdjson                 0.07 ms --- 0.725972 GB/sec --- x 1.13 = 1 / 0.89
+Test: sajson                   0.11 ms --- 0.449855 GB/sec --- x 0.70 = 1 / 1.43
+Test: RapidJSON                0.44 ms --- 0.112712 GB/sec --- x 0.18 = 1 / 5.70
+---
+File: test_data/jsonexamples/mini/gsoc-2018.json
+Size: 3070076
+Test: Json1                    5.85 ms --- 0.488616 GB/sec
+Test: simdjson                 5.86 ms --- 0.488273 GB/sec --- x 1.00 = 1 / 1.00
+Test: sajson                   9.46 ms --- 0.302203 GB/sec --- x 0.62 = 1 / 1.62
+Test: RapidJSON               24.33 ms --- 0.117530 GB/sec --- x 0.24 = 1 / 4.16
+---
+File: test_data/jsonexamples/mini/instruments.json
+Size: 108313
+Test: Json1                    0.28 ms --- 0.365977 GB/sec
+Test: simdjson                 0.26 ms --- 0.382645 GB/sec --- x 1.05 = 1 / 0.96
+Test: sajson                   0.35 ms --- 0.286178 GB/sec --- x 0.78 = 1 / 1.28
+Test: RapidJSON                0.91 ms --- 0.110963 GB/sec --- x 0.30 = 1 / 3.30
+---
+File: test_data/jsonexamples/mini/marine_ik.json
+Size: 1847375
+Test: Json1                   12.59 ms --- 0.136657 GB/sec
+Test: simdjson                13.29 ms --- 0.129496 GB/sec --- x 0.95 = 1 / 1.06
+Test: sajson                  21.77 ms --- 0.079047 GB/sec --- x 0.58 = 1 / 1.73
+Test: RapidJSON               16.09 ms --- 0.106909 GB/sec --- x 0.78 = 1 / 1.28
+---
+File: test_data/jsonexamples/mini/mesh.json
+Size: 642703
+Test: Json1                    2.22 ms --- 0.269265 GB/sec
+Test: simdjson                 3.26 ms --- 0.183592 GB/sec --- x 0.68 = 1 / 1.47
+Test: sajson                   4.82 ms --- 0.124280 GB/sec --- x 0.46 = 1 / 2.17
+Test: RapidJSON                2.99 ms --- 0.199956 GB/sec --- x 0.74 = 1 / 1.35
+---
+File: test_data/jsonexamples/mini/numbers.json
+Size: 150122
+Test: Json1                    0.40 ms --- 0.347013 GB/sec
+Test: simdjson                 0.47 ms --- 0.300295 GB/sec --- x 0.87 = 1 / 1.16
+Test: sajson                   0.54 ms --- 0.259570 GB/sec --- x 0.75 = 1 / 1.34
+Test: RapidJSON                0.59 ms --- 0.235153 GB/sec --- x 0.68 = 1 / 1.48
+---
+File: test_data/jsonexamples/mini/random.json
+Size: 461466
+Test: Json1                    1.51 ms --- 0.284656 GB/sec
+Test: simdjson                 1.71 ms --- 0.251445 GB/sec --- x 0.88 = 1 / 1.13
+Test: sajson                   2.16 ms --- 0.199065 GB/sec --- x 0.70 = 1 / 1.43
+Test: RapidJSON                3.63 ms --- 0.118441 GB/sec --- x 0.42 = 1 / 2.40
+---
+File: test_data/jsonexamples/mini/twitter.json
+Size: 467473
+Test: Json1                    1.15 ms --- 0.378449 GB/sec
+Test: simdjson                 1.25 ms --- 0.349446 GB/sec --- x 0.92 = 1 / 1.08
+Test: sajson                   1.17 ms --- 0.371828 GB/sec --- x 0.98 = 1 / 1.02
+Test: RapidJSON                3.53 ms --- 0.123163 GB/sec --- x 0.33 = 1 / 3.07
+---
+File: test_data/jsonexamples/mini/update-center.json
+Size: 533177
+Test: Json1                    0.94 ms --- 0.528843 GB/sec
+Test: simdjson                 1.42 ms --- 0.349626 GB/sec --- x 0.66 = 1 / 1.51
+Test: sajson                   2.00 ms --- 0.248642 GB/sec --- x 0.47 = 1 / 2.13
+Test: RapidJSON                4.57 ms --- 0.108611 GB/sec --- x 0.21 = 1 / 4.87
