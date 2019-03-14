@@ -138,13 +138,13 @@ inline std::string FormatError(json::ParseResult const& res)
     s.append("Error: ");
     s.append(ParseStatusDescr(res.ec));
     s.append("\n");
-    s.append("Found: ");
-    s.append(TokenKindDescr(res.token.kind));
-    s.append(" ");
-    s.append("|");
-    s.append(ToPrintableString(res.token.ptr, res.token.end));
-    s.append("|");
-    s.append("\n");
+    //s.append("Found: ");
+    //s.append(TokenKindDescr(res.token.kind));
+    //s.append(" ");
+    //s.append("|");
+    //s.append(ToPrintableString(res.token.ptr, res.token.end));
+    //s.append("|");
+    //s.append("\n");
 
     return s;
 }

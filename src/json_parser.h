@@ -394,6 +394,11 @@ public:
 
     void Skip(TokenKind kind);
 
+    char const* Next() const { return ptr; }
+    char const* Last() const { return end; }
+
+    char const* Seek(intptr_t dist);
+
 private:
     Token LexString     (char const* p);
     Token LexNumber     (char const* p);
@@ -551,6 +556,15 @@ inline void Lexer::Skip(TokenKind kind)
 #endif
 
     ++ptr;
+}
+
+inline char const* Lexer::Seek(intptr_t dist)
+{
+    JSON_ASSERT(dist >= 0);
+    JSON_ASSERT(dist <= end - ptr);
+
+    ptr += dist;
+    return ptr;
 }
 
 inline Token Lexer::LexString(char const* p)
@@ -861,6 +875,12 @@ struct Failed
     explicit operator ParseStatus() const noexcept { return ec; }
 };
 
+struct ParseResult
+{
+    char const* ptr;
+    ParseStatus ec = ParseStatus::unknown;
+};
+
 template <typename ParseCallbacks>
 class Parser
 {
@@ -882,7 +902,7 @@ public:
 
     // Extract the next JSON value from the input
     // and check whether EOF has been reached.
-    ParseStatus Parse();
+    ParseResult Parse();
 
     // Extract the next JSON value from the input.
     ParseStatus ParseValue();
@@ -924,31 +944,20 @@ inline Token Parser<ParseCallbacks>::GetPeekToken()
 }
 
 template <typename ParseCallbacks>
-inline ParseStatus Parser<ParseCallbacks>::Parse()
+inline ParseResult Parser<ParseCallbacks>::Parse()
 {
     ParseStatus ec = ParseValue();
 
-    // We want to return the last token in ParseSAX() below.
-    // If curr has been successfully consumed in the ParseValue() function above,
-    // read one more token (and use this to check for EOF).
-    if (curr.kind == TokenKind::discarded)
-    {
-        curr = lexer.Lex(Peek());
-        peek = TokenKind::discarded;
-    }
-
-    JSON_ASSERT(curr.kind != TokenKind::discarded);
-    JSON_ASSERT(peek == TokenKind::discarded);
-
     if (ec == ParseStatus::success)
     {
-        if (curr.kind != TokenKind::eof)
+        JSON_ASSERT(curr.kind == TokenKind::discarded);
+        if (Peek() != TokenKind::eof)
         {
             ec = ParseStatus::expected_eof;
         }
     }
 
-    return ec;
+    return {lexer.Next(), ec};
 }
 
 template <typename ParseCallbacks>
@@ -1316,15 +1325,6 @@ inline void Parser<ParseCallbacks>::Skip(TokenKind kind)
 // ParseSAX
 //==================================================================================================
 
-struct ParseResult
-{
-    ParseStatus ec = ParseStatus::unknown;
-
-    // On return, TOKEN contains the last token which has been read by the parser.
-    // In case of an error, this contains the invalid token.
-    Token token;
-};
-
 template <typename ParseCallbacks>
 inline ParseResult ParseSAX(ParseCallbacks& cb, char const* next, char const* last, Mode mode)
 {
@@ -1335,10 +1335,7 @@ inline ParseResult ParseSAX(ParseCallbacks& cb, char const* next, char const* la
 
     parser.Init(next, last);
 
-    auto const ec = parser.Parse();
-    auto const token = parser.GetPeekToken();
-
-    return {ec, token};
+    return parser.Parse();
 }
 
 } // namespace json
