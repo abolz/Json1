@@ -908,8 +908,6 @@ public:
     ParseStatus ParseValue();
 
 private:
-    ParseStatus ConsumePrimitive(TokenKind kind);
-
     ParseStatus ConsumeString();
     ParseStatus ConsumeNumber();
     ParseStatus ConsumeIdentifier();
@@ -977,18 +975,7 @@ inline ParseStatus Parser<ParseCallbacks>::ParseValue()
     peek = lexer.Peek(mode);
     curr.kind = TokenKind::discarded;
 
-    // Parse 'value'
-    if (peek == TokenKind::l_brace)
-        goto L_begin_object;
-    if (peek == TokenKind::l_square)
-        goto L_begin_array;
-
-    if (Failed ec = ConsumePrimitive(peek))
-        return ParseStatus(ec);
-
-    Discard();
-
-    return ParseStatus::success;
+    goto L_parse_value;
 
 L_begin_object:
     //
@@ -1066,15 +1053,7 @@ L_begin_object:
             // This must be a JSON value.
             Peek();
 
-            if (peek == TokenKind::l_brace)
-                goto L_begin_object;
-            if (peek == TokenKind::l_square)
-                goto L_begin_array;
-
-            if (Failed ec = ConsumePrimitive(peek))
-                return ParseStatus(ec);
-
-            Discard();
+            goto L_parse_value;
 
 L_end_member:
             JSON_ASSERT(stack_size != 0);
@@ -1141,15 +1120,7 @@ L_begin_array:
     {
         for (;;)
         {
-            if (peek == TokenKind::l_brace)
-                goto L_begin_object;
-            if (peek == TokenKind::l_square)
-                goto L_begin_array;
-
-            if (Failed ec = ConsumePrimitive(peek))
-                return ParseStatus(ec);
-
-            Discard();
+            goto L_parse_value;
 
 L_end_element:
             JSON_ASSERT(stack_size != 0);
@@ -1191,6 +1162,36 @@ L_end_structured:
     JSON_ASSERT(stack_size != 0);
     --stack_size;
 
+    if (0)
+    {
+L_parse_value:
+        ParseStatus ec;
+        switch (peek)
+        {
+        case TokenKind::l_brace:
+            goto L_begin_object;
+        case TokenKind::l_square:
+            goto L_begin_array;
+        case TokenKind::string:
+            ec = ConsumeString();
+            break;
+        case TokenKind::number:
+            ec = ConsumeNumber();
+            break;
+        case TokenKind::identifier:
+            ec = ConsumeIdentifier();
+            break;
+        default:
+            ec = ParseStatus::expected_value;
+            break;
+        }
+
+        if (ec != ParseStatus::success)
+            return ec;
+
+        Discard();
+    }
+
     if (stack_size == 0)
         return ParseStatus::success;
 
@@ -1198,33 +1199,6 @@ L_end_structured:
         goto L_end_member;
     else
         goto L_end_element;
-}
-
-template <typename ParseCallbacks>
-inline ParseStatus Parser<ParseCallbacks>::ConsumePrimitive(TokenKind kind)
-{
-    JSON_ASSERT(curr.kind == TokenKind::discarded);
-    JSON_ASSERT(peek == kind);
-    JSON_ASSERT(kind != TokenKind::l_brace && kind != TokenKind::l_square);
-
-    ParseStatus ec;
-    switch (kind)
-    {
-    case TokenKind::string:
-        ec = ConsumeString();
-        break;
-    case TokenKind::number:
-        ec = ConsumeNumber();
-        break;
-    case TokenKind::identifier:
-        ec = ConsumeIdentifier();
-        break;
-    default:
-        ec = ParseStatus::expected_value;
-        break;
-    }
-
-    return ec;
 }
 
 template <typename ParseCallbacks>
