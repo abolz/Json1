@@ -392,10 +392,11 @@ UnescapeStringResult UnescapeString(char const* curr, char const* last, bool all
 {
     namespace unicode = json::impl::unicode;
 
-    auto skip_non_special = [](char const* f, char const* l)
+    auto SkipFast = [](char const* f, char const* l)
     {
-        for ( ; f != l; ++f) {
-            if (static_cast<uint8_t>(*f) >= 0x80 || static_cast<uint8_t>(*f) <= 0x1F || *f == '\\')
+        for ( ; f != l; ++f)
+        {
+            if (*f == '\\' || static_cast<int8_t>(*f) < ' ')
                 break;
         }
         return f;
@@ -403,7 +404,7 @@ UnescapeStringResult UnescapeString(char const* curr, char const* last, bool all
 
     for (;;)
     {
-        char const* const next = skip_non_special(curr, last);
+        char const* const next = SkipFast(curr, last);
         yield_n(curr, next - curr);
         curr = next;
 
@@ -554,10 +555,12 @@ EscapeStringResult EscapeString(char const* curr, char const* last, bool allow_i
 
     static constexpr char const kHexDigits[] = "0123456789ABCDEF";
 
-    auto skip_non_special = [](char const* f, char const* l)
+    auto SkipFast = [](char const* f, char const* l)
     {
-        for ( ; f != l; ++f) {
-            if (static_cast<uint8_t>(*f) >= 0x80 || static_cast<uint8_t>(*f) <= 0x1F || *f == '\\' || *f == '"' || *f == '/')
+        for ( ; f != l; ++f)
+        {
+            
+            if (*f == '\\' || *f == '"' || *f == '/' || static_cast<int8_t>(*f) < ' ')
                 break;
         }
         return f;
@@ -566,7 +569,7 @@ EscapeStringResult EscapeString(char const* curr, char const* last, bool allow_i
     char const* const first = curr;
     for (;;)
     {
-        char const* const next = skip_non_special(curr, last);
+        char const* const next = SkipFast(curr, last);
         yield_n(curr, next - curr);
         curr = next;
 
