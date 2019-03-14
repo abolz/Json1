@@ -801,11 +801,7 @@ struct ParseValueCallbacks
         if (mode == Mode::strict && !IsFinite(nc))
             return ParseStatus::invalid_number;
 
-        //if (options.parse_numbers_as_strings)
-        //    stack.emplace_back(json::string_tag, first, last);
-        //else
-            stack.emplace_back(numbers::StringToNumber(first, last, nc));
-
+        stack.emplace_back(numbers::StringToNumber(first, last, nc));
         return {};
     }
 
