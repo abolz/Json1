@@ -348,7 +348,10 @@ struct RapidjsonDocumentReader
             std::string str;
             str.reserve(static_cast<size_t>(last - first));
 
-            auto const res = json::strings::UnescapeString(first, last, /*allow_invalid_unicode*/ false, [&](char ch) { str.push_back(ch); });
+            auto const res = json::strings::UnescapeString(first, last, /*allow_invalid_unicode*/ false,
+                [&](char ch) { str.push_back(ch); },
+                [&](char const* p, intptr_t n) { str.append(p, static_cast<size_t>(n)); });
+
             if (res.ec != json::strings::Status::success) {
                 return ParseStatus::invalid_string;
             }
@@ -525,7 +528,7 @@ inline bool StringifyString(OutputStream& out, rapidjson::Value const& value, Ra
 
     if (len != 0)
     {
-        auto const res = json::strings::EscapeString(str, str + len, [&](char ch) { out.Put(ch); }, /*allow_invalid_unicode*/ true);
+        auto const res = json::strings::EscapeString(str, str + len, /*allow_invalid_unicode*/ true, [&](char ch) { out.Put(ch); });
         if (res.ec != json::strings::Status::success) {
             return false;
         }
