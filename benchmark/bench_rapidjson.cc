@@ -279,8 +279,10 @@ bool rapidjson_dom_stats(jsonstats& stats, char const* first, char const* last)
         return false;
     }
 
-    //GenStatsHandler handler(stats);
-    //doc.Accept(handler);
+#if BENCH_COLLECT_STATS
+    GenStatsHandler handler(stats);
+    doc.Accept(handler);
+#endif
 
     return true;
 #else

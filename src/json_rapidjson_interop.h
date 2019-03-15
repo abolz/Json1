@@ -332,6 +332,16 @@ struct RapidjsonDocumentReader
         return {};
     }
 
+#if JSON_PARSER_CONVERT_NUMBERS_FAST
+    ParseStatus HandleNumber(double value, NumberClass nc)
+    {
+        if (nc == NumberClass::invalid)
+            return ParseStatus::invalid_number;
+
+        doc->Double(value);
+        return {};
+    }
+#else
     ParseStatus HandleNumber(char const* first, char const* last, NumberClass nc)
     {
         if (nc == NumberClass::invalid)
@@ -340,6 +350,7 @@ struct RapidjsonDocumentReader
         doc->Double(json::numbers::StringToNumber(first, last, nc));
         return {};
     }
+#endif
 
     ParseStatus HandleString(char const* first, char const* last, StringClass sc)
     {
