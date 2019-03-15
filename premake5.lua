@@ -164,6 +164,9 @@ project "benchmark"
     links {
         "json",
     }
+    includedirs {
+        "ext/",
+    }
     configuration { "gmake*" }
         buildoptions {
             "-Wsign-compare",

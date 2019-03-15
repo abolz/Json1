@@ -1423,7 +1423,7 @@ struct StringifyOptions
 
     // If >= 0, pretty-print the JSON.
     // Default is < 0, that is the JSON is rendered as the shortest string possible.
-    int indent_width = -1;
+    int8_t indent_width = -1;
 };
 
 // Write a stringified version of the given value to str.

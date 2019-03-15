@@ -793,6 +793,19 @@ struct ParseValueCallbacks
         return {};
     }
 
+#if JSON_PARSER_CONVERT_NUMBERS_FAST
+    ParseStatus HandleNumber(double value, NumberClass nc)
+    {
+        if (nc == NumberClass::invalid)
+            return ParseStatus::invalid_number;
+
+        if (mode == Mode::strict && !IsFinite(nc))
+            return ParseStatus::invalid_number;
+
+        stack.emplace_back(value);
+        return {};
+    }
+#else
     ParseStatus HandleNumber(char const* first, char const* last, NumberClass nc)
     {
         if (nc == NumberClass::invalid)
@@ -801,13 +814,10 @@ struct ParseValueCallbacks
         if (mode == Mode::strict && !IsFinite(nc))
             return ParseStatus::invalid_number;
 
-        //if (options.parse_numbers_as_strings)
-        //    stack.emplace_back(json::string_tag, first, last);
-        //else
-            stack.emplace_back(numbers::StringToNumber(first, last, nc));
-
+        stack.emplace_back(numbers::StringToNumber(first, last, nc));
         return {};
     }
+#endif
 
     ParseStatus HandleString(char const* first, char const* last, StringClass string_class)
     {
@@ -817,7 +827,7 @@ struct ParseValueCallbacks
 
             str.reserve(static_cast<size_t>(last - first));
 
-            auto const res = strings::UnescapeString(first, last, [&](char ch) { str.push_back(ch); }, /*allow_invalid_unicode*/ false);
+            auto const res = strings::UnescapeString(first, last, /*allow_invalid_unicode*/ mode != Mode::strict, [&](char ch) { str.push_back(ch); });
             if (res.ec != strings::Status::success)
                 return ParseStatus::invalid_string;
 
@@ -876,7 +886,7 @@ struct ParseValueCallbacks
             keys.emplace_back();
             keys.back().reserve(static_cast<size_t>(last - first));
 
-            auto const res = strings::UnescapeString(first, last, [&](char ch) { keys.back().push_back(ch); }, /*allow_invalid_unicode*/ false);
+            auto const res = strings::UnescapeString(first, last, /*allow_invalid_unicode*/ mode != Mode::strict, [&](char ch) { keys.back().push_back(ch); });
             if (res.ec != strings::Status::success)
                 return ParseStatus::invalid_string; // return ParseStatus::invalid_key;
         }
@@ -1018,7 +1028,7 @@ static bool StringifyNumber(std::string& str, double value, StringifyOptions con
     return true;
 }
 
-static bool StringifyString(std::string& str, String const& value, StringifyOptions const& /*options*/)
+static bool StringifyString(std::string& str, String const& value, StringifyOptions const& options)
 {
     bool success = true;
 
@@ -1028,7 +1038,7 @@ static bool StringifyString(std::string& str, String const& value, StringifyOpti
     char const* const last = value.data() + value.size();
     if (next != last)
     {
-        auto const res = strings::EscapeString(next, last, [&](char ch) { str += ch; }, /*allow_invalid_unicode*/ false);
+        auto const res = strings::EscapeString(next, last, /*allow_invalid_unicode*/ options.mode != Mode::strict, [&](char ch) { str += ch; });
         success = res.ec == strings::Status::success;
     }
 
@@ -1047,9 +1057,7 @@ static bool StringifyArray(std::string& str, Array const& value, StringifyOption
     {
         if (options.indent_width > 0)
         {
-            // Prevent overflow in curr_indent + options.indent_width
-            int const indent_width = (curr_indent <= INT_MAX - options.indent_width) ? options.indent_width : 0;
-            curr_indent += indent_width;
+            curr_indent += options.indent_width;
 
             for (;;)
             {
@@ -1065,7 +1073,7 @@ static bool StringifyArray(std::string& str, Array const& value, StringifyOption
                 str += ',';
             }
 
-            curr_indent -= indent_width;
+            curr_indent -= options.indent_width;
 
             str += '\n';
             str.append(static_cast<size_t>(curr_indent), ' ');
@@ -1102,9 +1110,7 @@ static bool StringifyObject(std::string& str, Object const& value, StringifyOpti
     {
         if (options.indent_width > 0)
         {
-            // Prevent overflow in curr_indent + options.indent_width
-            int const indent_width = (curr_indent <= INT_MAX - options.indent_width) ? options.indent_width : 0;
-            curr_indent += indent_width;
+            curr_indent += options.indent_width;
 
             for (;;)
             {
@@ -1124,7 +1130,7 @@ static bool StringifyObject(std::string& str, Object const& value, StringifyOpti
                 str += ',';
             }
 
-            curr_indent -= indent_width;
+            curr_indent -= options.indent_width;
 
             str += '\n';
             str.append(static_cast<size_t>(curr_indent), ' ');

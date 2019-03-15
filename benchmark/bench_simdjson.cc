@@ -1,5 +1,19 @@
 #include "bench_simdjson.h"
 
+#if defined(__MINGW32__) && defined(_WIN32)
+
+bool simdjson_sax_stats(jsonstats& /*stats*/, char const* /*first*/, char const* /*last*/)
+{
+    return false;
+}
+
+bool simdjson_dom_stats(jsonstats& /*stats*/, char const* /*first*/, char const* /*last*/)
+{
+    return true;
+}
+
+#else
+
 #if defined(__GNUC__)
 #pragma GCC diagnostic ignored "-Wsign-conversion"
 #pragma GCC diagnostic ignored "-Wold-style-cast"
@@ -22,6 +36,8 @@
 #include "../ext/simdjson/parsedjsoniterator.cpp"
 #include "../ext/simdjson/jsonparser.h"
 #include "../ext/simdjson/jsonparser.cpp"
+#include "../ext/simdjson/simdjson.h"
+#include "../ext/simdjson/simdjson.cpp"
 #include "../ext/simdjson/stage1_find_marks.cpp"
 #include "../ext/simdjson/stage2_build_tape.cpp"
 
@@ -45,15 +61,15 @@ static void GenStats(jsonstats& stats, ParsedJson::iterator& it)
         return;
     case 'd':
         ++stats.number_count;
-        stats.total_number_value += it.get_double();
+        stats.total_number_value.Add(it.get_double());
         return;
     case 'l':
         ++stats.number_count;
-        stats.total_number_value += it.get_integer();
+        stats.total_number_value.Add(static_cast<double>(it.get_integer()));
         return;
     case '"':
         ++stats.string_count;
-        stats.total_string_length += strlen(it.get_string());
+        stats.total_string_length += it.get_string_length();
         return;
     case '[':
         ++stats.array_count;
@@ -72,13 +88,13 @@ static void GenStats(jsonstats& stats, ParsedJson::iterator& it)
         if (it.down()) {
             ++stats.total_object_length;
             ++stats.key_count;
-            stats.total_key_length += strlen(it.get_string());
+            stats.total_key_length += it.get_string_length();
             it.next();
             GenStats(stats, it);
             while (it.next()) {
                 ++stats.total_object_length;
                 ++stats.key_count;
-                stats.total_key_length += strlen(it.get_string());
+                stats.total_key_length += it.get_string_length();
                 it.next();
                 GenStats(stats, it);
             }
@@ -103,3 +119,5 @@ bool simdjson_dom_stats(jsonstats& stats, char const* first, char const* last)
 
     return true;
 }
+
+#endif

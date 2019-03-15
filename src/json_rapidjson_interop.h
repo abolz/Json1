@@ -332,14 +332,25 @@ struct RapidjsonDocumentReader
         return {};
     }
 
+#if JSON_PARSER_CONVERT_NUMBERS_FAST
+    ParseStatus HandleNumber(double value, NumberClass nc)
+    {
+        if (nc == NumberClass::invalid)
+            return ParseStatus::invalid_number;
+
+        doc->Double(value);
+        return {};
+    }
+#else
     ParseStatus HandleNumber(char const* first, char const* last, NumberClass nc)
     {
-        // TODO:
-        // nc == NumberClass::integer
+        if (nc == NumberClass::invalid)
+            return ParseStatus::invalid_number;
 
         doc->Double(json::numbers::StringToNumber(first, last, nc));
         return {};
     }
+#endif
 
     ParseStatus HandleString(char const* first, char const* last, StringClass sc)
     {
@@ -348,7 +359,10 @@ struct RapidjsonDocumentReader
             std::string str;
             str.reserve(static_cast<size_t>(last - first));
 
-            auto const res = json::strings::UnescapeString(first, last, [&](char ch) { str.push_back(ch); });
+            auto const res = json::strings::UnescapeString(first, last, /*allow_invalid_unicode*/ false,
+                [&](char ch) { str.push_back(ch); },
+                [&](char const* p, intptr_t n) { str.append(p, static_cast<size_t>(n)); });
+
             if (res.ec != json::strings::Status::success) {
                 return ParseStatus::invalid_string;
             }
@@ -398,23 +412,7 @@ struct RapidjsonDocumentReader
 
     ParseStatus HandleKey(char const* first, char const* last, StringClass sc)
     {
-        if (sc != StringClass::clean)
-        {
-            std::string str;
-            str.reserve(static_cast<size_t>(last - first));
-
-            auto const res = json::strings::UnescapeString(first, last, [&](char ch) { str.push_back(ch); });
-            if (res.ec != json::strings::Status::success) {
-                return ParseStatus::invalid_string;
-            }
-
-            doc->Key(str.data(), static_cast<rapidjson::SizeType>(str.size()), /*copy*/ true);
-        }
-        else
-        {
-            doc->Key(first, static_cast<rapidjson::SizeType>(last - first), /*copy*/ kCopyCleanStrings);
-        }
-        return {};
+        return HandleString(first, last, sc);
     }
 };
 
@@ -541,7 +539,7 @@ inline bool StringifyString(OutputStream& out, rapidjson::Value const& value, Ra
 
     if (len != 0)
     {
-        auto const res = json::strings::EscapeString(str, str + len, [&](char ch) { out.Put(ch); }, /*allow_invalid_unicode*/ true);
+        auto const res = json::strings::EscapeString(str, str + len, /*allow_invalid_unicode*/ true, [&](char ch) { out.Put(ch); });
         if (res.ec != json::strings::Status::success) {
             return false;
         }

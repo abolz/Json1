@@ -46,12 +46,12 @@ static void GenStats(jsonstats& stat, const sajson::value& v)
 
     case TYPE_INTEGER:
         stat.number_count++;
-        stat.total_number_value += v.get_integer_value();
+        stat.total_number_value.Add(v.get_integer_value());
         break;
 
     case TYPE_DOUBLE:
         stat.number_count++;
-        stat.total_number_value += v.get_double_value();
+        stat.total_number_value.Add(v.get_double_value());
         break;
 
     case TYPE_TRUE:
