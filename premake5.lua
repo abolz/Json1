@@ -99,11 +99,7 @@ workspace "Json"
     else
         configuration { "gmake*" }
             buildoptions {
-                "-std=c++17",
-            }
-        configuration { "vs*" }
-            buildoptions {
-                "/std:c++latest",
+                "-std=c++14",
             }
     end
 
