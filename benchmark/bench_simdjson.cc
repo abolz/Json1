@@ -1,5 +1,19 @@
 #include "bench_simdjson.h"
 
+#if defined(__MINGW32__) && defined(_WIN32)
+
+bool simdjson_sax_stats(jsonstats& /*stats*/, char const* /*first*/, char const* /*last*/)
+{
+    return false;
+}
+
+bool simdjson_dom_stats(jsonstats& /*stats*/, char const* /*first*/, char const* /*last*/)
+{
+    return true;
+}
+
+#else
+
 #if defined(__GNUC__)
 #pragma GCC diagnostic ignored "-Wsign-conversion"
 #pragma GCC diagnostic ignored "-Wold-style-cast"
@@ -105,3 +119,5 @@ bool simdjson_dom_stats(jsonstats& stats, char const* first, char const* last)
 
     return true;
 }
+
+#endif

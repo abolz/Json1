@@ -129,7 +129,9 @@ const auto SECONDS_PER_TEST = std::chrono::seconds(6);
 
 TestImplementation test_implementations[] = {
     { "Json1", &json1_dom_test::test },
+#if !defined(__MINGW32__) || !defined(_WIN32)
     { "simdjson", &simdjson_dom_test::test },
+#endif
     { "sajson", &sajson_dom_test::test },
     { "RapidJSON", &rapidjson_dom_test::test },
     //{ "nlohmann", &nlohmann_dom_test::test },
