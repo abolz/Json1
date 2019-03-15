@@ -104,7 +104,11 @@ inline uint32_t CharClass(char ch)
     return kMap[static_cast<uint8_t>(ch)];
 }
 
-inline bool IsWhitespace     (char ch) { return (CharClass(ch) & CC_whitespace      ) != 0; }
+//#if 0
+//inline bool IsWhitespace     (char ch) { return ch == ' ' || ch == '\n' || ch == '\r' || ch == '\t'; }
+//#else
+//inline bool IsWhitespace     (char ch) { return (CharClass(ch) & CC_whitespace      ) != 0; }
+//#endif
 #if 1
 inline bool IsDigit          (char ch) { return '0' <= ch && ch <= '9'; }
 #else
@@ -112,7 +116,7 @@ inline bool IsDigit          (char ch) { return (CharClass(ch) & CC_digit       
 #endif
 inline bool IsIdentifierStart(char ch) { return (CharClass(ch) & CC_identifier_start) != 0; }
 inline bool IsIdentifierBody (char ch) { return (CharClass(ch) & CC_identifier_body ) != 0; }
-inline bool IsPunctuation    (char ch) { return (CharClass(ch) & CC_punctuation     ) != 0; }
+//inline bool IsPunctuation    (char ch) { return (CharClass(ch) & CC_punctuation     ) != 0; }
 
 inline bool IsSeparator(char ch)
 {
@@ -145,7 +149,6 @@ struct ScanNumberResult
     NumberClass number_class;
 };
 
-// PRE: next points at '0', ..., '9', or '-'
 inline ScanNumberResult ScanNumber(char const* next, char const* last)
 {
     using json::charclass::IsDigit;
@@ -324,6 +327,7 @@ enum class TokenKind : uint8_t {
     comment,
     incomplete_string,
     incomplete_comment,
+    discarded,
 };
 
 struct Token
@@ -347,13 +351,21 @@ private:
 public:
     void SetInput(char const* first, char const* last);
 
-    Token Lex(Mode mode);
+    TokenKind Peek(Mode mode);
+
+    Token Lex(TokenKind kind);
+
+    void Skip(TokenKind kind);
 
 private:
     Token LexString     (char const* p);
     Token LexNumber     (char const* p);
     Token LexIdentifier (char const* p);
-    Token LexComment    (char const* p);
+
+    // Skip the comment starting at p (*p == '/')
+    // If the comment is an incomplete block comment, return nullptr.
+    // Otherwise return an iterator pointing past the end of the comment.
+    static char const* SkipComment(char const* p, char const* end);
 
     Token MakeToken(char const* p, TokenKind kind);
 };
@@ -370,80 +382,141 @@ inline void Lexer::SetInput(char const* first, char const* last)
     end = last;
 }
 
-inline Token Lexer::Lex(Mode mode)
+JSON_FORCE_INLINE TokenKind Lexer::Peek(Mode mode)
 {
-    using namespace json::charclass;
+    enum : uint8_t {
+        Ic = static_cast<uint8_t>(TokenKind::invalid_character),
+        Lb = static_cast<uint8_t>(TokenKind::l_brace),
+        Rb = static_cast<uint8_t>(TokenKind::r_brace),
+        Ls = static_cast<uint8_t>(TokenKind::l_square),
+        Rs = static_cast<uint8_t>(TokenKind::r_square),
+        Ca = static_cast<uint8_t>(TokenKind::comma),
+        Cn = static_cast<uint8_t>(TokenKind::colon),
+        St = static_cast<uint8_t>(TokenKind::string),
+        Nr = static_cast<uint8_t>(TokenKind::number),
+        Id = static_cast<uint8_t>(TokenKind::identifier),
+    };
 
-L_again:
-    char const* p = ptr;
-    for ( ; p != end && IsWhitespace(*p); ++p)
+    static constexpr uint8_t kMap[] = {
+    //  NUL   SOH   STX   ETX   EOT   ENQ   ACK   BEL   BS    HT    LF    VT    FF    CR    SO    SI
+        Ic,   Ic,   Ic,   Ic,   Ic,   Ic,   Ic,   Ic,   Ic,   0,    0,    Ic,   Ic,   0,    Ic,   Ic,
+    //  DLE   DC1   DC2   DC3   DC4   NAK   SYN   ETB   CAN   EM    SUB   ESC   FS    GS    RS    US
+        Ic,   Ic,   Ic,   Ic,   Ic,   Ic,   Ic,   Ic,   Ic,   Ic,   Ic,   Ic,   Ic,   Ic,   Ic,   Ic,
+    //  space !     "     #     $     %     &     '     (     )     *     +     ,     -     .     /
+        0,    Ic,   St,   Ic,   Ic,   Ic,   Ic,   Ic,   Ic,   Ic,   Ic,   Nr,   Ca,   Nr,   Nr,   Ic,
+    //  0     1     2     3     4     5     6     7     8     9     :     ;     <     =     >     ?
+        Nr,   Nr,   Nr,   Nr,   Nr,   Nr,   Nr,   Nr,   Nr,   Nr,   Cn,   Ic,   Ic,   Ic,   Ic,   Ic,
+    //  @     A     B     C     D     E     F     G     H     I     J     K     L     M     N     O
+        Ic,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,
+    //  P     Q     R     S     T     U     V     W     X     Y     Z     [     \     ]     ^     _
+        Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Ls,   Id,   Rs,   Ic,   Id,
+    //  `     a     b     c     d     e     f     g     h     i     j     k     l     m     n     o
+        Ic,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,
+    //  p     q     r     s     t     u     v     w     x     y     z     {     |     }     ~     DEL
+        Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Lb,   Ic,   Rb,   Ic,   Ic,
+        Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,
+        Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,
+        Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,
+        Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,
+        Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,
+        Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,
+        Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,
+        Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,
+    };
+
+    char const*       f = ptr;
+    char const* const l = end;
+    for (;;)
     {
-    }
+        uint8_t charclass = 0;
 
-    ptr = p; // Mark start of next token.
-
-    if (p == end)
-        return MakeToken(p, TokenKind::eof);
-
-    TokenKind kind;
-
-    char const ch = *p;
-    switch (ch)
-    {
-    case '{':
-        kind = TokenKind::l_brace;
-        break;
-    case '}':
-        kind = TokenKind::r_brace;
-        break;
-    case '[':
-        kind = TokenKind::l_square;
-        break;
-    case ']':
-        kind = TokenKind::r_square;
-        break;
-    case ',':
-        kind = TokenKind::comma;
-        break;
-    case ':':
-        kind = TokenKind::colon;
-        break;
-    case '"':
-        return LexString(p);
-    case '.':
-    case '+':
-    case '-':
-    case '0':
-    case '1':
-    case '2':
-    case '3':
-    case '4':
-    case '5':
-    case '6':
-    case '7':
-    case '8':
-    case '9':
-        return LexNumber(p);
-    case '/':
+        // Skip whitespace
+        for ( ; f != l; ++f)
         {
-            auto const tok = LexComment(p);
-            if (mode != Mode::strict && tok.kind == TokenKind::comment)
-                goto L_again;
-
-            return tok;
+            charclass = kMap[static_cast<uint8_t>(*f)];
+            if (charclass != 0)
+                break;
         }
+
+        // Mark start of next token.
+        ptr = f;
+
+        if (f == l)
+            return TokenKind::eof;
+
+        if (*f != '/')
+            return static_cast<TokenKind>(charclass);
+
+        if (mode == Mode::strict)
+            return TokenKind::invalid_character;
+
+        char const* const next = SkipComment(f, l);
+        if (next == nullptr)
+            return TokenKind::incomplete_comment;
+
+        f = next;
+    }
+}
+
+JSON_FORCE_INLINE Token Lexer::Lex(TokenKind kind)
+{
+    char const* p = ptr;
+    switch (kind)
+    {
+    case TokenKind::eof:
+        break;
+    case TokenKind::l_brace:
+    case TokenKind::r_brace:
+    case TokenKind::l_square:
+    case TokenKind::r_square:
+    case TokenKind::comma:
+    case TokenKind::colon:
+        ++p;
+        break;
+    case TokenKind::string:
+        return LexString(p);
+    case TokenKind::number:
+        return LexNumber(p);
+    case TokenKind::incomplete_comment:
+        p = end;
+        break;
+    case TokenKind::identifier:
+        return LexIdentifier(p);
+    case TokenKind::invalid_character:
+        ++p;
+        break;
     default:
-        if (IsIdentifierStart(ch))
-            return LexIdentifier(p);
-        kind = TokenKind::invalid_character;
+        JSON_ASSERT(false && "unreachable");
         break;
     }
 
-    ++p;
     return MakeToken(p, kind);
 }
 
-inline Token Lexer::LexString(char const* p)
+JSON_FORCE_INLINE void Lexer::Skip(TokenKind kind)
+{
+#ifndef NDEBUG
+    switch (kind)
+    {
+    case TokenKind::l_brace:
+    case TokenKind::r_brace:
+    case TokenKind::l_square:
+    case TokenKind::r_square:
+    case TokenKind::comma:
+    case TokenKind::colon:
+        break;
+    default:
+        JSON_ASSERT(false && "internal error: skipping is only allowed for punctuation");
+        break;
+    }
+#else
+    static_cast<void>(kind); // Fix warning
+#endif
+
+    ++ptr;
+}
+
+JSON_FORCE_INLINE Token Lexer::LexString(char const* p)
 {
     using namespace json::charclass;
 
@@ -488,7 +561,7 @@ inline Token Lexer::LexString(char const* p)
     return tok;
 }
 
-inline Token Lexer::LexNumber(char const* p)
+JSON_FORCE_INLINE Token Lexer::LexNumber(char const* p)
 {
     using json::charclass::IsSeparator;
 
@@ -523,7 +596,7 @@ inline Token Lexer::LexNumber(char const* p)
     return tok;
 }
 
-inline Token Lexer::LexIdentifier(char const* p)
+JSON_FORCE_INLINE Token Lexer::LexIdentifier(char const* p)
 {
     using namespace json::charclass;
 
@@ -557,54 +630,53 @@ inline Token Lexer::LexIdentifier(char const* p)
     return tok;
 }
 
-JSON_NEVER_INLINE Token Lexer::LexComment(char const* p)
+JSON_NEVER_INLINE char const* Lexer::SkipComment(char const* p, char const* end)
 {
     JSON_ASSERT(p != end);
     JSON_ASSERT(*p == '/');
 
-    TokenKind kind = TokenKind::invalid_character;
-
     ++p; // Skip '/'
 
-    if (p != end)
+    if (p == end)
+        return nullptr;
+
+    if (*p == '/')
     {
-        if (*p == '/')
+        ++p;
+        for (;;)
         {
-            kind = TokenKind::comment;
-
-            for (++p; p != end; ++p)
-            {
-                if (*p == '\n' || *p == '\r')
-                    break;
-            }
+            if (p == end || *p == '\n' || *p == '\r')
+                return p;
+            ++p;
         }
-        else if (*p == '*')
-        {
-            kind = TokenKind::incomplete_comment;
+    }
 
-            for (++p; p != end; /**/)
+    if (*p == '*')
+    {
+        ++p;
+        for (;;)
+        {
+            if (p == end)
+                break; // incomplete block comment
+            char const ch = *p;
+            ++p;
+            if (ch == '*')
             {
-                char const ch = *p;
-                ++p;
-                if (ch == '*')
+                if (p == end)
+                    break; // incomplete block comment
+                if (*p == '/')
                 {
-                    if (p == end)
-                        break;
-                    if (*p == '/')
-                    {
-                        ++p;
-                        kind = TokenKind::comment;
-                        break;
-                    }
+                    ++p;
+                    return p;
                 }
             }
         }
     }
 
-    return MakeToken(p, kind);
+    return nullptr;
 }
 
-inline Token Lexer::MakeToken(char const* p, TokenKind kind)
+JSON_FORCE_INLINE Token Lexer::MakeToken(char const* p, TokenKind kind)
 {
     Token tok;
 
@@ -655,7 +727,8 @@ class Parser
 
     ParseCallbacks& cb;
     Lexer           lexer;
-    Token           peek; // The next token.
+    Token           curr; // The current token.
+    TokenKind       peek; // The next token. (hint only)
     Mode            mode;
 
 public:
@@ -664,10 +737,7 @@ public:
     void Init(char const* next, char const* last);
 
     // Returns the current token.
-    Token GetPeekToken() const;
-
-    // Read the next token from the input stream.
-    Token Lex();
+    Token GetPeekToken();
 
     // Extract the next JSON value from the input
     // and check whether EOF has been reached.
@@ -677,7 +747,19 @@ public:
     ParseStatus ParseValue();
 
 private:
-    ParseStatus ConsumePrimitive();
+    ParseStatus ConsumePrimitive(TokenKind kind);
+
+    ParseStatus ConsumeString();
+    ParseStatus ConsumeNumber();
+    ParseStatus ConsumeIdentifier();
+
+    TokenKind Peek(); // idemp
+
+    TokenKind Lex(TokenKind kind);
+
+    void Discard(); // idemp
+
+    void Skip(TokenKind kind);
 };
 
 template <typename ParseCallbacks>
@@ -691,22 +773,13 @@ template <typename ParseCallbacks>
 void Parser<ParseCallbacks>::Init(char const* next, char const* last)
 {
     lexer.SetInput(next, last);
-
-    // Get the first token.
-    Lex();
 }
 
 template <typename ParseCallbacks>
-Token Parser<ParseCallbacks>::GetPeekToken() const
+Token Parser<ParseCallbacks>::GetPeekToken()
 {
-    return peek;
-}
-
-template <typename ParseCallbacks>
-Token Parser<ParseCallbacks>::Lex()
-{
-    peek = lexer.Lex(mode);
-    return peek;
+    JSON_ASSERT(curr.kind != TokenKind::discarded);
+    return curr;
 }
 
 template <typename ParseCallbacks>
@@ -714,9 +787,21 @@ ParseStatus Parser<ParseCallbacks>::Parse()
 {
     ParseStatus ec = ParseValue();
 
+    // We want to return the last token in ParseSAX() below.
+    // If curr has been successfully consumed in the ParseValue() function above,
+    // read one more token (and use this to check for EOF).
+    if (curr.kind == TokenKind::discarded)
+    {
+        curr = lexer.Lex(Peek());
+        peek = TokenKind::discarded;
+    }
+
+    JSON_ASSERT(curr.kind != TokenKind::discarded);
+    JSON_ASSERT(peek == TokenKind::discarded);
+
     if (ec == ParseStatus::success)
     {
-        if (peek.kind != TokenKind::eof)
+        if (curr.kind != TokenKind::eof)
         {
             ec = ParseStatus::expected_eof;
         }
@@ -739,13 +824,19 @@ ParseStatus Parser<ParseCallbacks>::ParseValue()
     // The first token has been read in SetInput()
     // or in the last call to ParseValue().
 
-    if (peek.kind == TokenKind::l_brace)
+    peek = lexer.Peek(mode);
+    curr.kind = TokenKind::discarded;
+
+    // Parse 'value'
+    if (peek == TokenKind::l_brace)
         goto L_begin_object;
-    if (peek.kind == TokenKind::l_square)
+    if (peek == TokenKind::l_square)
         goto L_begin_array;
 
-    if (Failed ec = ConsumePrimitive())
+    if (Failed ec = ConsumePrimitive(peek))
         return ParseStatus(ec);
+
+    Discard();
 
     return ParseStatus::success;
 
@@ -760,7 +851,7 @@ L_begin_object:
     //  pair
     //      string : value
     //
-    JSON_ASSERT(peek.kind == TokenKind::l_brace);
+    JSON_ASSERT(peek == TokenKind::l_brace);
 
     if (stack_size >= kMaxDepth)
         return ParseStatus::max_depth_reached;
@@ -771,25 +862,37 @@ L_begin_object:
     if (Failed ec = cb.HandleBeginObject())
         return ParseStatus(ec);
 
-    // Read the token after the '{'.
-    // This must be either an '}' or a key.
-    Lex();
+    // Skip the '{'.
+    Skip(TokenKind::l_brace);
 
-    if (peek.kind != TokenKind::r_brace)
+    // Get the possible kind of the next token.
+    // This must be either an '}' or a key.
+    Peek();
+    if (peek != TokenKind::r_brace)
     {
         for (;;)
         {
-            if (peek.kind == TokenKind::string)
+            if (peek == TokenKind::string)
             {
-                JSON_ASSERT(peek.end - peek.ptr >= 2);
-                JSON_ASSERT(peek.ptr[ 0] == '"');
-                JSON_ASSERT(peek.end[-1] == '"');
-                if (Failed ec = cb.HandleKey(peek.ptr + 1, peek.end - 1, peek.string_class))
+                Lex(TokenKind::string);
+
+                JSON_ASSERT(curr.kind == TokenKind::string || curr.kind == TokenKind::incomplete_string);
+                if (curr.kind == TokenKind::incomplete_string)
+                {
+                    return ParseStatus::expected_key;
+                }
+
+                JSON_ASSERT(curr.end - curr.ptr >= 2);
+                JSON_ASSERT(curr.ptr[ 0] == '"');
+                JSON_ASSERT(curr.end[-1] == '"');
+                if (Failed ec = cb.HandleKey(curr.ptr + 1, curr.end - 1, curr.string_class))
                     return ParseStatus(ec);
             }
-            else if (mode != Mode::strict && peek.kind == TokenKind::identifier)
+            else if (mode != Mode::strict && peek == TokenKind::identifier)
             {
-                if (Failed ec = cb.HandleKey(peek.ptr, peek.end, peek.string_class))
+                Lex(TokenKind::identifier);
+
+                if (Failed ec = cb.HandleKey(curr.ptr, curr.end, curr.string_class))
                     return ParseStatus(ec);
             }
             else
@@ -797,24 +900,31 @@ L_begin_object:
                 return ParseStatus::expected_key;
             }
 
+            // Mark the current token (the key) as used.
+            Discard();
+
             // Read the token after the key.
             // This must be a ':'.
-            Lex();
+            Peek();
 
-            if (peek.kind != TokenKind::colon)
+            if (peek != TokenKind::colon)
                 return ParseStatus::expected_colon_after_key;
+
+            Skip(TokenKind::colon);
 
             // Read the token after the ':'.
             // This must be a JSON value.
-            Lex();
+            Peek();
 
-            if (peek.kind == TokenKind::l_brace)
+            if (peek == TokenKind::l_brace)
                 goto L_begin_object;
-            if (peek.kind == TokenKind::l_square)
+            if (peek == TokenKind::l_square)
                 goto L_begin_array;
 
-            if (Failed ec = ConsumePrimitive())
+            if (Failed ec = ConsumePrimitive(peek))
                 return ParseStatus(ec);
+
+            Discard();
 
 L_end_member:
             JSON_ASSERT(stack_size != 0);
@@ -825,12 +935,15 @@ L_end_member:
                 return ParseStatus(ec);
 
             // Expect a ',' (and another member) or a closing '}'.
-            if (peek.kind == TokenKind::comma)
+            Peek();
+            if (peek == TokenKind::comma)
             {
                 // Read the token after the ','.
                 // This must be a key.
-                Lex();
-                if (mode != Mode::strict && peek.kind == TokenKind::r_brace)
+                Skip(TokenKind::comma);
+
+                Peek();
+                if (mode != Mode::strict && peek == TokenKind::r_brace)
                     break;
             }
             else
@@ -839,13 +952,14 @@ L_end_member:
             }
         }
 
-        if (peek.kind != TokenKind::r_brace)
+        if (peek != TokenKind::r_brace)
             return ParseStatus::expected_comma_or_closing_brace;
     }
 
     if (Failed ec = cb.HandleEndObject(stack[stack_size - 1].count))
         return ParseStatus(ec);
 
+    Skip(TokenKind::r_brace);
     goto L_end_structured;
 
 L_begin_array:
@@ -857,7 +971,7 @@ L_begin_array:
     //      value
     //      value , elements
     //
-    JSON_ASSERT(peek.kind == TokenKind::l_square);
+    JSON_ASSERT(peek == TokenKind::l_square);
 
     if (stack_size >= kMaxDepth)
         return ParseStatus::max_depth_reached;
@@ -870,19 +984,22 @@ L_begin_array:
 
     // Read the token after '['.
     // This must be a ']' or any JSON value.
-    Lex();
+    Skip(TokenKind::l_square);
 
-    if (peek.kind != TokenKind::r_square)
+    Peek();
+    if (peek != TokenKind::r_square)
     {
         for (;;)
         {
-            if (peek.kind == TokenKind::l_brace)
+            if (peek == TokenKind::l_brace)
                 goto L_begin_object;
-            if (peek.kind == TokenKind::l_square)
+            if (peek == TokenKind::l_square)
                 goto L_begin_array;
 
-            if (Failed ec = ConsumePrimitive())
+            if (Failed ec = ConsumePrimitive(peek))
                 return ParseStatus(ec);
+
+            Discard();
 
 L_end_element:
             JSON_ASSERT(stack_size != 0);
@@ -893,12 +1010,15 @@ L_end_element:
                 return ParseStatus(ec);
 
             // Expect a ',' (and another element) or a closing ']'.
-            if (peek.kind == TokenKind::comma)
+            Peek();
+            if (peek == TokenKind::comma)
             {
                 // Read the token after the ','.
                 // This must be a JSON value.
-                Lex();
-                if (mode != Mode::strict && peek.kind == TokenKind::r_square)
+                Skip(TokenKind::comma);
+
+                Peek();
+                if (mode != Mode::strict && peek == TokenKind::r_square)
                     break;
             }
             else
@@ -907,20 +1027,17 @@ L_end_element:
             }
         }
 
-        if (peek.kind != TokenKind::r_square)
+        if (peek != TokenKind::r_square)
             return ParseStatus::expected_comma_or_closing_bracket;
     }
 
     if (Failed ec = cb.HandleEndArray(stack[stack_size - 1].count))
         return ParseStatus(ec);
 
+    Skip(TokenKind::r_square);
     goto L_end_structured;
 
 L_end_structured:
-    // Read the token after '}' or ']'.
-    // Parser::peek refers to the next token the parser needs to look at.
-    Lex();
-
     JSON_ASSERT(stack_size != 0);
     --stack_size;
 
@@ -934,66 +1051,124 @@ L_end_structured:
 }
 
 template <typename ParseCallbacks>
-ParseStatus Parser<ParseCallbacks>::ConsumePrimitive()
+JSON_FORCE_INLINE ParseStatus Parser<ParseCallbacks>::ConsumePrimitive(TokenKind kind)
 {
-    JSON_ASSERT(peek.kind != TokenKind::l_brace && peek.kind != TokenKind::l_square);
-
-    auto const first = peek.ptr;
-    auto const last  = peek.end;
+    JSON_ASSERT(curr.kind == TokenKind::discarded);
+    JSON_ASSERT(peek == kind);
+    JSON_ASSERT(kind != TokenKind::l_brace && kind != TokenKind::l_square);
 
     ParseStatus ec;
-    switch (peek.kind)
+    switch (kind)
     {
     case TokenKind::string:
-        JSON_ASSERT(last - first >= 2);
-        JSON_ASSERT(first[0] == '"');
-        JSON_ASSERT(last[-1] == '"');
-        ec = cb.HandleString(first + 1, last - 1, peek.string_class);
+        ec = ConsumeString();
         break;
-
     case TokenKind::number:
-        ec = cb.HandleNumber(first, last, peek.number_class);
+        ec = ConsumeNumber();
         break;
-
     case TokenKind::identifier:
-        switch (ScanIdentifer(first, last))
-        {
-        case Identifier::null:
-            ec = cb.HandleNull();
-            break;
-        case Identifier::true_:
-            ec = cb.HandleTrue();
-            break;
-        case Identifier::false_:
-            ec = cb.HandleFalse();
-            break;
-        case Identifier::nan:
-            peek.kind = TokenKind::number;
-            peek.number_class = NumberClass::nan;
-            ec = cb.HandleNumber(first, last, peek.number_class);
-            break;
-        case Identifier::infinity:
-            peek.kind = TokenKind::number;
-            peek.number_class = NumberClass::pos_infinity;
-            ec = cb.HandleNumber(first, last, peek.number_class);
-            break;
-        default:
-            ec = ParseStatus::unrecognized_identifier;
-            break;
-        }
+        ec = ConsumeIdentifier();
         break;
     default:
         ec = ParseStatus::expected_value;
         break;
     }
 
-    if (ec == ParseStatus::success)
+    return ec;
+}
+
+template <typename ParseCallbacks>
+ParseStatus Parser<ParseCallbacks>::ConsumeString()
+{
+    Lex(TokenKind::string);
+    JSON_ASSERT(curr.kind == TokenKind::string || curr.kind == TokenKind::incomplete_string);
+
+    if (curr.kind == TokenKind::incomplete_string)
     {
-        // Peek the next token after 'string', 'number', or 'identifier'.
-        Lex();
+        return ParseStatus::expected_value;
     }
 
-    return ec;
+    JSON_ASSERT(curr.end - curr.ptr >= 2);
+    JSON_ASSERT(curr.ptr[ 0] == '"');
+    JSON_ASSERT(curr.end[-1] == '"');
+    return cb.HandleString(curr.ptr + 1, curr.end - 1, curr.string_class);
+}
+
+template <typename ParseCallbacks>
+ParseStatus Parser<ParseCallbacks>::ConsumeNumber()
+{
+    Lex(TokenKind::number);
+    JSON_ASSERT(curr.kind == TokenKind::number);
+
+    return cb.HandleNumber(curr.ptr, curr.end, curr.number_class);
+}
+
+template <typename ParseCallbacks>
+ParseStatus Parser<ParseCallbacks>::ConsumeIdentifier()
+{
+    Lex(TokenKind::identifier);
+    JSON_ASSERT(curr.kind == TokenKind::identifier);
+
+    char const* next = curr.ptr;
+    char const* last = curr.end;
+
+    switch (ScanIdentifer(next, last))
+    {
+    case Identifier::null:
+        return cb.HandleNull();
+    case Identifier::true_:
+        return cb.HandleTrue();
+    case Identifier::false_:
+        return cb.HandleFalse();
+    case Identifier::nan:
+        curr.kind = TokenKind::number;
+        curr.number_class = NumberClass::nan;
+        return cb.HandleNumber(curr.ptr, curr.end, curr.number_class);
+    case Identifier::infinity:
+        curr.kind = TokenKind::number;
+        curr.number_class = NumberClass::pos_infinity;
+        return cb.HandleNumber(curr.ptr, curr.end, curr.number_class);
+    default:
+        return ParseStatus::unrecognized_identifier;
+    }
+}
+
+template <typename ParseCallbacks>
+JSON_FORCE_INLINE TokenKind Parser<ParseCallbacks>::Peek()
+{
+    //JSON_ASSERT(curr.kind == TokenKind::discarded);
+    //JSON_ASSERT(peek == TokenKind::discarded);
+
+    curr.kind = TokenKind::discarded;
+    peek = lexer.Peek(mode);
+
+    return peek;
+}
+
+template <typename ParseCallbacks>
+JSON_FORCE_INLINE TokenKind Parser<ParseCallbacks>::Lex(TokenKind kind)
+{
+    JSON_ASSERT(curr.kind == TokenKind::discarded);
+    JSON_ASSERT(kind != TokenKind::discarded);
+
+    curr = lexer.Lex(kind);
+    peek = TokenKind::discarded;
+
+    return curr.kind;
+}
+
+template <typename ParseCallbacks>
+JSON_FORCE_INLINE void Parser<ParseCallbacks>::Discard()
+{
+    curr.kind = TokenKind::discarded;
+    peek = TokenKind::discarded;
+}
+
+template <typename ParseCallbacks>
+JSON_FORCE_INLINE void Parser<ParseCallbacks>::Skip(TokenKind kind)
+{
+    lexer.Skip(kind);
+    Discard();
 }
 
 //==================================================================================================
