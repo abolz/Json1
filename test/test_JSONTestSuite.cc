@@ -60,6 +60,8 @@ inline char const* TokenKindDescr(json::TokenKind kind)
         return "incomplete_string";
     case json::TokenKind::incomplete_comment:
         return "incomplete_comment";
+    case json::TokenKind::discarded:
+        return "discarded";
     }
 
     assert(false && "unreachable");
