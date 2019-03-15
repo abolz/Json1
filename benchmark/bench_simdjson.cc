@@ -22,6 +22,8 @@
 #include "../ext/simdjson/parsedjsoniterator.cpp"
 #include "../ext/simdjson/jsonparser.h"
 #include "../ext/simdjson/jsonparser.cpp"
+#include "../ext/simdjson/simdjson.h"
+#include "../ext/simdjson/simdjson.cpp"
 #include "../ext/simdjson/stage1_find_marks.cpp"
 #include "../ext/simdjson/stage2_build_tape.cpp"
 
