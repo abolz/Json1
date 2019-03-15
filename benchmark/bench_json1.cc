@@ -103,7 +103,7 @@ private:
         intptr_t len = 0;
         if (sc != StringClass::clean)
         {
-            auto const res = json::strings::UnescapeString(first, last, [&](char) { ++len; }, /*allow_invalid_unicode*/ false);
+            auto const res = json::strings::UnescapeString(first, last, /*allow_invalid_unicode*/ false, [&](char) { ++len; });
             if (res.ec != json::strings::Status::success) {
                 return ParseStatus::invalid_string;
             }
