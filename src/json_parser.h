@@ -25,7 +25,7 @@
 
 //#define JSON_USE_SSE2 1
 #ifndef JSON_USE_SSE2
-#if defined(__SSE_2__) || defined(_M_X64)
+#if defined(__SSE2__) || defined(_M_X64) || defined(__x86_64__)
 #define JSON_USE_SSE2 1
 #endif
 #endif
