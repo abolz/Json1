@@ -52,7 +52,7 @@ struct GenStatsCallbacks
             return ParseStatus::invalid_number;
 
         ++stats.number_count;
-        stats.total_number_value += value;
+        stats.total_number_value.Add(value);
         return {};
     }
 #else
@@ -62,7 +62,7 @@ struct GenStatsCallbacks
             return ParseStatus::invalid_number;
 
         ++stats.number_count;
-        stats.total_number_value += json::numbers::StringToNumber(first, last, nc);
+        stats.total_number_value.Add(json::numbers::StringToNumber(first, last, nc));
         return {};
     }
 #endif
@@ -323,35 +323,35 @@ struct RapidjsonStatsHandler
     bool Int(int value)
     {
         ++stats.number_count;
-        stats.total_number_value += static_cast<double>(value);
+        stats.total_number_value.Add(static_cast<double>(value));
         return true;
     }
 
     bool Uint(unsigned value)
     {
         ++stats.number_count;
-        stats.total_number_value += static_cast<double>(value);
+        stats.total_number_value.Add(static_cast<double>(value));
         return true;
     }
 
     bool Int64(int64_t value)
     {
         ++stats.number_count;
-        stats.total_number_value += static_cast<double>(value);
+        stats.total_number_value.Add(static_cast<double>(value));
         return true;
     }
 
     bool Uint64(uint64_t value)
     {
         ++stats.number_count;
-        stats.total_number_value += static_cast<double>(value);
+        stats.total_number_value.Add(static_cast<double>(value));
         return true;
     }
 
     bool Double(double value)
     {
         ++stats.number_count;
-        stats.total_number_value += value;
+        stats.total_number_value.Add(value);
         return true;
     }
 

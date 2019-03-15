@@ -271,13 +271,18 @@ void benchmark(const char* filename) {
         jsonstats this_stats;
         if (first) {
             implementation.func(expected_stats, file);
+            expected_stats.total_number_value.Finish();
         } else {
             implementation.func(this_stats, file);
+            this_stats.total_number_value.Finish();
             if (this_stats != expected_stats) {
-                fprintf(stderr, "parse results did not match.\nexpected:\n");
+                fprintf(stderr, "Test: %s\n", implementation.name);
+                fprintf(stderr, "> Parse results did not match.\n");
+                fprintf(stderr, "> Expected:\n");
                 expected_stats.print(stderr);
-                fprintf(stderr, "actual:\n");
+                fprintf(stderr, "> Actual:\n");
                 this_stats.print(stderr);
+                fprintf(stderr, "> Parse results did not match.\n");
             }
         }
 
@@ -304,8 +309,6 @@ void benchmark(const char* filename) {
 
         auto const mean = std::chrono::duration<double>(end - start).count() / static_cast<double>(parses);
 
-        //const double MB = static_cast<double>(length) / 1024.0 / 1024.0;
-        //const double MBPerSec = MB / mean;
         const double GBPerSec = (length / (1024.0 * 1024.0 * 1024.0)) / mean;
 
         if (first) {

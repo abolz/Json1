@@ -47,21 +47,21 @@ public:
     bool number_integer(number_integer_t val) /*override*/
     {
         ++stats.number_count;
-        stats.total_number_value += static_cast<double>(val);
+        stats.total_number_value.Add(static_cast<double>(val));
         return true;
     }
 
     bool number_unsigned(number_unsigned_t val) /*override*/
     {
         ++stats.number_count;
-        stats.total_number_value += static_cast<double>(val);
+        stats.total_number_value.Add(static_cast<double>(val));
         return true;
     }
 
     bool number_float(number_float_t val, const string_t&) /*override*/
     {
         ++stats.number_count;
-        stats.total_number_value += val;
+        stats.total_number_value.Add(val);
         return true;
     }
 
@@ -153,15 +153,15 @@ static void GenStats(jsonstats& stats, nlohmann::json const& value)
         break;
     case json::value_t::number_float:
         stats.number_count++;
-        stats.total_number_value += value.get<json::number_float_t>();
+        stats.total_number_value.Add(value.get<json::number_float_t>());
         break;
     case json::value_t::number_integer:
         stats.number_count++;
-        stats.total_number_value += value.get<json::number_integer_t>();
+        stats.total_number_value.Add(static_cast<double>(value.get<json::number_integer_t>()));
         break;
     case json::value_t::number_unsigned:
         stats.number_count++;
-        stats.total_number_value += value.get<json::number_unsigned_t>();
+        stats.total_number_value.Add(static_cast<double>(value.get<json::number_unsigned_t>()));
         break;
     case json::value_t::boolean:
         if (value.get<json::boolean_t>())

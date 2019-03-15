@@ -45,11 +45,11 @@ static void GenStats(jsonstats& stats, ParsedJson::iterator& it)
         return;
     case 'd':
         ++stats.number_count;
-        stats.total_number_value += it.get_double();
+        stats.total_number_value.Add(it.get_double());
         return;
     case 'l':
         ++stats.number_count;
-        stats.total_number_value += it.get_integer();
+        stats.total_number_value.Add(static_cast<double>(it.get_integer()));
         return;
     case '"':
         ++stats.string_count;

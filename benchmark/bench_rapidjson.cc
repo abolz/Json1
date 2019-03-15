@@ -5,6 +5,11 @@
 #include "../ext/rapidjson/memorystream.h"
 #include "../ext/rapidjson/writer.h"
 
+#if !BENCH_RAPIDJSON_DOCUMENT
+#include "../src/json.h"
+#include "traverse.h"
+#endif
+
 #include <vector>
 
 #define USE_MEMSTREAM 1
@@ -36,35 +41,35 @@ struct GenStatsHandler : public rapidjson::BaseReaderHandler<>
     bool Int(int value)
     {
         ++stats.number_count;
-        stats.total_number_value += static_cast<double>(value);
+        stats.total_number_value.Add(static_cast<double>(value));
         return true;
     }
 
     bool Uint(unsigned value)
     {
         ++stats.number_count;
-        stats.total_number_value += static_cast<double>(value);
+        stats.total_number_value.Add(static_cast<double>(value));
         return true;
     }
 
     bool Int64(int64_t value)
     {
         ++stats.number_count;
-        stats.total_number_value += static_cast<double>(value);
+        stats.total_number_value.Add(static_cast<double>(value));
         return true;
     }
 
     bool Uint64(uint64_t value)
     {
         ++stats.number_count;
-        stats.total_number_value += static_cast<double>(value);
+        stats.total_number_value.Add(static_cast<double>(value));
         return true;
     }
 
     bool Double(double value)
     {
         ++stats.number_count;
-        stats.total_number_value += value;
+        stats.total_number_value.Add(value);
         return true;
     }
 
