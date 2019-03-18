@@ -22,8 +22,8 @@
 
 #include "json_parser.h" // NumberClass, Options
 
-#include "charconv/charconv_bellerophon.h"
-#include "charconv/charconv_ryu.h"
+#include "charconv/bellerophon.h"
+#include "charconv/ryu.h"
 
 #include <climits>
 #include <limits>

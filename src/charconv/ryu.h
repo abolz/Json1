@@ -20,8 +20,8 @@
 
 #pragma once
 
-#include "charconv_common.h"
-#include "charconv_pow5.h"
+#include "common.h"
+#include "pow5.h"
 
 namespace charconv {
 namespace ryu {
