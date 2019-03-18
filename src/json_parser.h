@@ -945,9 +945,6 @@ public:
 
     void Init(char const* next, char const* last);
 
-    // Returns the current token.
-    Token GetPeekToken();
-
     // Extract the next JSON value from the input
     // and check whether EOF has been reached.
     ParseResult Parse();
@@ -980,13 +977,6 @@ template <typename ParseCallbacks>
 inline void Parser<ParseCallbacks>::Init(char const* next, char const* last)
 {
     lexer.SetInput(next, last);
-}
-
-template <typename ParseCallbacks>
-inline Token Parser<ParseCallbacks>::GetPeekToken()
-{
-    JSON_ASSERT(curr.kind != TokenKind::discarded);
-    return curr;
 }
 
 template <typename ParseCallbacks>
