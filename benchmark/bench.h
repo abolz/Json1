@@ -145,8 +145,8 @@ struct jsonstats {
             && array_count == rhs.array_count
             && string_count == rhs.string_count
             && total_string_length == rhs.total_string_length
-            //&& total_array_length == rhs.total_array_length
-            //&& total_object_length == rhs.total_object_length
+            && total_array_length == rhs.total_array_length
+            && total_object_length == rhs.total_object_length
             && total_key_length == rhs.total_key_length
             && total_number_value.Result() == rhs.total_number_value.Result()
             ;
