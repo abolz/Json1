@@ -26,50 +26,59 @@ class FloatSum
     //----------------------------------------------------------------------------------------------
 
     std::vector<double> expansion;
-    /*mutable*/ double sum = 0.0;
+    double sum = 0.0;
+
+    static void TwoSum(double x, double y, double& hi, double& lo)
+    {
+        hi = x + y;
+        const double y_virt = hi - x;
+        const double x_virt = hi - y_virt;
+        const double y_round = y - y_virt;
+        const double x_round = x - x_virt;
+        lo = x_round + y_round;
+    }
 
 public:
+    FloatSum()
+    {
+        // Max length is 11 for the minified examples
+        expansion.reserve(16);
+    }
+
     void Add(double x)
     {
-        // partials += x
+        // expansion += x
         // Add a scalar to an expansion, eliminating zero components from the output expansion.
 
         size_t i = 0;
 
         for (double y : expansion)
         {
-            if (std::fabs(x) < std::fabs(y))
-            {
-                std::swap(x, y);
-            }
-
-            const double hi = x + y;
-            const double lo = y - (hi - x);
+            double hi;
+            double lo;
+            TwoSum(x, y, hi, lo);
             if (lo != 0.0)
             {
                 expansion[i++] = lo;
             }
-
             x = hi;
         }
 
         if (x != 0.0 /*|| i == 0*/)
         {
-            if (i >= expansion.size())
-            {
+            if (i == expansion.size())
                 expansion.push_back(x);
-            }
             else
-            {
-                expansion[i++] = x;
-                expansion.resize(i);
-            }
+                expansion[i] = x;
+
+            i++;
         }
+
+        expansion.resize(i);
     }
 
     double Finish()
     {
-//      sum = std::accumulate(expansion.begin(), expansion.end(), 0.0);
         sum = 0.0;
         for (double y : expansion) {
             sum += y;
