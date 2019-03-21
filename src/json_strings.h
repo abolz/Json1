@@ -117,7 +117,7 @@ inline uint32_t DecodeUTF8Step(uint32_t state, uint8_t byte, char32_t& U)
         1,3,1,1,1,1,1,3,1,3,1,1,1,1,1,1,1,3,1,1,1,1,1,1,1,1,1,1,1,1,1,1, // s7..s8
     };
 
-    uint8_t const type = kUTF8Decoder[byte];
+    auto const type = kUTF8Decoder[byte];
 
     // NB:
     // The conditional here will likely be optimized out in the loop below.
@@ -137,7 +137,7 @@ inline DecodeUTF8SequenceResult DecodeUTF8Sequence(char const* next, char const*
 
     // Always consume the first byte.
     // The following bytes will only be consumed while the UTF-8 sequence is still valid.
-    uint8_t const b1 = static_cast<uint8_t>(*next);
+    auto const b1 = static_cast<uint8_t>(*next);
     ++next;
 
     char32_t W = 0;
@@ -404,7 +404,7 @@ UnescapeStringResult UnescapeString(char const* curr, char const* last, bool all
 
     for (;;)
     {
-        char const* const next = SkipFast(curr, last);
+        auto* const next = SkipFast(curr, last);
         yield_n(curr, next - curr);
         curr = next;
 
@@ -415,7 +415,7 @@ UnescapeStringResult UnescapeString(char const* curr, char const* last, bool all
 
         if (*curr == '\\')
         {
-            char const* const f = curr; // The start of the possible UCN sequence
+            auto* const f = curr; // The start of the possible UCN sequence
 
             ++curr; // skip '\'
             if (curr == last)
@@ -491,7 +491,7 @@ UnescapeStringResult UnescapeString(char const* curr, char const* last, bool all
         }
         else if (static_cast<uint8_t>(*curr) >= 0x80)
         {
-            char const* const f = curr;
+            auto* const f = curr;
 
             auto const res = unicode::ValidateUTF8Sequence(f, last);
             curr = res.ptr;
@@ -559,7 +559,6 @@ EscapeStringResult EscapeString(char const* curr, char const* last, bool allow_i
     {
         for ( ; f != l; ++f)
         {
-            
             if (*f == '\\' || *f == '"' || *f == '/' || static_cast<int8_t>(*f) < ' ')
                 break;
         }
@@ -569,7 +568,7 @@ EscapeStringResult EscapeString(char const* curr, char const* last, bool allow_i
     char const* const first = curr;
     for (;;)
     {
-        char const* const next = SkipFast(curr, last);
+        auto* const next = SkipFast(curr, last);
         yield_n(curr, next - curr);
         curr = next;
 
@@ -578,7 +577,7 @@ EscapeStringResult EscapeString(char const* curr, char const* last, bool allow_i
             break;
         }
 
-        if (0x20 <= static_cast<uint8_t>(*curr) && static_cast<uint8_t>(*curr) < 0x80)
+        if (static_cast<int8_t>(*curr) >= 0x20)
         {
             auto do_escape = [&](char ch) {
                 switch (ch) {
@@ -600,7 +599,7 @@ EscapeStringResult EscapeString(char const* curr, char const* last, bool allow_i
         }
         else if (static_cast<uint8_t>(*curr) >= 0x80)
         {
-            char const* const f = curr;
+            auto* const f = curr;
 
             char32_t U;
             auto const res = unicode::DecodeUTF8Sequence(f, last, U);

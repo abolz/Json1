@@ -51,17 +51,17 @@ inline uint32_t ToUint32(double value)
     //
 
     using Double = charconv::Double;
-    const Double d(value);
+    Double const d(value);
 
-    const uint64_t F = d.PhysicalSignificand();
-    const uint64_t E = d.PhysicalExponent();
+    uint64_t const F = d.PhysicalSignificand();
+    uint64_t const E = d.PhysicalExponent();
 
     // Assume that x is a normalized floating-point number.
     // The special cases subnormal/zero and nan/inf are actually handled below
     // in the branches 'exponent <= -p' and 'exponent >= 32'.
 
-    const auto significand = Double::HiddenBit | F;
-    const auto exponent = static_cast<int>(E) - Double::ExponentBias;
+    auto const significand = Double::HiddenBit | F;
+    auto const exponent = static_cast<int>(E) - Double::ExponentBias;
 
     uint32_t bits32; // = floor(abs(x)) mod 2^32
     if (exponent <= -Double::SignificandSize)
@@ -153,7 +153,7 @@ inline uint8_t ToUint8Clamp(double value)
 
     // Then do the rounding.
     // Note: (value - t) is exact here (as would be (t + 0.5)).
-    const double fraction = value - t;
+    double const fraction = value - t;
 
     // Round towards +Inf
     t += (fraction >= 0.5);
@@ -168,7 +168,7 @@ inline uint8_t ToUint8Clamp(double value)
     return static_cast<uint8_t>(static_cast<uint32_t>(t));
 #else
     using Double = charconv::Double;
-    const Double d(value);
+    Double const d(value);
 
     if (d.bits <= 0x3FE0000000000000ull) // +0.0 <= x <= 1/2
     {
@@ -177,19 +177,19 @@ inline uint8_t ToUint8Clamp(double value)
     else if (d.bits <= 0x406FD00000000000ull) // 0.5 < x <= 254.5
     {
         // x = significand * 2^exponent is a normalized floating-point number.
-        const uint64_t F = d.PhysicalSignificand();
-        const uint64_t E = d.PhysicalExponent();
+        uint64_t const F = d.PhysicalSignificand();
+        uint64_t const E = d.PhysicalExponent();
 
-        const auto significand = Double::HiddenBit | F;
-        const auto exponent = static_cast<int>(E) - Double::ExponentBias;
+        auto const significand = Double::HiddenBit | F;
+        auto const exponent = static_cast<int>(E) - Double::ExponentBias;
         JSON_ASSERT(exponent >= -1 - (Double::SignificandSize - 1));
         JSON_ASSERT(exponent <   8 - (Double::SignificandSize - 1));
         // 44 < -exponent <= 53
 
-        const uint64_t high = uint64_t{1} << -exponent;
-        const uint64_t mask = high - 1;
-        const uint64_t half = high >> 1;
-        const uint64_t fraction = significand & mask;
+        uint64_t const high = uint64_t{1} << -exponent;
+        uint64_t const mask = high - 1;
+        uint64_t const half = high >> 1;
+        uint64_t const fraction = significand & mask;
 
         uint32_t t = static_cast<uint32_t>(significand >> -exponent);
 
@@ -232,7 +232,7 @@ inline uint64_t DoubleToSmallInt(double x, bool& is_small_int)
 #if 1
     if (1.0 <= x && x <= 9007199254740992.0) // 1.0 <= x <= 2^53
     {
-        const int64_t i = static_cast<int64_t>(x);
+        int64_t const i = static_cast<int64_t>(x);
         is_small_int = (x == static_cast<double>(i));
         return static_cast<uint64_t>(i);
     }
@@ -241,23 +241,23 @@ inline uint64_t DoubleToSmallInt(double x, bool& is_small_int)
     return 0;
 #else
     using charconv::Double;
-    const Double d(x);
+    Double const d(x);
 
     if (0x3FF0000000000000ull <= d.bits && d.bits < 0x4340000000000000ull) // 1 <= x < 2^53
     {
         // x = significand * 2^exponent is a normalized floating-point number.
-        const uint64_t F = d.PhysicalSignificand();
-        const uint64_t E = d.PhysicalExponent();
+        uint64_t const F = d.PhysicalSignificand();
+        uint64_t const E = d.PhysicalExponent();
 
-        const auto significand = Double::HiddenBit | F;
-        const auto exponent = static_cast<int>(E) - Double::ExponentBias;
+        auto const significand = Double::HiddenBit | F;
+        auto const exponent = static_cast<int>(E) - Double::ExponentBias;
         JSON_ASSERT(-exponent >= 0);
         JSON_ASSERT(-exponent < Double::SignificandSize);
 
         // Test whether the lower -exponent bits are 0, i.e.
         // whether the fractional part of x is 0.
-        const uint64_t mask = (uint64_t{1} << -exponent) - 1;
-        const uint64_t fraction = significand & mask;
+        uint64_t const mask = (uint64_t{1} << -exponent) - 1;
+        uint64_t const fraction = significand & mask;
 
         is_small_int = (fraction == 0);
         return significand >> -exponent;
@@ -639,28 +639,15 @@ inline double InternalStringToDouble(char const* next, char const* last, NumberC
         // No need to copy the digits into a temporary buffer.
         // DigitsToDouble will trim the input to kMaxSignificantDigits.
 
-        digits     = next;
+        digits = next;
         num_digits = static_cast<int>(last - next);
 
-        // Use a faster method for integers which will fit into a uint64_t.
-        // Let static_cast do the conversion.
-        if (num_digits <= 20)
+        // Integers with at most 15 decimal digits are exactly representable as 'double'.
+        // We could read up to 19 (or 20) decimal digits into an uint64_t and let static_cast
+        // do the conversion, but then rounding would be implementation-defined.
+        if (num_digits <= 15)
         {
-            uint64_t const u = ReadInt<uint64_t>(next, num_digits <= 19 ? num_digits : 19);
-
-            if (num_digits <= 19)
-            {
-                return static_cast<double>(u);
-            }
-
-            if (u <= UINT64_MAX / 10)
-            {
-                uint32_t const d = static_cast<uint32_t>(next[19] - '0');
-                if (d <= UINT64_MAX - 10 * u)
-                {
-                    return static_cast<double>(10 * u + d);
-                }
-            }
+            return static_cast<double>(ReadInt<int64_t>(next, num_digits));
         }
     }
     else
@@ -673,7 +660,7 @@ inline double InternalStringToDouble(char const* next, char const* last, NumberC
         // - Rewrite DigitsToDouble to allow a decimal separator?
         //
 
-        digits     = buffer;
+        digits = buffer;
         num_digits = 0;
 
         if (*next == '0')
@@ -686,7 +673,7 @@ inline double InternalStringToDouble(char const* next, char const* last, NumberC
         {
             for (;;)
             {
-                if (num_digits < kDoubleMaxSignificantDigits)
+                if /*very very likely*/ (num_digits < kDoubleMaxSignificantDigits)
                 {
                     buffer[num_digits++] = *next;
                 }
@@ -728,7 +715,7 @@ inline double InternalStringToDouble(char const* next, char const* last, NumberC
 
             while (IsDigit(*next))
             {
-                if (num_digits < kDoubleMaxSignificantDigits)
+                if /*very very likely*/ (num_digits < kDoubleMaxSignificantDigits)
                 {
                     buffer[num_digits++] = *next;
                     --exponent;
@@ -767,7 +754,7 @@ inline double InternalStringToDouble(char const* next, char const* last, NumberC
             {
             }
 
-            if (last - next <= 8)
+            if /*very likely*/ (last - next <= 8)
             {
                 // NB:
                 // ReadInt returns 0 for empty inputs.

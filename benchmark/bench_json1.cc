@@ -2,6 +2,10 @@
 
 #include <memory>
 
+#define JSON_STRICT 1
+#if !BENCH_FULLPREC
+#define JSON_CONVERT_NUMBERS 1
+#endif
 #include "../src/json_parser.h"
 #include "../src/json_strings.h"
 #include "../src/json_numbers.h"
@@ -14,6 +18,8 @@
 #include "../src/json.h"
 #include "traverse.h"
 #endif
+
+#include <cstdio>
 
 #define USE_STRING_BUFFER 0
 
@@ -45,7 +51,7 @@ struct GenStatsCallbacks
         return {};
     }
 
-#if JSON_PARSER_CONVERT_NUMBERS_FAST
+#if JSON_CONVERT_NUMBERS
     ParseStatus HandleNumber(double value, NumberClass nc)
     {
         if (nc == NumberClass::invalid)
@@ -140,15 +146,11 @@ using RapidjsonDocument = rapidjson::Document;
 struct RapidjsonDocumentReader
 {
     RapidjsonDocument* doc;
-#if USE_STRING_BUFFER
     char* string_buffer;
-#endif
 
     RapidjsonDocumentReader(RapidjsonDocument* doc_, char* string_buffer_)
         : doc(doc_)
-#if USE_STRING_BUFFER
         , string_buffer(string_buffer_)
-#endif
     {
         static_cast<void>(string_buffer_);
     }
@@ -171,7 +173,7 @@ struct RapidjsonDocumentReader
         return {};
     }
 
-#if JSON_PARSER_CONVERT_NUMBERS_FAST
+#if JSON_CONVERT_NUMBERS
     ParseStatus HandleNumber(double value, NumberClass nc)
     {
         if (nc == NumberClass::invalid)
@@ -240,12 +242,30 @@ struct RapidjsonDocumentReader
 #if USE_STRING_BUFFER
         if (sc != StringClass::clean)
         {
-            char* str = string_buffer; // static_cast<char*>(doc->GetAllocator().Malloc(static_cast<size_t>(last - first)));
+            char* str = string_buffer;
 
             intptr_t len = 0;
             auto const res = json::strings::UnescapeString(first, last, /*allow_invalid_unicode*/ false,
-                [&](char ch) { str[len++] =ch; },
-                [&](char const* p, intptr_t n) { std::memcpy(str + len, p, static_cast<size_t>(n)); len += n; });
+                [&](char ch) {
+                    str[len++] = ch;
+                },
+                [&](char const* p, intptr_t n) {
+                    switch (n) {
+                    case 0: break;
+                    case 1: std::memcpy(str + len, p, 1); break;
+                    case 2: std::memcpy(str + len, p, 2); break;
+                    case 3: std::memcpy(str + len, p, 3); break;
+                    case 4: std::memcpy(str + len, p, 4); break;
+                    //case 5: std::memcpy(str + len, p, 5); break;
+                    //case 6: std::memcpy(str + len, p, 6); break;
+                    //case 7: std::memcpy(str + len, p, 7); break;
+                    //case 8: std::memcpy(str + len, p, 8); break;
+                    default:
+                        std::memcpy(str + len, p, static_cast<size_t>(n));
+                        break;
+                    }
+                    len += n;
+                });
 
             if (res.ec != json::strings::Status::success) {
                 return ParseStatus::invalid_string;
@@ -257,17 +277,44 @@ struct RapidjsonDocumentReader
         }
         else
         {
-            doc->String(first, static_cast<rapidjson::SizeType>(last - first), /*copy*/ true);
+            const size_t len = static_cast<size_t>(last - first);
+            std::memcpy(string_buffer, first, len);
+
+            doc->String(string_buffer, static_cast<rapidjson::SizeType>(len), /*copy*/ false);
+
+            string_buffer += len;
         }
-#else
+#else // ^^^ USE_STRING_BUFFER ^^^
         if (sc != StringClass::clean)
         {
-            char* str = static_cast<char*>(doc->GetAllocator().Malloc(static_cast<size_t>(last - first)));
+            const size_t max_len = static_cast<size_t>(last - first);       // allow_invalid_unicode == false
+//          const size_t max_len = static_cast<size_t>(last - first) * 6;   // allow_invalid_unicode == true
+
+            char* str = static_cast<char*>(doc->GetAllocator().Malloc(max_len));
 
             intptr_t len = 0;
             auto const res = json::strings::UnescapeString(first, last, /*allow_invalid_unicode*/ false,
-                [&](char ch) { str[len++] =ch; },
-                [&](char const* p, intptr_t n) { std::memcpy(str + len, p, static_cast<size_t>(n)); len += n; });
+                [&](char ch) {
+                    str[len++] = ch;
+                },
+                [&](char const* p, intptr_t n) {
+                    switch (n) {
+                    case 0: break;
+                    case 1: std::memcpy(str + len, p, 1); break;
+                    case 2: std::memcpy(str + len, p, 2); break;
+                    case 3: std::memcpy(str + len, p, 3); break;
+                    case 4: std::memcpy(str + len, p, 4); break;
+                    //case 5: std::memcpy(str + len, p, 5); break;
+                    //case 6: std::memcpy(str + len, p, 6); break;
+                    //case 7: std::memcpy(str + len, p, 7); break;
+                    //case 8: std::memcpy(str + len, p, 8); break;
+                    default:
+                        std::memcpy(str + len, p, static_cast<size_t>(n));
+                        break;
+                    }
+                    //std::memcpy(str + len, p, static_cast<size_t>(n));
+                    len += n;
+                });
 
             if (res.ec != json::strings::Status::success) {
                 return ParseStatus::invalid_string;
@@ -279,7 +326,7 @@ struct RapidjsonDocumentReader
         {
             doc->String(first, static_cast<rapidjson::SizeType>(last - first), /*copy*/ true);
         }
-#endif
+#endif // ^^^ ! USE_STRING_BUFFER ^^^
         return {};
     }
 };
@@ -405,22 +452,25 @@ bool json1_sax_stats(jsonstats& stats, char const* first, char const* last)
     return res.ec == ParseStatus::success;
 }
 
-struct FreeDeleter {
-    void operator()(void* p) { free(p); }
-};
-
 bool json1_dom_stats(jsonstats& stats, char const* first, char const* last)
 {
 #if BENCH_RAPIDJSON_DOCUMENT
+    RapidjsonDocument doc;
+
 #if USE_STRING_BUFFER
-    size_t const doc_len = static_cast<size_t>(last - first);
-    std::unique_ptr<char, FreeDeleter> string_buffer_( (char*)malloc(doc_len), FreeDeleter{} );
-    char* string_buffer = string_buffer_.get();
+    const size_t doc_len = static_cast<size_t>(last - first);
+    const size_t max_len = doc_len;     // allow_invalid_unicode == false
+//  const size_t max_len = doc_len * 6; // allow_invalid_unicode == true
+
+#if 1
+    char* string_buffer = static_cast<char*>(doc.GetAllocator().Malloc(max_len));
+#else
+    std::unique_ptr<char, decltype(&::free)> string_buffer_holder(static_cast<char*>(malloc(max_len)), &::free);
+    char* string_buffer = string_buffer_holder.get();
+#endif
 #else
     char* string_buffer = nullptr;
 #endif
-
-    RapidjsonDocument doc;
 
     auto const res = ParseRapidjsonDocument(doc, string_buffer, first, last);
     if (res.ec != ParseStatus::success) {

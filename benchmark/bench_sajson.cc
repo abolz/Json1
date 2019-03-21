@@ -8,6 +8,7 @@
 //#pragma GCC diagnostic ignored "-Woverflow"
 //#endif
 
+#define SAJSON_UNSORTED_OBJECT_KEYS 1
 #include "../ext/sajson/sajson.h"
 
 static void GenStats(jsonstats& stat, const sajson::value& v)
@@ -73,9 +74,9 @@ bool sajson_sax_stats(jsonstats& /*stats*/, char const* /*first*/, char const* /
     return false;
 }
 
-bool sajson_dom_stats(jsonstats& stats, char const* first, char const* /*last*/)
+bool sajson_dom_stats(jsonstats& stats, char const* first, char const* last)
 {
-    const sajson::document doc = sajson::parse(sajson::dynamic_allocation(), sajson::literal(first));
+    const auto doc = sajson::parse(sajson::single_allocation(), sajson::string(first, static_cast<size_t>(last - first)));
     if (!doc.is_valid())
         return false;
 

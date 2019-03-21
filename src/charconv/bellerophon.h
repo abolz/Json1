@@ -365,8 +365,8 @@ inline DiyFp DiyFpFromFloat(Double v)
 inline DiyFp UpperBoundary(Double value)
 {
     auto const v = DiyFpFromFloat(value);
-//  return DiyFp(2*v.f + 1, v.e - 1);
-    return DiyFp(4*v.f + 2, v.e - 2);
+    return DiyFp(2*v.f + 1, v.e - 1);
+//  return DiyFp(4*v.f + 2, v.e - 2);
 }
 
 struct DiyFpWithError // value = (x.f + delta) * 2^x.e, where |delta| <= error
@@ -536,8 +536,7 @@ inline StrtodApproxResult StrtodApprox(uint64_t significand, int num_digits, int
     // We don't want to deal with fractions and therefore work with a common denominator.
     constexpr uint32_t ULP = 2;
 
-//  if (num_digits_in_significand < num_digits)
-    if (num_digits > kMaxDigitsInSignificand)
+    if /*unlikely*/ (num_digits > kMaxDigitsInSignificand)
     {
         // We assume |significand| is rounded (towards +infinity),
         // so the error is <= 1/2 ULP.
@@ -830,7 +829,7 @@ inline void MulAddU32(DiyInt& x, uint32_t A, uint32_t B = 0)
     }
 }
 
-inline void AssignDecimalInteger(DiyInt& x, char const* digits, int num_digits)
+inline void AssignDecimalDigits(DiyInt& x, char const* digits, int num_digits)
 {
     static constexpr uint32_t kPow10_32[] = {
         1, // (unused)
@@ -854,87 +853,6 @@ inline void AssignDecimalInteger(DiyInt& x, char const* digits, int num_digits)
         digits     += n;
         num_digits -= n;
     }
-}
-
-CC_NEVER_INLINE int AssignDecimalFraction(DiyInt& x, char const* next, char const* last, int& exponent)
-{
-    // digits, stored in [next, last) is of the form "xxx.yyy"
-    // This function removes the decimal point, leading and trailing zeros, and adjusts the exponent.
-    // Then assigns the decimal integer "xxxyyy" to |x|.
-
-    CC_ASSERT(next != last);
-
-    char digits[kDoubleMaxSignificantDigits + 1];
-    int num_digits = 0;
-    bool zero_tail = true;
-
-    // Skip leading zeros in "xxx"
-    while (next != last && *next == '0')
-    {
-        ++next;
-    }
-
-// int
-
-    while (next != last && IsDigit(*next))
-    {
-        if (num_digits < kDoubleMaxSignificantDigits)
-        {
-            digits[num_digits] = *next;
-            ++num_digits;
-        }
-        else
-        {
-            ++exponent;
-            zero_tail &= (*next == '0');
-        }
-        ++next;
-    }
-
-// frac
-
-    if (next != last && *next == '.')
-    {
-        ++next;
-
-        if (num_digits == 0)
-        {
-            // 0.yyy
-            // Skip leading zeros in "yyy" and adjust the exponent
-            while (next != last && *next == '0')
-            {
-                --exponent;
-                ++next;
-            }
-        }
-
-        while (next != last && IsDigit(*next))
-        {
-            if (num_digits < kDoubleMaxSignificantDigits)
-            {
-                digits[num_digits] = *next;
-                ++num_digits;
-                --exponent;
-            }
-            else
-            {
-                zero_tail &= (*next == '0');
-            }
-            ++next;
-        }
-    }
-
-    const int result = num_digits;
-    if (!zero_tail)
-    {
-        digits[num_digits] = '1';
-        ++num_digits;
-        --exponent;
-    }
-
-    AssignDecimalInteger(x, digits, num_digits);
-
-    return result;
 }
 
 inline void MulPow2(DiyInt& x, int exp) // aka left-shift
@@ -1058,12 +976,7 @@ inline int MulCompare(DiyInt& lhs, int lhs_decimal_exponent, DiyInt& rhs, int rh
         lhs_exp2 -= rhs_binary_exponent;
     }
 
-#if 1
-    if (lhs_exp5 > 0 || rhs_exp5 > 0)
-    {
-        MulPow5((lhs_exp5 > 0) ? lhs : rhs, (lhs_exp5 > 0) ? lhs_exp5 : rhs_exp5);
-    }
-#else
+#ifndef NDEBUG
     if (lhs_exp5 > 0) // rhs >= digits
     {
         MulPow5(lhs, lhs_exp5);
@@ -1081,6 +994,11 @@ inline int MulCompare(DiyInt& lhs, int lhs_decimal_exponent, DiyInt& rhs, int rh
         // rhs_exp5 = -exponent >= -kDoubleMaxDecimalPower - 1 + num_digits
         CC_ASSERT(lhs.size <= (2555        + 31) / 32);
         CC_ASSERT(rhs.size <= (  64 + 2536 + 31) / 32); // 2536 = log_2(5^(324 - 1 + 769)) ---- XXX: 2504
+    }
+#else
+    if (lhs_exp5 > 0 || rhs_exp5 > 0)
+    {
+        MulPow5((lhs_exp5 > 0) ? lhs : rhs, (lhs_exp5 > 0) ? lhs_exp5 : rhs_exp5);
     }
 #endif
 
@@ -1122,7 +1040,7 @@ inline int MulCompare(DiyInt& lhs, int lhs_decimal_exponent, DiyInt& rhs, int rh
 // PRE: num_digits + exponent <= kDoubleMaxDecimalPower
 // PRE: num_digits + exponent >  kDoubleMinDecimalPower
 // PRE: num_digits            <= kDoubleMaxSignificantDigits
-inline int CompareBufferWithDiyFp(char const* digits, int num_digits, int exponent, bool nonzero_tail, DiyFp v)
+CC_NEVER_INLINE int CompareBufferWithDiyFp(char const* digits, int num_digits, int exponent, bool nonzero_tail, DiyFp v)
 {
     CC_ASSERT(num_digits > 0);
     CC_ASSERT(num_digits + exponent <= kDoubleMaxDecimalPower);
@@ -1132,7 +1050,7 @@ inline int CompareBufferWithDiyFp(char const* digits, int num_digits, int expone
     DiyInt lhs;
     DiyInt rhs;
 
-    AssignDecimalInteger(lhs, digits, num_digits);
+    AssignDecimalDigits(lhs, digits, num_digits);
     if (nonzero_tail)
     {
         MulAddU32(lhs, 10, 1);
@@ -1143,21 +1061,8 @@ inline int CompareBufferWithDiyFp(char const* digits, int num_digits, int expone
     return MulCompare(lhs, exponent, rhs, v.e);
 }
 
-//--------------------------------------------------------------------------------------------------
-// DigitsToDouble
-//--------------------------------------------------------------------------------------------------
-
-// Convert the decimal representation 'digits * 10^exponent' into an IEEE
-// double-precision number.
-//
-// PRE: digits must contain only ASCII characters in the range '0'...'9'.
-// PRE: num_digits >= 0
-// PRE: num_digits + exponent must not overflow.
-inline double DigitsToDouble(char const* digits, int num_digits, int exponent, bool nonzero_tail = false)
+CC_FORCE_INLINE void TrimDigits(char const*& digits, int& num_digits, int& exponent, bool& nonzero_tail)
 {
-    CC_ASSERT(num_digits >= 0);
-    CC_ASSERT(exponent <= INT_MAX - num_digits);
-
     // Ignore leading zeros
     while (num_digits > 0 && digits[0] == '0')
     {
@@ -1175,6 +1080,7 @@ inline double DigitsToDouble(char const* digits, int num_digits, int exponent, b
         }
     }
 
+    // Discard insignificant digits
     if (num_digits > kDoubleMaxSignificantDigits)
     {
         // Since trailing zeros have been trimmed above:
@@ -1186,6 +1092,24 @@ inline double DigitsToDouble(char const* digits, int num_digits, int exponent, b
         exponent += num_digits - kDoubleMaxSignificantDigits;
         num_digits = kDoubleMaxSignificantDigits;
     }
+}
+
+//--------------------------------------------------------------------------------------------------
+// DigitsToDouble
+//--------------------------------------------------------------------------------------------------
+
+// Convert the decimal representation 'digits * 10^exponent' into an IEEE
+// double-precision number.
+//
+// PRE: digits must contain only ASCII characters in the range '0'...'9'.
+// PRE: num_digits >= 0
+// PRE: num_digits + exponent must not overflow.
+inline double DigitsToDouble(char const* digits, int num_digits, int exponent, bool nonzero_tail = false)
+{
+    CC_ASSERT(num_digits >= 0);
+    CC_ASSERT(exponent <= INT_MAX - num_digits);
+
+    TrimDigits(digits, num_digits, exponent, nonzero_tail);
 
     if (num_digits == 0)
     {
@@ -1206,14 +1130,14 @@ inline double DigitsToDouble(char const* digits, int num_digits, int exponent, b
 
     // Read up to 19 digits of the significand.
     uint64_t significand = ReadInt<uint64_t>(digits, Min(num_digits, kMaxDigitsInSignificand));
-    if (num_digits > kMaxDigitsInSignificand)
+    if /*unlikely*/ (num_digits > kMaxDigitsInSignificand)
     {
         // Round towards +infinity.
         significand += (digits[kMaxDigitsInSignificand] >= '5');
     }
 
     // Compute an approximation to digits * 10^exponent using the most significant digits.
-    const StrtodApproxResult guess = StrtodApprox(significand, num_digits, exponent);
+    auto const guess = StrtodApprox(significand, num_digits, exponent);
     if (guess.is_correct)
     {
         return guess.value;

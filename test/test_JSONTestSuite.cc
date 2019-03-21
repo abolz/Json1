@@ -54,14 +54,12 @@ inline char const* TokenKindDescr(json::TokenKind kind)
         return "number";
     case json::TokenKind::identifier:
         return "identifier";
-    case json::TokenKind::comment:
-        return "comment";
     case json::TokenKind::incomplete_string:
         return "incomplete_string";
+    case json::TokenKind::comment:
+        return "comment";
     case json::TokenKind::incomplete_comment:
         return "incomplete_comment";
-    case json::TokenKind::discarded:
-        return "discarded";
     }
 
     assert(false && "unreachable");
@@ -506,7 +504,8 @@ static const JSONTestSuiteTest kJSONTestSuite_n[] = {
     {std::string("[Infinity]", 10), "n_number_infinity"},
     {std::string("[-Infinity]", 11), "n_number_minus_infinity"},
     {std::string("[NaN]", 5), "n_number_NaN"},
-    {std::string("[-NaN]", 6), "n_number_-NaN"},};
+    {std::string("[-NaN]", 6), "n_number_-NaN"},
+};
 
 TEST_CASE("JSONTestSuite")
 {

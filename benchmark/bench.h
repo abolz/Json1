@@ -2,9 +2,11 @@
 
 #define BENCH_RAPIDJSON_DOCUMENT 1
 #define BENCH_COLLECT_STATS 0
+#define BENCH_FULLPREC 0
 
 #include <cstddef>
 #include <cstdio>
+#include <cstdlib>
 #include <cmath>
 #include <vector>
 
@@ -25,8 +27,12 @@ class FloatSum
     // configured to round internally to double precision.
     //----------------------------------------------------------------------------------------------
 
-    std::vector<double> expansion;
+    // Max length is 11 for the minified examples
+    static constexpr int MaxExpansionLength = 16;
+
     double sum = 0.0;
+    double expansion[MaxExpansionLength];
+    int expansion_length = 0;
 
     static void TwoSum(double x, double y, double& hi, double& lo)
     {
@@ -39,10 +45,10 @@ class FloatSum
     }
 
 public:
-    FloatSum()
+    void Assign(double x)
     {
-        // Max length is 11 for the minified examples
-        expansion.reserve(16);
+        expansion[0] = x;
+        expansion_length = 1;
     }
 
     void Add(double x)
@@ -50,10 +56,12 @@ public:
         // expansion += x
         // Add a scalar to an expansion, eliminating zero components from the output expansion.
 
-        size_t i = 0;
+        int i = 0;
 
-        for (double y : expansion)
+        for (int j = 0; j < expansion_length; ++j)
         {
+            const double y = expansion[j];
+
             double hi;
             double lo;
             TwoSum(x, y, hi, lo);
@@ -61,27 +69,28 @@ public:
             {
                 expansion[i++] = lo;
             }
+
             x = hi;
         }
 
         if (x != 0.0 /*|| i == 0*/)
         {
-            if (i == expansion.size())
-                expansion.push_back(x);
-            else
-                expansion[i] = x;
+            if (i >= MaxExpansionLength) {
+                fprintf(stderr, "MaxExpansionLength too small\n");
+                abort();
+            }
 
-            i++;
+            expansion[i++] = x;
         }
 
-        expansion.resize(i);
+        expansion_length = i;
     }
 
     double Finish()
     {
         sum = 0.0;
-        for (double y : expansion) {
-            sum += y;
+        for (int j = 0; j < expansion_length; ++j) {
+            sum += expansion[j];
         }
         return sum;
     }
@@ -125,14 +134,15 @@ struct jsonstats {
     FloatSum total_number_value;
 
     void print(FILE* file) const {
-        fprintf(file, "    # null    = %10zu\n", null_count);
-        fprintf(file, "    # false   = %10zu\n", false_count);
-        fprintf(file, "    # true    = %10zu\n", true_count);
-        fprintf(file, "    # numbers = %10zu --- total_number_value  = %f\n", number_count, total_number_value.Result());
-        fprintf(file, "    # strings = %10zu --- total_string_length = %zu\n", string_count, total_string_length);
-        fprintf(file, "    # arrays  = %10zu --- total_array_length  = %zu\n", array_count, total_array_length);
-        fprintf(file, "    # objects = %10zu --- total_object_length = %zu\n", object_count, total_object_length);
-        fprintf(file, "    # keys    = %10zu --- total_key_length    = %zu\n", key_count, total_key_length);
+        fprintf(file, "    # null     = %10zu\n", null_count);
+        fprintf(file, "    # false    = %10zu\n", false_count);
+        fprintf(file, "    # true     = %10zu\n", true_count);
+        //fprintf(file, "    # keywords = %10zu (null %zu, false %zu, true %zu)\n", null_count + false_count + true_count, null_count, false_count, true_count);
+        fprintf(file, "    # numbers  = %10zu --- total_number_value  = %.17g\n", number_count, total_number_value.Result());
+        fprintf(file, "    # strings  = %10zu --- total_string_length = %zu\n", string_count, total_string_length);
+        fprintf(file, "    # arrays   = %10zu --- total_array_length  = %zu\n", array_count, total_array_length);
+        fprintf(file, "    # objects  = %10zu --- total_object_length = %zu\n", object_count, total_object_length);
+        fprintf(file, "    # keys     = %10zu --- total_key_length    = %zu\n", key_count, total_key_length);
     }
 
     bool operator==(const jsonstats& rhs) const {

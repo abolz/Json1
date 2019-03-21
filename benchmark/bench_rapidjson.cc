@@ -12,7 +12,7 @@
 
 #include <vector>
 
-#define USE_MEMSTREAM 1
+#define USE_MEMSTREAM 0
 #define USE_ITERATIVE_PARSER 0
 
 namespace {
@@ -242,7 +242,9 @@ private:
 
 static constexpr int kParseFlags
     = 0
-    //| rapidjson::kParseFullPrecisionFlag
+#if BENCH_FULLPREC
+    | rapidjson::kParseFullPrecisionFlag
+#endif
     | rapidjson::kParseStopWhenDoneFlag
     | rapidjson::kParseValidateEncodingFlag
 #if USE_ITERATIVE_PARSER

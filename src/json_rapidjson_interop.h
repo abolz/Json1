@@ -74,13 +74,13 @@ inline bool TraverseRapidjsonDocument(TraverseCallbacks& cb, rapidjson::Value co
 
     case rapidjson::kArrayType:
         {
-            const auto size = value.Size();
+            auto const size = value.Size();
 
             if (!cb.HandleBeginArray(value, size))
                 return false;
 
             auto I = value.Begin();
-            const auto E = value.End();
+            auto const E = value.End();
             if (I != E)
             {
                 for (rapidjson::SizeType index = 0; /**/; ++index)
@@ -101,13 +101,13 @@ inline bool TraverseRapidjsonDocument(TraverseCallbacks& cb, rapidjson::Value co
 
     case rapidjson::kObjectType:
         {
-            const auto size = value.MemberCount();
+            auto const size = value.MemberCount();
 
             if (!cb.HandleBeginObject(value, size))
                 return false;
 
             auto I = value.MemberBegin();
-            const auto E = value.MemberEnd();
+            auto const E = value.MemberEnd();
             if (I != E)
             {
                 for (rapidjson::SizeType index = 0; /**/; ++index)
@@ -137,7 +137,7 @@ inline bool TraverseRapidjsonDocument(TraverseCallbacks& cb, rapidjson::Value co
     static_assert(MaxDepth >= 1, "invalid parameter");
 
     struct StackElement {
-        const rapidjson::Value* value;
+        rapidjson::Value const* value;
         rapidjson::SizeType size;
         rapidjson::SizeType index;
     };
@@ -182,18 +182,18 @@ inline bool TraverseRapidjsonDocument(TraverseCallbacks& cb, rapidjson::Value co
     {
 L_dive:
         auto& top = stack[stack_size - 1];
-        const bool is_array = top.value->IsArray();
+        bool const is_array = top.value->IsArray();
 
         while (top.index < top.size)
         {
-            const rapidjson::Value* child;
+            rapidjson::Value const* child;
             if (is_array)
             {
                 child = &top.value->Begin()[top.index];
             }
             else
             {
-                const auto it = top.value->MemberBegin() + top.index;
+                auto const it = top.value->MemberBegin() + top.index;
                 if (!cb.HandleKey(it->name))
                     return false;
                 child = &it->value;
@@ -332,7 +332,7 @@ struct RapidjsonDocumentReader
         return {};
     }
 
-#if JSON_PARSER_CONVERT_NUMBERS_FAST
+#if JSON_CONVERT_NUMBERS
     ParseStatus HandleNumber(double value, NumberClass nc)
     {
         if (nc == NumberClass::invalid)
@@ -341,7 +341,7 @@ struct RapidjsonDocumentReader
         doc->Double(value);
         return {};
     }
-#else
+#else // ^^^ JSON_CONVERT_NUMBERS ^^^
     ParseStatus HandleNumber(char const* first, char const* last, NumberClass nc)
     {
         if (nc == NumberClass::invalid)
@@ -350,7 +350,7 @@ struct RapidjsonDocumentReader
         doc->Double(json::numbers::StringToNumber(first, last, nc));
         return {};
     }
-#endif
+#endif // ^^^ !JSON_CONVERT_NUMBERS ^^^
 
     ParseStatus HandleString(char const* first, char const* last, StringClass sc)
     {
@@ -446,7 +446,7 @@ struct RapidjsonStringifyOptions
 
     // If > 0, pretty-print the JSON.
     // Default is <= 0, that is the JSON is rendered as the shortest string possible.
-    int indent_width = -1;
+    int8_t indent_width = -1;
 };
 
 namespace impl {
@@ -561,9 +561,7 @@ inline bool StringifyArray(OutputStream& out, rapidjson::Value const& value, Rap
     {
         if (options.indent_width > 0)
         {
-            // Prevent overflow in curr_indent + options.indent_width
-            int const indent_width = (curr_indent <= INT_MAX - options.indent_width) ? options.indent_width : 0;
-            curr_indent += indent_width;
+            curr_indent += options.indent_width;
 
             for (;;)
             {
@@ -577,7 +575,7 @@ inline bool StringifyArray(OutputStream& out, rapidjson::Value const& value, Rap
                 out.Put(',');
             }
 
-            curr_indent -= indent_width;
+            curr_indent -= options.indent_width;
 
             out.Put('\n');
             json::impl::WriteChars(out, ' ', static_cast<size_t>(curr_indent));
@@ -611,9 +609,7 @@ static bool StringifyObject(OutputStream& out, rapidjson::Value const& value, Ra
     {
         if (options.indent_width > 0)
         {
-            // Prevent overflow in curr_indent + options.indent_width
-            int const indent_width = (curr_indent <= INT_MAX - options.indent_width) ? options.indent_width : 0;
-            curr_indent += indent_width;
+            curr_indent += options.indent_width;
 
             for (;;)
             {
@@ -631,7 +627,7 @@ static bool StringifyObject(OutputStream& out, rapidjson::Value const& value, Ra
                 out.Put(',');
             }
 
-            curr_indent -= indent_width;
+            curr_indent -= options.indent_width;
 
             out.Put('\n');
             json::impl::WriteChars(out, ' ', static_cast<size_t>(curr_indent));

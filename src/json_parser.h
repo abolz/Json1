@@ -20,30 +20,27 @@
 
 #pragma once
 
-#define JSON_PARSER_STRICT 0
-#define JSON_PARSER_CONVERT_NUMBERS_FAST 0
-
-//#define JSON_USE_SSE2 1
-#ifndef JSON_USE_SSE2
-#if defined(__SSE2__) || defined(_M_X64) || defined(__x86_64__)
-#define JSON_USE_SSE2 1
+//#define JSON_USE_SSE42 0
+#ifndef JSON_USE_SSE42
+#if defined(__SSE4_2__) || defined(__AVX__) || defined(__AVX2__)
+#define JSON_USE_SSE42 1
 #endif
-#endif
+#endif // ^^^ !defined(JSON_USE_SSE42) ^^^
 
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#if JSON_PARSER_CONVERT_NUMBERS_FAST
+#if JSON_CONVERT_NUMBERS
 #include <limits>
-#endif
+#endif // ^^^ JSON_CONVERT_NUMBERS ^^^
 
-#if JSON_USE_SSE2
 #if _MSC_VER
 #include <intrin.h>
 #endif
-#include <emmintrin.h>
-#endif
+#if JSON_USE_SSE42
+#include <nmmintrin.h>
+#endif // ^^^ JSON_USE_SSE42 ^^^
 
 #ifndef JSON_ASSERT
 #define JSON_ASSERT(X) assert(X)
@@ -61,30 +58,6 @@
 #endif
 
 namespace json {
-
-namespace impl {
-namespace intrinsics {
-    // Returns the number of trailing 0-bits in X, starting at the least significant bit position.
-    // If X is 0, the result is undefined.
-    inline int bsf32(uint32_t x)
-    {
-#if _MSC_VER
-        unsigned long index;
-        _BitScanForward(&index, x);
-        return (int)index;
-#else
-        return __builtin_ctz(x);
-#endif
-    }
-
-    // Returns the number of trailing 0-bits in X, starting at the least significant bit position.
-    // If X is 0, the result is undefined.
-    inline int bsf32(int32_t x)
-    {
-        return json::impl::intrinsics::bsf32(static_cast<uint32_t>(x));
-    }
-} // namespace intrinsics
-} // namespace impl
 
 //==================================================================================================
 // CharClass
@@ -177,9 +150,11 @@ enum class NumberClass : uint8_t {
     invalid,
     integer,
     decimal,
+//#if !JSON_STRICT
     nan,
     pos_infinity,
     neg_infinity,
+//#endif // ^^^ !JSON_STRICT ^^^
 };
 
 inline bool IsFinite(NumberClass nc)
@@ -231,7 +206,7 @@ inline ScanNumberResult ScanNumber(char const* next, char const* last)
                 break;
         }
     }
-#if !JSON_PARSER_STRICT
+#if !JSON_STRICT
     else if (last - next >= 3 && std::memcmp(next, "NaN", 3) == 0)
     {
         return {next + 3, NumberClass::nan};
@@ -240,7 +215,7 @@ inline ScanNumberResult ScanNumber(char const* next, char const* last)
     {
         return {next + 8, is_neg ? NumberClass::neg_infinity : NumberClass::pos_infinity};
     }
-#endif
+#endif // ^^^ !JSON_STRICT ^^^
     else
     {
         return {next, NumberClass::invalid};
@@ -309,42 +284,6 @@ enum class StringClass : uint8_t {
 };
 
 //==================================================================================================
-// ScanIdentifier
-//==================================================================================================
-
-enum class Identifier : uint8_t {
-    other,
-    null,
-    true_,
-    false_,
-#if !JSON_PARSER_STRICT
-    nan,
-    infinity,
-#endif
-};
-
-inline Identifier ScanIdentifer(char const* next, char const* last)
-{
-    auto const len = last - next;
-    JSON_ASSERT(len >= 1);
-
-    if (len == 4 && std::memcmp(next, "null", 4) == 0)
-        return Identifier::null;
-    if (len == 4 && std::memcmp(next, "true", 4) == 0)
-        return Identifier::true_;
-    if (len == 5 && std::memcmp(next, "false", 5) == 0)
-        return Identifier::false_;
-#if !JSON_PARSER_STRICT
-    if (len == 3 && std::memcmp(next, "NaN", 3) == 0)
-        return Identifier::nan;
-    if (len == 8 && std::memcmp(next, "Infinity", 8) == 0)
-        return Identifier::infinity;
-#endif
-
-    return Identifier::other;
-}
-
-//==================================================================================================
 // Lexer
 //==================================================================================================
 
@@ -374,14 +313,11 @@ enum class TokenKind : uint8_t {
     string,
     number,
     identifier,
-#if !JSON_PARSER_STRICT
-    comment,
-#endif
     incomplete_string,
-#if !JSON_PARSER_STRICT
+#if !JSON_STRICT
+    comment,
     incomplete_comment,
-#endif
-    discarded,
+#endif // ^^^ !JSON_STRICT ^^^
 };
 
 struct Token
@@ -406,30 +342,27 @@ public:
 
     TokenKind Peek(Mode mode);
 
-    Token Lex(TokenKind kind);
+    Token LexString();
+    Token LexNumber();
+    Token LexIdentifier();
 
     void Skip(TokenKind kind);
 
     char const* Next() const { return ptr; }
     char const* Last() const { return end; }
 
+    // Advance the read pointer.
+    // PRE: dist >= 0
+    // PRE: Next() + dist <= Last()
     char const* Seek(intptr_t dist);
 
 private:
-    Token LexString     (char const* p);
-#if !JSON_PARSER_CONVERT_NUMBERS_FAST
-    Token LexNumber     (char const* p);
-#endif
-    Token LexIdentifier (char const* p);
-
-#if !JSON_PARSER_STRICT
+#if !JSON_STRICT
     // Skip the comment starting at p (*p == '/')
     // If the comment is an incomplete block comment, return nullptr.
     // Otherwise return an iterator pointing past the end of the comment.
     static char const* SkipComment(char const* p, char const* end);
-#endif
-
-    Token MakeToken(char const* p, TokenKind kind);
+#endif // ^^^ !JSON_STRICT ^^^
 };
 
 inline void Lexer::SetInput(char const* first, char const* last)
@@ -444,7 +377,11 @@ inline void Lexer::SetInput(char const* first, char const* last)
     end = last;
 }
 
+#if !JSON_STRICT
 inline TokenKind Lexer::Peek(Mode mode)
+#else // ^^^ !JSON_STRICT ^^^
+inline TokenKind Lexer::Peek(Mode /*mode*/)
+#endif // ^^^ JSON_STRICT ^^^
 {
     enum : uint8_t {
         Ic = static_cast<uint8_t>(TokenKind::invalid_character),
@@ -459,7 +396,7 @@ inline TokenKind Lexer::Peek(Mode mode)
         Id = static_cast<uint8_t>(TokenKind::identifier),
     };
 
-    static constexpr uint8_t kMap[] = {
+    static constexpr uint8_t const kMap[] = {
     //  NUL   SOH   STX   ETX   EOT   ENQ   ACK   BEL   BS    HT    LF    VT    FF    CR    SO    SI
         Ic,   Ic,   Ic,   Ic,   Ic,   Ic,   Ic,   Ic,   Ic,   0,    0,    Ic,   Ic,   0,    Ic,   Ic,
     //  DLE   DC1   DC2   DC3   DC4   NAK   SYN   ETB   CAN   EM    SUB   ESC   FS    GS    RS    US
@@ -486,97 +423,246 @@ inline TokenKind Lexer::Peek(Mode mode)
         Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,   Id,
     };
 
-#if !JSON_PARSER_STRICT
-    char const*       f = ptr;
-    char const* const l = end;
+#if !JSON_STRICT
+    char const* p = ptr;
     for (;;)
     {
         uint8_t charclass = 0;
 
         // Skip whitespace
-        for ( ; f != l; ++f)
+        for ( ; p != end; ++p)
         {
-            charclass = kMap[static_cast<uint8_t>(*f)];
+            charclass = kMap[static_cast<uint8_t>(*p)];
             if (charclass != 0)
                 break;
         }
 
-        // Mark start of next token.
-        ptr = f;
+        ptr = p; // Mark start of next token.
 
-        if (f == l)
+        if (p == end)
             return TokenKind::eof;
 
-        if (*f != '/')
+        if (*p != '/')
             return static_cast<TokenKind>(charclass);
 
         if (mode == Mode::strict)
             return TokenKind::invalid_character;
 
-        char const* const next = SkipComment(f, l);
+        char const* next = SkipComment(p, end);
         if (next == nullptr)
             return TokenKind::incomplete_comment;
 
-        f = next;
+        p = next;
     }
-#else
-    char const*       f = ptr;
-    char const* const l = end;
+#else // ^^^ !JSON_STRICT ^^^
+    char const* p = ptr;
+
+    uint8_t charclass = 0;
 
     // Skip whitespace
-    for ( ; f != l; ++f)
+    for ( ; p != end; ++p)
     {
-        const uint8_t charclass = kMap[static_cast<uint8_t>(*f)];
+        charclass = kMap[static_cast<uint8_t>(*p)];
         if (charclass != 0)
-        {
-            ptr = f;
-            return static_cast<TokenKind>(charclass);
-        }
+            break;
     }
 
-    ptr = f;
-    return TokenKind::eof;
+    ptr = p; // Mark start of next token.
 
-#endif
+    return (p == end)
+        ? TokenKind::eof
+        : static_cast<TokenKind>(charclass);
+#endif // ^^^ JSON_STRICT ^^^
 }
 
-inline Token Lexer::Lex(TokenKind kind)
+inline Token Lexer::LexString()
 {
+    using namespace ::json::charclass;
+
     char const* p = ptr;
-    switch (kind)
+    JSON_ASSERT(p != end);
+    JSON_ASSERT(*p == '"');
+
+    ++p; // Skip "
+
+    StringClass sc = StringClass::clean;
+
+#if JSON_USE_SSE42
+    auto CountTrailingZeros = [](int bits)
     {
-    case TokenKind::eof:
-        break;
-    case TokenKind::l_brace:
-    case TokenKind::r_brace:
-    case TokenKind::l_square:
-    case TokenKind::r_square:
-    case TokenKind::comma:
-    case TokenKind::colon:
-        ++p;
-        break;
-    case TokenKind::string:
-        return LexString(p);
-#if !JSON_PARSER_CONVERT_NUMBERS_FAST
-    case TokenKind::number:
-        return LexNumber(p);
+#if _MSC_VER
+        unsigned long index;
+        _BitScanForward(&index, static_cast<unsigned long>(bits));
+        return static_cast<int>(index);
+#else
+        return __builtin_ctz(static_cast<unsigned>(bits));
 #endif
-#if !JSON_PARSER_STRICT
-    case TokenKind::incomplete_comment:
-        p = end;
-        break;
-#endif // ^^^ !JSON_PARSER_STRICT ^^^
-    case TokenKind::identifier:
-        return LexIdentifier(p);
-    case TokenKind::invalid_character:
+    };
+
+    /*static*/ __m128i const kQuotes = _mm_set1_epi8('"');
+    /*static*/ __m128i const kBackslashes = _mm_set1_epi8('\\');
+    /*static*/ __m128i const kSpaces = _mm_set1_epi8(' ');
+
+    for ( ; end - p >= 16; p += 16)
+    {
+        __m128i const bytes = _mm_loadu_si128(reinterpret_cast<__m128i const*>(p));
+        __m128i const mask2 = _mm_cmpeq_epi8(kQuotes, bytes);
+        __m128i const mask1 = _mm_or_si128(mask2, _mm_cmpeq_epi8(kBackslashes, bytes));
+        __m128i const mask0 = _mm_or_si128(mask1, _mm_cmpgt_epi8(kSpaces, bytes));
+        if (! _mm_testz_si128(mask0, mask0))
+        {
+            p += CountTrailingZeros(_mm_movemask_epi8(mask0));
+            goto L1;
+        }
+    }
+    while (p != end && (CharClass(*p) & (CC_string_special | CC_needs_cleaning)) == 0)
+    {
         ++p;
-        break;
-    default:
-        JSON_ASSERT(false && "unreachable");
-        break;
     }
 
-    return MakeToken(p, kind);
+L1:
+    if (p != end && *p != '"')
+    {
+        sc = StringClass::needs_cleaning;
+        for (;;)
+        {
+            for ( ; end - p >= 16; p += 16)
+            {
+                __m128i const bytes = _mm_loadu_si128(reinterpret_cast<__m128i const*>(p));
+                __m128i const mask1 = _mm_cmpeq_epi8(kQuotes, bytes);
+                __m128i const mask0 = _mm_or_si128(mask1, _mm_cmpeq_epi8(kBackslashes, bytes));
+                if (! _mm_testz_si128(mask0, mask0))
+                {
+                    p += CountTrailingZeros(_mm_movemask_epi8(mask0));
+                    goto L2;
+                }
+            }
+            while (p != end && (CharClass(*p) & CC_string_special) == 0)
+            {
+                ++p;
+            }
+
+L2:
+            if (p == end || *p == '"')
+                break;
+
+            JSON_ASSERT(*p == '\\');
+            ++p; // Skip '\\'. The escaped character will be skipped below.
+            if (p == end)
+                break;
+            ++p;
+        }
+    }
+#else // ^^^ JSON_USE_SSE42 ^^^
+    while (p != end && (CharClass(*p) & (CC_string_special | CC_needs_cleaning)) == 0)
+    {
+        ++p;
+    }
+
+    if (p != end && *p != '"')
+    {
+        sc = StringClass::needs_cleaning;
+        for (;;)
+        {
+            while (p != end && (CharClass(*p) & CC_string_special) == 0)
+            {
+                ++p;
+            }
+
+            if (p == end || *p == '"')
+                break;
+
+            JSON_ASSERT(*p == '\\');
+            ++p; // Skip '\\'. The escaped character will be skipped below.
+            if (p == end)
+                break;
+            ++p;
+        }
+    }
+#endif // ^^^ !JSON_USE_SSE42 ^^^
+
+    JSON_ASSERT(p == end || *p == '"');
+
+    bool const is_incomplete = (p == end);
+    if (!is_incomplete)
+        ++p; // Skip '"'
+
+    Token tok;
+
+    tok.ptr = ptr;
+    tok.end = p;
+    tok.kind = is_incomplete ? TokenKind::incomplete_string : TokenKind::string;
+    tok.string_class = sc;
+//  tok.number_class = 0;
+
+    ptr = p;
+
+    return tok;
+}
+
+inline Token Lexer::LexNumber()
+{
+    using json::charclass::IsSeparator;
+
+    char const* p = ptr;
+
+    auto const res = json::ScanNumber(p, end);
+    p = res.next;
+
+    NumberClass nc = res.number_class;
+    if (nc == NumberClass::invalid || (p != end && !IsSeparator(*p)))
+    {
+        // Invalid number,
+        // or valid number with trailing garbage, which is also an invalid number.
+        nc = NumberClass::invalid;
+    }
+
+    Token tok;
+
+    tok.ptr = ptr;
+    tok.end = p;
+    tok.kind = TokenKind::number;
+//  tok.string_class = 0;
+    tok.number_class = nc;
+
+    ptr = p;
+
+    return tok;
+}
+
+inline Token Lexer::LexIdentifier()
+{
+    using namespace json::charclass;
+
+    char const* p = ptr;
+    JSON_ASSERT(p != end);
+    JSON_ASSERT(IsIdentifierStart(*p));
+    JSON_ASSERT(IsIdentifierBody(*p));
+
+    // Don't skip identifier start here.
+    // Might have to set needs_cleaning flag below.
+
+    uint32_t mask = 0;
+    while (p != end)
+    {
+        auto const m = CharClass(*p);
+        mask |= m;
+        if ((m & CC_identifier_body) == 0)
+            break;
+        ++p;
+    }
+
+    Token tok;
+
+    tok.ptr = ptr;
+    tok.end = p;
+    tok.kind = TokenKind::identifier;
+    tok.string_class = ((mask & CC_needs_cleaning) != 0) ? StringClass::needs_cleaning : StringClass::clean;
+//  tok.number_class = 0;
+
+    ptr = p;
+
+    return tok;
 }
 
 inline void Lexer::Skip(TokenKind kind)
@@ -611,227 +697,7 @@ inline char const* Lexer::Seek(intptr_t dist)
     return ptr;
 }
 
-inline Token Lexer::LexString(char const* p)
-{
-#if JSON_USE_SSE2
-    using namespace json::charclass;
-
-    JSON_ASSERT(p != end);
-    JSON_ASSERT(*p == '"');
-
-    ++p; // Skip '"'
-
-    const __m128i quotes = _mm_set1_epi8('"');
-    const __m128i backslashes = _mm_set1_epi8('\\');
-    const __m128i spaces = _mm_set1_epi8(' ');
-
-    auto SkipFast = [&](char const* f, char const* l)
-    {
-        for ( ; l - f >= 16; f += 16)
-        {
-            const __m128i bytes = _mm_loadu_si128(reinterpret_cast<const __m128i*>(f));
-            const __m128i mask_quotes = _mm_cmpeq_epi8(quotes, bytes);
-            const __m128i mask_backslashes = _mm_cmpeq_epi8(backslashes, bytes);
-            const __m128i mask_spaces = _mm_cmpgt_epi8(spaces, bytes);
-            const __m128i mask = _mm_or_si128(mask_quotes, _mm_or_si128(mask_backslashes, mask_spaces));
-            const int32_t mmask = _mm_movemask_epi8(mask);
-            if (mmask != 0)
-            {
-                return f + json::impl::intrinsics::bsf32(mmask);
-            }
-        }
-        for ( ; f != l; ++f)
-        {
-            if ('"' == *f || '\\' == *f || ' ' > static_cast<int8_t>(*f))
-                break;
-        }
-        return f;
-    };
-
-    auto SkipFaster = [&](char const* f, char const* l)
-    {
-        for ( ; l - f >= 16; f += 16)
-        {
-            const __m128i bytes = _mm_loadu_si128(reinterpret_cast<const __m128i*>(f));
-            const __m128i mask_quotes = _mm_cmpeq_epi8(quotes, bytes);
-            const __m128i mask_backslashes = _mm_cmpeq_epi8(backslashes, bytes);
-            const __m128i mask = _mm_or_si128(mask_quotes, mask_backslashes);
-            const int32_t mmask = _mm_movemask_epi8(mask);
-            if (mmask != 0)
-            {
-                return f + json::impl::intrinsics::bsf32(mmask);
-            }
-        }
-        for ( ; f != l; ++f)
-        {
-            if ('"' == *f || '\\' == *f)
-                break;
-        }
-        return f;
-    };
-
-    StringClass sc = StringClass::clean;
-
-    p = SkipFast(p, end);
-    if (p != end && *p != '"')
-    {
-        sc = StringClass::needs_cleaning;
-
-        if (*p == '\\')
-        {
-            ++p; // skip '\'
-            if (p != end)
-                ++p; // skip escaped char
-        }
-
-        for (;;)
-        {
-            p = SkipFaster(p, end);
-            if (p == end || *p == '"')
-                break;
-
-            JSON_ASSERT(*p == '\\');
-            ++p; // skip '\'
-            if (p == end)
-                break;
-            ++p; // skip escaped char
-        }
-    }
-
-    JSON_ASSERT(p == end || *p == '"');
-
-    bool const is_incomplete = (p == end);
-    if (!is_incomplete)
-        ++p; // Skip '"'
-
-    Token tok;
-
-    tok.ptr = ptr;
-    tok.end = p;
-    tok.kind = is_incomplete ? TokenKind::incomplete_string : TokenKind::string;
-    tok.string_class = sc;
-//  tok.number_class = 0;
-
-    ptr = p;
-
-    return tok;
-#else // ^^^ JSON_USE_SSE2 ^^^
-    using namespace json::charclass;
-
-    JSON_ASSERT(p != end);
-    JSON_ASSERT(*p == '"');
-
-    ++p; // Skip '"'
-
-    uint32_t mask = 0;
-    while (p != end)
-    {
-        uint32_t const m = CharClass(*p);
-        mask |= m;
-        if ((m & CC_string_special) != 0)
-        {
-            if (*p == '"' || ++p == end)
-                break;
-        }
-        ++p;
-    }
-
-    JSON_ASSERT(p == end || *p == '"');
-
-    StringClass const sc = (mask & CC_needs_cleaning) != 0
-        ? StringClass::needs_cleaning
-        : StringClass::clean;
-
-    bool const is_incomplete = (p == end);
-    if (!is_incomplete)
-        ++p; // Skip '"'
-
-    Token tok;
-
-    tok.ptr = ptr;
-    tok.end = p;
-    tok.kind = is_incomplete ? TokenKind::incomplete_string : TokenKind::string;
-    tok.string_class = sc;
-//  tok.number_class = 0;
-
-    ptr = p;
-
-    return tok;
-#endif // ^^^ not JSON_USE_SSE2 ^^^
-}
-
-#if !JSON_PARSER_CONVERT_NUMBERS_FAST
-inline Token Lexer::LexNumber(char const* p)
-{
-    using json::charclass::IsSeparator;
-
-    ScanNumberResult const res = json::ScanNumber(p, end);
-    p = res.next;
-
-    NumberClass nc = res.number_class;
-    if (nc == NumberClass::invalid || (p != end && !IsSeparator(*p)))
-    {
-        // Invalid number,
-        // or valid number with trailing garbage, which is also an invalid number.
-        nc = NumberClass::invalid;
-
-        // Skip everything which looks like a number.
-        // For slightly nicer error messages.
-        // Everything which is not whitespace or punctuation will be skipped.
-        for ( ; p != end && !IsSeparator(*p); ++p)
-        {
-        }
-    }
-
-    Token tok;
-
-    tok.ptr = ptr;
-    tok.end = p;
-    tok.kind = TokenKind::number;
-//  tok.string_class = 0;
-    tok.number_class = nc;
-
-    ptr = p;
-
-    return tok;
-}
-#endif
-
-inline Token Lexer::LexIdentifier(char const* p)
-{
-    using namespace json::charclass;
-
-    JSON_ASSERT(p != end);
-    JSON_ASSERT(IsIdentifierStart(*p));
-    JSON_ASSERT(IsIdentifierBody(*p));
-
-    // Don't skip identifier start here.
-    // Might have to set needs_cleaning flag below.
-
-    uint32_t mask = 0;
-    while (p != end)
-    {
-        uint32_t const m = CharClass(*p);
-        mask |= m;
-        if ((m & CC_identifier_body) == 0)
-            break;
-        ++p;
-    }
-
-    Token tok;
-
-    tok.ptr = ptr;
-    tok.end = p;
-    tok.kind = TokenKind::identifier;
-    tok.string_class = ((mask & CC_needs_cleaning) != 0) ? StringClass::needs_cleaning : StringClass::clean;
-//  tok.number_class = 0;
-
-    ptr = p;
-
-    return tok;
-}
-
-#if !JSON_PARSER_STRICT
+#if !JSON_STRICT
 JSON_NEVER_INLINE char const* Lexer::SkipComment(char const* p, char const* end)
 {
     JSON_ASSERT(p != end);
@@ -877,22 +743,7 @@ JSON_NEVER_INLINE char const* Lexer::SkipComment(char const* p, char const* end)
 
     return nullptr;
 }
-#endif
-
-inline Token Lexer::MakeToken(char const* p, TokenKind kind)
-{
-    Token tok;
-
-    tok.ptr = ptr;
-    tok.end = p;
-    tok.kind = kind;
-//  tok.string_class = 0;
-//  tok.number_class = 0;
-
-    ptr = p;
-
-    return tok;
-}
+#endif // ^^^ !JSON_STRICT ^^^
 
 //==================================================================================================
 // Parser
@@ -923,8 +774,7 @@ struct Failed
     explicit operator ParseStatus() const noexcept { return ec; }
 };
 
-struct ParseResult
-{
+struct ParseResult {
     char const* ptr;
     ParseStatus ec = ParseStatus::unknown;
 };
@@ -935,8 +785,8 @@ class Parser
     static constexpr uint32_t kMaxDepth = 500;
 
     ParseCallbacks& cb;
-    Lexer           lexer;
-    Mode            mode;
+    Lexer lexer;
+    Mode mode;
 
 public:
     Parser(ParseCallbacks& cb_, Mode mode);
@@ -951,9 +801,9 @@ public:
     ParseStatus ParseValue();
 
 private:
-    ParseStatus ConsumeString();
-    ParseStatus ConsumeNumber();
-    ParseStatus ConsumeIdentifier();
+    ParseStatus ParseString();
+    ParseStatus ParseNumber();
+    ParseStatus ParseIdentifier();
 };
 
 template <typename ParseCallbacks>
@@ -1037,9 +887,9 @@ L_begin_object:
         {
             if (peek == TokenKind::string)
             {
-                Token curr = lexer.Lex(TokenKind::string);
-
+                Token const curr = lexer.LexString();
                 JSON_ASSERT(curr.kind == TokenKind::string || curr.kind == TokenKind::incomplete_string);
+
                 if (curr.kind == TokenKind::incomplete_string)
                 {
                     return ParseStatus::expected_key;
@@ -1051,15 +901,16 @@ L_begin_object:
                 if (Failed ec = cb.HandleKey(curr.ptr + 1, curr.end - 1, curr.string_class))
                     return ParseStatus(ec);
             }
-#if !JSON_PARSER_STRICT
+#if !JSON_STRICT
             else if (mode != Mode::strict && peek == TokenKind::identifier)
             {
-                Token curr = lexer.Lex(TokenKind::identifier);
+                Token const curr = lexer.LexIdentifier();
+                JSON_ASSERT(curr.kind == TokenKind::identifier);
 
                 if (Failed ec = cb.HandleKey(curr.ptr, curr.end, curr.string_class))
                     return ParseStatus(ec);
             }
-#endif
+#endif // ^^^ !JSON_STRICT ^^^
             else
             {
                 return ParseStatus::expected_key;
@@ -1097,10 +948,10 @@ L_end_member:
                 lexer.Skip(TokenKind::comma);
 
                 peek = lexer.Peek(mode);
-#if !JSON_PARSER_STRICT
+#if !JSON_STRICT
                 if (mode != Mode::strict && peek == TokenKind::r_brace)
                     break;
-#endif
+#endif // ^^^ !JSON_STRICT ^^^
             }
             else
             {
@@ -1166,10 +1017,10 @@ L_end_element:
                 lexer.Skip(TokenKind::comma);
 
                 peek = lexer.Peek(mode);
-#if !JSON_PARSER_STRICT
+#if !JSON_STRICT
                 if (mode != Mode::strict && peek == TokenKind::r_square)
                     break;
-#endif
+#endif // ^^^ !JSON_STRICT ^^^
             }
             else
             {
@@ -1202,13 +1053,13 @@ L_parse_value:
         case TokenKind::l_square:
             goto L_begin_array;
         case TokenKind::string:
-            ec = ConsumeString();
+            ec = ParseString();
             break;
         case TokenKind::number:
-            ec = ConsumeNumber();
+            ec = ParseNumber();
             break;
         case TokenKind::identifier:
-            ec = ConsumeIdentifier();
+            ec = ParseIdentifier();
             break;
         default:
             ec = ParseStatus::expected_value;
@@ -1229,10 +1080,9 @@ L_parse_value:
 }
 
 template <typename ParseCallbacks>
-inline ParseStatus Parser<ParseCallbacks>::ConsumeString()
+inline ParseStatus Parser<ParseCallbacks>::ParseString()
 {
-    Token curr = lexer.Lex(TokenKind::string);
-
+    Token const curr = lexer.LexString();
     JSON_ASSERT(curr.kind == TokenKind::string || curr.kind == TokenKind::incomplete_string);
 
     if (curr.kind == TokenKind::incomplete_string)
@@ -1246,7 +1096,7 @@ inline ParseStatus Parser<ParseCallbacks>::ConsumeString()
     return cb.HandleString(curr.ptr + 1, curr.end - 1, curr.string_class);
 }
 
-#if JSON_PARSER_CONVERT_NUMBERS_FAST
+#if JSON_CONVERT_NUMBERS
 namespace impl {
 
 struct ParsedNumber {
@@ -1302,7 +1152,7 @@ JSON_FORCE_INLINE ScanNumberResult ParseNumber(char const* next, char const* las
                 break;
         }
     }
-#if !JSON_PARSER_STRICT
+#if !JSON_STRICT
     else if (last - next >= 3 && std::memcmp(next, "NaN", 3) == 0)
     {
         return {next + 3, NumberClass::nan};
@@ -1311,7 +1161,7 @@ JSON_FORCE_INLINE ScanNumberResult ParseNumber(char const* next, char const* las
     {
         return {next + 8, number.is_neg ? NumberClass::neg_infinity : NumberClass::pos_infinity};
     }
-#endif
+#endif // ^^^ !JSON_STRICT ^^^
     else
     {
         return {next, NumberClass::invalid};
@@ -1513,31 +1363,39 @@ JSON_FORCE_INLINE double ConvertFiniteParsedNumber(ParsedNumber const& number)
 
 JSON_FORCE_INLINE double ConvertParsedNumber(ParsedNumber const& number, NumberClass nc)
 {
+    double value;
     switch (nc)
     {
     case NumberClass::invalid:
         return 0.0;
+    case NumberClass::integer:
+        value = static_cast<double>(number.significand);
+        break;
+    case NumberClass::decimal:
+        value = ConvertFiniteParsedNumber(number);
+        break;
+#if !JSON_STRICT
     case NumberClass::nan:
         return std::numeric_limits<double>::quiet_NaN();
     case NumberClass::neg_infinity:
         return -std::numeric_limits<double>::infinity();
     case NumberClass::pos_infinity:
         return +std::numeric_limits<double>::infinity();
+#endif // ^^^ !JSON_STRICT ^^^
     default:
         break;
     }
 
-    double value = /*(nc == NumberClass::integer) ? static_cast<double>(number.significand) :*/ ConvertFiniteParsedNumber(number);
     return number.is_neg ? -value : value;
 }
 
 } // namespace impl
-#endif // ^^^ JSON_PARSER_CONVERT_NUMBERS ^^^
+#endif
 
+#if JSON_CONVERT_NUMBERS
 template <typename ParseCallbacks>
-inline ParseStatus Parser<ParseCallbacks>::ConsumeNumber()
+inline ParseStatus Parser<ParseCallbacks>::ParseNumber()
 {
-#if JSON_PARSER_CONVERT_NUMBERS_FAST
     using json::charclass::IsSeparator;
 
     char const* base = lexer.Next();
@@ -1545,7 +1403,7 @@ inline ParseStatus Parser<ParseCallbacks>::ConsumeNumber()
     char const* next = base;
 
     json::impl::ParsedNumber number;
-    ScanNumberResult snr = json::impl::ParseNumber(next, last, number);
+    auto const snr = json::impl::ParseNumber(next, last, number);
     next = snr.next;
 
     NumberClass nc = snr.number_class;
@@ -1554,66 +1412,63 @@ inline ParseStatus Parser<ParseCallbacks>::ConsumeNumber()
         // Invalid number,
         // or valid number with trailing garbage, which is also an invalid number.
         nc = NumberClass::invalid;
-
-        // Skip everything which looks like a number.
-        // For slightly nicer error messages.
-        // Everything which is not whitespace or punctuation will be skipped.
-        for ( ; next != last && !IsSeparator(*next); ++next)
-        {
-        }
     }
 
     lexer.Seek(next - base);
 
     return cb.HandleNumber(json::impl::ConvertParsedNumber(number, nc), nc);
-#else
-    Token curr = lexer.Lex(TokenKind::number);
-
+}
+#else // ^^^ JSON_CONVERT_NUMBERS ^^^
+template <typename ParseCallbacks>
+inline ParseStatus Parser<ParseCallbacks>::ParseNumber()
+{
+    Token const curr = lexer.LexNumber();
     JSON_ASSERT(curr.kind == TokenKind::number);
 
     return cb.HandleNumber(curr.ptr, curr.end, curr.number_class);
-#endif
 }
+#endif // ^^^ !JSON_CONVERT_NUMBERS ^^^
 
 template <typename ParseCallbacks>
-inline ParseStatus Parser<ParseCallbacks>::ConsumeIdentifier()
+inline ParseStatus Parser<ParseCallbacks>::ParseIdentifier()
 {
-    Token curr = lexer.Lex(TokenKind::identifier);
-
+    Token const curr = lexer.LexIdentifier();
     JSON_ASSERT(curr.kind == TokenKind::identifier);
 
-    char const* next = curr.ptr;
-    char const* last = curr.end;
+    auto const len = curr.end - curr.ptr;
+    JSON_ASSERT(len >= 1);
 
-    switch (ScanIdentifer(next, last))
-    {
-    case Identifier::null:
+    if (len == 4 && std::memcmp(curr.ptr, "null", 4) == 0) {
         return cb.HandleNull();
-    case Identifier::true_:
-        return cb.HandleTrue();
-    case Identifier::false_:
-        return cb.HandleFalse();
-#if !JSON_PARSER_STRICT
-    case Identifier::nan:
-        curr.kind = TokenKind::number;
-        curr.number_class = NumberClass::nan;
-#if JSON_PARSER_CONVERT_NUMBERS_FAST
-        return cb.HandleNumber(std::numeric_limits<double>::quiet_NaN(), curr.number_class);
-#else
-        return cb.HandleNumber(curr.ptr, curr.end, curr.number_class);
-#endif
-    case Identifier::infinity:
-        curr.kind = TokenKind::number;
-        curr.number_class = NumberClass::pos_infinity;
-#if JSON_PARSER_CONVERT_NUMBERS_FAST
-        return cb.HandleNumber(std::numeric_limits<double>::infinity(), curr.number_class);
-#else
-        return cb.HandleNumber(curr.ptr, curr.end, curr.number_class);
-#endif
-#endif
-    default:
-        return ParseStatus::unrecognized_identifier;
     }
+
+    if (len == 4 && std::memcmp(curr.ptr, "true", 4) == 0) {
+        return cb.HandleTrue();
+    }
+
+    if (len == 5 && std::memcmp(curr.ptr, "false", 5) == 0) {
+        return cb.HandleFalse();
+    }
+
+#if !JSON_STRICT
+    if (len == 3 && std::memcmp(curr.ptr, "NaN", 3) == 0) {
+#if JSON_CONVERT_NUMBERS
+        return cb.HandleNumber(std::numeric_limits<double>::quiet_NaN(), NumberClass::nan);
+#else // ^^^ JSON_CONVERT_NUMBERS ^^^
+        return cb.HandleNumber(curr.ptr, curr.end, NumberClass::nan);
+#endif // ^^^ !JSON_CONVERT_NUMBERS ^^^
+    }
+
+    if (len == 8 && std::memcmp(curr.ptr, "Infinity", 8) == 0) {
+#if JSON_CONVERT_NUMBERS
+        return cb.HandleNumber(std::numeric_limits<double>::infinity(), NumberClass::pos_infinity);
+#else // ^^^ JSON_CONVERT_NUMBERS ^^^
+        return cb.HandleNumber(curr.ptr, curr.end, NumberClass::pos_infinity);
+#endif // ^^^ !JSON_CONVERT_NUMBERS ^^^
+    }
+#endif // ^^^ !JSON_STRICT ^^^
+
+    return ParseStatus::unrecognized_identifier;
 }
 
 //==================================================================================================
@@ -1644,7 +1499,7 @@ inline ParseResult ParseSAX(ParseCallbacks& cb, char const* next, char const* la
 //    virtual json::ParseStatus HandleNull() = 0;
 //    virtual json::ParseStatus HandleTrue() = 0;
 //    virtual json::ParseStatus HandleFalse() = 0;
-//#if JSON_PARSER_CONVERT_NUMBERS_FAST
+//#if JSON_CONVERT_NUMBERS
 //    virtual json::ParseStatus HandleNumber(double value, json::NumberClass nc) = 0;
 //#else
 //    virtual json::ParseStatus HandleNumber(char const* first, char const* last, json::NumberClass nc) = 0;

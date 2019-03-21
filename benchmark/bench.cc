@@ -19,6 +19,7 @@
 #define WIN32_LEAN_AND_MEAN 1
 #define NOMINMAX 1
 #include <windows.h>
+#include <intrin.h>
 #endif
 
 #include "bench_json1.h"
@@ -125,7 +126,17 @@ struct TestImplementation {
 };
 
 const auto SECONDS_PER_WARMUP = std::chrono::seconds(2);
-const auto SECONDS_PER_TEST = std::chrono::seconds(6);
+const auto SECONDS_PER_TEST = std::chrono::seconds(2);
+//const auto SECONDS_PER_WARMUP = std::chrono::seconds(0);
+//const auto SECONDS_PER_TEST = std::chrono::seconds(0);
+
+struct TestResult {
+    std::string name;
+    int64_t nanoseconds_min;
+    int64_t nanoseconds_avg;
+    int64_t cycles_min;
+    int64_t cycles_avg;
+};
 
 TestImplementation test_implementations[] = {
     { "Json1", &json1_dom_test::test },
@@ -171,49 +182,69 @@ const char* benchmark_files[] = {
 };
 
 template<typename T, size_t L>
-size_t array_length(T(&)[L]) {
+constexpr size_t array_length(T(&)[L]) {
     return L;
 }
 
 using Clock = std::chrono::steady_clock;
 
-#if 0
-struct Timing
-{
-    int n = 0;
-    double mean = 0.0;
-    double var2 = 0.0;
-};
-
-static inline void Update(Timing& t, double x)
-{
-    const int n = t.n + 1;
-
-    // x_n - mu_{n-1}
-    const double diff = x - t.mean;
-
-    // mu_n = mu_{n-1} + (x_n - mu_{n-1}) / n
-    const double mean = t.mean + diff / n;
-
-    // S_n = S_{n-1} + (x_n - mu_{n-1}) * (x_n - mu_n)
-    const double var2 = t.var2 + diff * (x - mean);
-
-    t.n = n;
-    t.mean = mean;
-    t.var2 = var2;
-}
-
-static inline double Mean(Timing const& t)
-{
-    return t.mean;
-}
-
-static inline double Var2(Timing const& t)
-{
-    return t.var2 / static_cast<double>(t.n - 1);
-//  return t.var2 / static_cast<double>(t.n);
-}
-#endif
+//struct Timing
+//{
+//    int n = 0;
+//    double mean = 0.0;
+//    double var2 = 0.0;
+//    double minx = 0.0;
+//    double maxx = 0.0;
+//};
+//
+//static inline void Update(Timing& t, double nanoseconds)
+//{
+//    if (t.n <= 0)
+//    {
+//        t.n = 1;
+//        t.mean = nanoseconds;
+//        t.var2 = 0;
+//        t.minx = nanoseconds;
+//        t.maxx = nanoseconds;
+//        return;
+//    }
+//
+//    const int n = t.n + 1;
+//
+//    // x_n - mu_{n-1}
+//    const double diff = nanoseconds - t.mean;
+//
+//    // mu_n = mu_{n-1} + (x_n - mu_{n-1}) / n
+//    const double mean = t.mean + diff / n;
+//
+//    // S_n = S_{n-1} + (x_n - mu_{n-1}) * (x_n - mu_n)
+//    const double var2 = t.var2 + diff * (nanoseconds - mean);
+//
+//    t.n = n;
+//    t.mean = mean;
+//    t.var2 = var2;
+//
+//    if (t.minx > nanoseconds)
+//        t.minx = nanoseconds;
+//    if (t.maxx < nanoseconds)
+//        t.maxx = nanoseconds;
+//}
+//
+//static inline double Mean(Timing const& t)
+//{
+//    return t.mean;
+//}
+//
+//static inline double Var2(Timing const& t)
+//{
+//    return t.var2 / (t.n - 1);
+////  return t.var2 / t.n;
+//}
+//
+//static inline double StdDev(Timing const& t)
+//{
+//    return std::sqrt(Var2(t));
+//}
 
 // the input buf should be readable up to buf + SIMDJSON_PADDING
 static constexpr size_t SIMDJSON_PADDING = 64; // (256 / 8);
@@ -235,6 +266,15 @@ struct AlignedDeleter {
 };
 
 using AlignedPointer = std::unique_ptr<char, AlignedDeleter>;
+
+//static inline void Serialize() {
+//    int t[4];
+//    __cpuid(t, 0);
+//    //volatile int dont_skip = t[0]; // Prevent the compiler from optimizing away the whole Serialize function:
+//}
+static inline uint64_t ReadTSC() {
+    return __rdtsc();
+}
 
 void benchmark(const char* filename) {
     FILE* fh = fopen(filename, "rb");
@@ -265,18 +305,27 @@ void benchmark(const char* filename) {
 
     TestFile file = { filename, length, reinterpret_cast<unsigned char*>(contents.get()) };
 
+    constexpr size_t NumTests = array_length(test_implementations);
+    TestResult results[NumTests];
+
+    fprintf(stderr, "Benchmarking...\n");
+
     jsonstats expected_stats;
-    double reference = 0;
+    double reference_ms = 0;
     bool first = true;
-    for (size_t i = 0; i < array_length(test_implementations); ++i) {
+    for (size_t i = 0; i < NumTests; ++i) {
         auto& implementation = test_implementations[i];
+        //fprintf(stderr, "Benchmarking %s...\n", implementation.name);
+
         jsonstats this_stats;
         if (first) {
             implementation.func(expected_stats, file);
             expected_stats.total_number_value.Finish();
+            //expected_stats.print(stderr);
         } else {
             implementation.func(this_stats, file);
             this_stats.total_number_value.Finish();
+            //this_stats.print(stderr);
             if (this_stats != expected_stats) {
                 fprintf(stderr, "Test: %s\n", implementation.name);
                 fprintf(stderr, "> Parse results did not match.\n");
@@ -288,45 +337,107 @@ void benchmark(const char* filename) {
             }
         }
 
-        auto start = Clock::now();
-        auto end = start;
-
         bool warmup = SECONDS_PER_WARMUP != std::chrono::seconds{0};
-
+        //Timing timing;
         int parses = 0;
+
+        int64_t min_nanoseconds = INT64_MAX;
+        int64_t min_cycles = INT64_MAX;
+        int64_t avg_nanoseconds = 0;
+        int64_t avg_cycles = 0;
+
+        auto test_start = Clock::now();
         for (;;) {
+            //Serialize();
+            const auto start = Clock::now();
+            const auto cy_start = ReadTSC();
+
             implementation.func(this_stats, file);
-            end = Clock::now();
+
+            //Serialize();
+            const auto cy_end = ReadTSC();
+            const auto end = Clock::now();
+
             if (warmup) {
-                if (end - start > SECONDS_PER_WARMUP) {
+                if (end - test_start > SECONDS_PER_WARMUP) {
                     warmup = false;
-                    start = end;
+                    test_start = end;
                 }
             } else {
                 ++parses;
-                if (end - start > SECONDS_PER_TEST)
+                avg_nanoseconds += (end - start).count();
+                avg_cycles += cy_end - cy_start;
+                //Update(timing, static_cast<double>((end - start).count()));
+                const int64_t ns = (end - start).count();
+                if (min_nanoseconds > ns)
+                    min_nanoseconds = ns;
+                const auto cy = (cy_end - cy_start);
+                if (min_cycles > cy)
+                    min_cycles = cy;
+                if (end - test_start > SECONDS_PER_TEST)
                     break;
             }
         }
 
-        auto const mean = std::chrono::duration<double>(end - start).count() / static_cast<double>(parses);
+        avg_nanoseconds /= parses;
+        avg_cycles /= parses;
 
-        const double GBPerSec = (length / (1024.0 * 1024.0 * 1024.0)) / mean;
+        results[i].name = implementation.name;
+        results[i].nanoseconds_min = min_nanoseconds;
+        results[i].nanoseconds_avg = avg_nanoseconds;
+        results[i].cycles_min = min_cycles;
+        results[i].cycles_avg = avg_cycles;
+        /*
+        //auto const time_ns = timing.minx;
+        //auto const time_ns = Mean(timing);
+        auto const time_ns = min_nanoseconds;
+        auto const time_ms = time_ns / 1e6;
+
+        const double GBPerSec = (length / ( (1024.0 * 1024.0 * 1024.0) / 1e9 )) / time_ns;
+
+        //const double Frequency = 2.0; // GHz
+        //const double CPB = Frequency * time_ns / length;
+        const double CPB = (double)min_cycles / length;
 
         if (first) {
-            reference = mean;
+            reference_ms = time_ms;
         }
 
-        printf("Test: %-20s %8.2f ms --- %8.6f GB/sec", implementation.name, 1000.0*mean, GBPerSec);
+        printf("Test: %-20s %8.2f ms --- %8.6f GB/sec --- %5.1f cycles/byte", implementation.name, time_ms, GBPerSec, CPB);
         if (first) {
             printf("\n");
         } else {
-            printf(" --- x %.2f = 1 / %.2f\n", reference / mean, mean / reference);
+            printf(" --- x %.2f = 1 / %.2f\n", reference_ms / time_ms, time_ms / reference_ms);
         }
         fflush(stdout);
 
         first = false;
         //reference = mean;
+        */
+    }
+
+    //std::sort(std::begin(results), std::end(results), [](TestResult const& lhs, TestResult const& rhs) {
+    //    return lhs.nanoseconds_min < rhs.nanoseconds_min;
+    //});
+    //size_t const fastest_i = 0;
+    auto const fastest_it = std::min_element(std::begin(results), std::end(results), [](TestResult const& lhs, TestResult const& rhs) {
+        return lhs.nanoseconds_min < rhs.nanoseconds_min;
+    });
+    size_t const fastest_i = fastest_it - std::begin(results);
+
+    int64_t nanoseconds_ref = results[0].nanoseconds_min;
+    for (size_t i = 0; i < NumTests; ++i)
+    {
+        const auto& r = results[i];
+        const double ms = r.nanoseconds_min / 1e6;
+        const double gbps = length / (1024.0 * 1024.0 * 1024.0 / 1e9) / r.nanoseconds_min;
+        const double cpb = (double)r.cycles_min / length;
+        fprintf(stderr, " %s %-20s %8.2f ms --- %8.6f GB/sec --- %6.2f cycles/byte", i == fastest_i ? "*" : " ", r.name.c_str(), ms, gbps, cpb);
+        if (i == 0) {
+            fprintf(stderr, "\n");
+        } else {
+            fprintf(stderr, " --- x %.2f = 1 / %.2f\n", (double)nanoseconds_ref / r.nanoseconds_min, (double)r.nanoseconds_min / nanoseconds_ref);
+        }
     }
 }
 
