@@ -557,6 +557,7 @@ L2:
         }
     }
 #else // ^^^ JSON_USE_SSE42 ^^^
+#if 1
     while (p != end && (CharClass(*p) & (CC_string_special | CC_needs_cleaning)) == 0)
     {
         ++p;
@@ -582,6 +583,22 @@ L2:
             ++p;
         }
     }
+#else
+    uint32_t mask = 0;
+    while (p != end)
+    {
+        uint32_t const m = CharClass(*p);
+        mask |= m;
+        if ((m & CC_string_special) != 0)
+        {
+            if (*p == '"' || ++p == end)
+                break;
+        }
+        ++p;
+    }
+
+    sc = (mask & CC_needs_cleaning) != 0 ? StringClass::needs_cleaning : StringClass::clean;
+#endif
 #endif // ^^^ !JSON_USE_SSE42 ^^^
 
     JSON_ASSERT(p == end || *p == '"');
@@ -618,6 +635,15 @@ inline Token Lexer::LexNumber()
         // Invalid number,
         // or valid number with trailing garbage, which is also an invalid number.
         nc = NumberClass::invalid;
+
+//#if !JSON_CONVERT_NUMBERS
+        // Skip everything which looks like a number.
+        // For slightly nicer error messages.
+        // Everything which is not whitespace or punctuation will be skipped.
+        for ( ; p != end && !IsSeparator(*p); ++p)
+        {
+        }
+//#endif // ^^^ !JSON_CONVERT_NUMBERS ^^^
     }
 
     Token tok;
