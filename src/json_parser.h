@@ -20,6 +20,9 @@
 
 #pragma once
 
+//#define JSON_STRICT 1
+//#define JSON_CONVERT_NUMBERS 1
+
 //#define JSON_USE_SSE42 0
 #ifndef JSON_USE_SSE42
 #if defined(__SSE4_2__) || defined(__AVX__) || defined(__AVX2__)
@@ -836,7 +839,7 @@ inline ParseResult Parser<ParseCallbacks>::Parse()
 }
 
 template <typename ParseCallbacks>
-inline ParseStatus Parser<ParseCallbacks>::ParseValue()
+JSON_NEVER_INLINE ParseStatus Parser<ParseCallbacks>::ParseValue()
 {
     struct StackElement {
         size_t count; // number of elements or members in the current array resp. object
@@ -1338,9 +1341,9 @@ JSON_FORCE_INLINE double ConvertFiniteParsedNumber(ParsedNumber const& number)
     }
 
     // Move least significant digits into the exponent.
-    if (number.num_digits > 19)
+    if (num_digits > 19)
     {
-        exponent += number.num_digits - 19;
+        exponent += num_digits - 19;
         // exponent > -324 - num_digits + (num_digits - 19) = -324 - 19 = -343
         // exponent <= 309 - num_digits + (num_digits - 19) = 309 - 19 = 290
     }

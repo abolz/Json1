@@ -793,7 +793,7 @@ struct ParseValueCallbacks
         return {};
     }
 
-#if JSON_PARSER_CONVERT_NUMBERS_FAST
+#if JSON_CONVERT_NUMBERS
     ParseStatus HandleNumber(double value, NumberClass nc)
     {
         if (nc == NumberClass::invalid)
