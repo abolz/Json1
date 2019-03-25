@@ -336,6 +336,7 @@ void benchmark(const char* filename) {
                 fprintf(stderr, "> Parse results did not match.\n");
             }
         }
+        first = false;
 
         bool warmup = SECONDS_PER_WARMUP != std::chrono::seconds{0};
         //Timing timing;
