@@ -20,11 +20,14 @@
 
 #pragma once
 
-#include "json_parser.h"
+#include "json_parser.h" // Mode
+#include "json_number_conversions.h"
 
 #include <cassert>
+#include <climits>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <map>
 #include <string>
 #include <type_traits>
@@ -147,6 +150,38 @@ struct DefaultTraits_number {
     template <typename V> static decltype(auto) from_json(V&& in) { return std::forward<V>(in).get_number(); }
 };
 
+template <typename T>
+struct DefaultTraits_s32 {
+    static_assert(std::is_integral<T>::value, "bug");
+    static_assert(std::is_signed<T>::value, "bug");
+    static_assert(std::numeric_limits<T>::min() >= INT32_MIN, "bug");
+    static_assert(std::numeric_limits<T>::max() <= INT32_MAX, "bug");
+
+    using tag = Tag_number;
+    template <typename V> static decltype(auto) to_json(V&& in) { return static_cast<double>(in); }
+    template <typename V> static decltype(auto) from_json(V&& in)
+    {
+        return static_cast<T>(
+            static_cast<std::make_unsigned_t<T>>(
+                json::numbers::ToUint32(std::forward<V>(in).get_number())));
+    }
+};
+
+template <typename T>
+struct DefaultTraits_u32 {
+    static_assert(std::is_integral<T>::value, "bug");
+    static_assert(std::is_unsigned<T>::value, "bug");
+    static_assert(std::numeric_limits<T>::max() <= UINT32_MAX, "bug");
+
+    using tag = Tag_number;
+    template <typename V> static decltype(auto) to_json(V&& in) { return static_cast<double>(in); }
+    template <typename V> static decltype(auto) from_json(V&& in)
+    {
+        return static_cast<T>(
+            json::numbers::ToUint32(std::forward<V>(in).get_number()));
+    }
+};
+
 struct DefaultTraits_string {
     using tag = Tag_string;
     template <typename V> static decltype(auto) to_json(V&& in) { return std::forward<V>(in); }
@@ -184,15 +219,23 @@ template <> struct DefaultTraits<std::nullptr_t    > : DefaultTraits_null    {};
 template <> struct DefaultTraits<bool              > : DefaultTraits_boolean {};
 template <> struct DefaultTraits<double            > : DefaultTraits_number  {};
 template <> struct DefaultTraits<float             > : DefaultTraits_number  {};
-template <> struct DefaultTraits<signed char       > : DefaultTraits_number  {};
-template <> struct DefaultTraits<signed short      > : DefaultTraits_number  {};
-template <> struct DefaultTraits<signed int        > : DefaultTraits_number  {};
+template <> struct DefaultTraits<signed char       > : DefaultTraits_s32<signed char   > {};
+template <> struct DefaultTraits<signed short      > : DefaultTraits_s32<signed short  > {};
+template <> struct DefaultTraits<signed int        > : DefaultTraits_s32<signed int    > {};
+#if LONG_MAX == INT_MAX
+template <> struct DefaultTraits<signed long       > : DefaultTraits_s32<signed long   > {};
+#else
 template <> struct DefaultTraits<signed long       > : DefaultTraits_number  {};
+#endif
 template <> struct DefaultTraits<signed long long  > : DefaultTraits_number  {};
-template <> struct DefaultTraits<unsigned char     > : DefaultTraits_number  {};
-template <> struct DefaultTraits<unsigned short    > : DefaultTraits_number  {};
-template <> struct DefaultTraits<unsigned int      > : DefaultTraits_number  {};
+template <> struct DefaultTraits<unsigned char     > : DefaultTraits_u32<unsigned char > {};
+template <> struct DefaultTraits<unsigned short    > : DefaultTraits_u32<unsigned short> {};
+template <> struct DefaultTraits<unsigned int      > : DefaultTraits_u32<unsigned int  > {};
+#if ULONG_MAX == UINT_MAX
+template <> struct DefaultTraits<unsigned long     > : DefaultTraits_u32<unsigned long > {};
+#else
 template <> struct DefaultTraits<unsigned long     > : DefaultTraits_number  {};
+#endif
 template <> struct DefaultTraits<unsigned long long> : DefaultTraits_number  {};
 template <> struct DefaultTraits<String            > : DefaultTraits_string  {};
 template <> struct DefaultTraits<Array             > : DefaultTraits_array   {};
@@ -257,6 +300,30 @@ struct Traits
     //      There is no need to write this as a template: V will always be a (rvalue) reference
     //      to a (possibly const qualified) object of type Value.
     //
+};
+
+template <>
+struct Traits<int53_t>
+{
+    using tag = Tag_number;
+    template <typename V> static double to_json(int53_t in) {
+        return static_cast<double>(static_cast<int64_t>(in));
+    }
+    template <typename V> static int53_t from_json(V&& in) {
+        return json::numbers::ToInt53(std::forward<V>(in).get_number());
+    }
+};
+
+template <>
+struct Traits<uint53_t>
+{
+    using tag = Tag_number;
+    template <typename V> static double to_json(uint53_t in) {
+        return static_cast<double>(static_cast<int64_t>(static_cast<uint64_t>(in)));
+    }
+    template <typename V> static uint53_t from_json(V&& in) {
+        return json::numbers::ToUint53(std::forward<V>(in).get_number());
+    }
 };
 
 template <typename T>
@@ -616,6 +683,14 @@ public:
     template <typename T> T as() &       { return TraitsFor<T>::from_json(*this); }
     template <typename T> T as() const&& { return TraitsFor<T>::from_json(static_cast<Value const&&>(*this)); }
     template <typename T> T as() &&      { return TraitsFor<T>::from_json(static_cast<Value&&      >(*this)); }
+
+#if 0
+    // Same as "static_cast<T>(value.as<T>())".
+    template <typename T> explicit operator T() const&  { return static_cast<T>( TraitsFor<T>::from_json(*this) ); }
+    template <typename T> explicit operator T() &       { return static_cast<T>( TraitsFor<T>::from_json(*this) ); }
+    template <typename T> explicit operator T() const&& { return static_cast<T>( TraitsFor<T>::from_json(static_cast<Value const&&>(*this)) ); }
+    template <typename T> explicit operator T() &&      { return static_cast<T>( TraitsFor<T>::from_json(static_cast<Value&&      >(*this)) ); }
+#endif
 
     // Compare this value to another. Strict equality (i.e. types must match).
     bool equal_to(Value const& rhs) const noexcept;

@@ -32,6 +32,77 @@
 #endif
 
 //==================================================================================================
+//
+//==================================================================================================
+
+namespace json {
+
+#if defined(__GNUC__) // && !defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+#endif
+
+struct int53_t;
+struct uint53_t;
+
+struct int53_t
+{
+    union {
+        int64_t s : 53;
+        uint64_t u : 53;
+    };
+    int53_t(signed int v) : s(v) {}
+#if LONG_MAX == INT_MAX
+    int53_t(signed long v) : s(v) {}
+#else
+    explicit int53_t(signed long v) : s(v) {}
+#endif
+    explicit int53_t(signed long long v) : s(v) {}
+    explicit int53_t(uint53_t v);
+
+    explicit operator signed int() const { return static_cast<signed int >(s); }
+#if LONG_MAX == INT_MAX
+    explicit operator signed long() const { return static_cast<signed long>(s); }
+#else
+    operator signed long() const { return s; }
+#endif
+    operator signed long long() const { return s; }
+};
+
+struct uint53_t
+{
+    union {
+        int64_t s : 53;
+        uint64_t u : 53;
+    };
+    uint53_t(unsigned int v) : u(v) {}
+#if LONG_MAX == INT_MAX
+    uint53_t(unsigned long v) : u(v) {}
+#else
+    explicit uint53_t(unsigned long v) : u(v) {}
+#endif
+    explicit uint53_t(unsigned long long v) : u(v) {}
+    explicit uint53_t(int53_t v);
+
+    explicit operator unsigned int() const { return static_cast<unsigned int >(u); }
+#if LONG_MAX == INT_MAX
+    explicit operator unsigned long() const { return static_cast<unsigned long>(u); }
+#else
+    operator unsigned long() const { return u; }
+#endif
+    operator unsigned long long() const { return u; }
+};
+
+inline int53_t::int53_t(uint53_t v) : u(v.u) {}
+inline uint53_t::uint53_t(int53_t v) : s(v.s) {}
+
+#if defined(__GNUC__) // && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
+
+} // namespace json
+
+//==================================================================================================
 // Number conversions
 //==================================================================================================
 
@@ -53,7 +124,7 @@ namespace numbers {
     //  5.  Return int32bit.
     //
 
-    using Double = charconv::Double;
+    using charconv::Double;
     Double const d(value);
 
     uint64_t const F = d.PhysicalSignificand();
@@ -123,7 +194,7 @@ inline int8_t ToInt8(double value)
     return static_cast<int8_t>(ToUint8(value));
 }
 
-inline uint8_t ToUint8Clamp(double value)
+/*never*/ inline uint8_t ToUint8Clamp(double value)
 {
     //
     // https://tc39.github.io/ecma262/#sec-touint8clamp
@@ -216,6 +287,63 @@ inline uint8_t ToUint8Clamp(double value)
         return 0;
     }
 #endif
+}
+
+/*never*/inline uint53_t ToUint53(double value)
+{
+    using charconv::Double;
+    Double const d(value);
+
+    uint64_t const F = d.PhysicalSignificand();
+    uint64_t const E = d.PhysicalExponent();
+
+    auto const significand = Double::HiddenBit | F;
+    auto const exponent = static_cast<int>(E) - Double::ExponentBias;
+
+    uint64_t bits64;
+    if (exponent <= -Double::SignificandSize)
+    {
+        return 0u;
+    }
+    else if (exponent < 0)
+    {
+        bits64 = significand >> -exponent;
+    }
+    else if (exponent < 53)
+    {
+        bits64 = (significand << exponent) & ((uint64_t{1} << 53) - 1);
+    }
+    else
+    {
+        return 0u;
+    }
+
+    return static_cast<uint53_t>(d.SignBit() ? (0 - bits64) : bits64);
+}
+
+inline int53_t ToInt53(double value)
+{
+    return static_cast<int53_t>(ToUint53(value));
+}
+
+// Returns whether x is an integer and in the range [-2^53+1, 2^53-1]
+// and stores the integral value of x in result.
+inline int64_t DoubleToInt53(double x, bool& is_int53)
+{
+    using charconv::Double;
+
+    constexpr double kMinInt = -9007199254740991.0; // -2^53 + 1
+    constexpr double kMaxInt =  9007199254740991.0; //  2^53 - 1
+
+    if (x < kMinInt || x > kMaxInt || Double(x).IsMinusZero())
+    {
+        is_int53 = false;
+        return 0;
+    }
+
+    int64_t const i = static_cast<int64_t>(x);
+    is_int53 = (x == static_cast<double>(i));
+    return i;
 }
 
 } // namespace numbers
