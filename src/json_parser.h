@@ -314,9 +314,9 @@ enum class TokenKind : uint8_t {
     comma,
     colon,
     string,
+    incomplete_string,
     number,
     identifier,
-    incomplete_string,
 #if !JSON_STRICT
     comment,
     incomplete_comment,
@@ -506,56 +506,52 @@ inline Token Lexer::LexString()
     /*static*/ __m128i const kBackslashes = _mm_set1_epi8('\\');
     /*static*/ __m128i const kSpaces = _mm_set1_epi8(' ');
 
-    for ( ; end - p >= 16; p += 16)
+    for ( ; /*likely*/ end - p >= 16; p += 16)
     {
         __m128i const bytes = _mm_loadu_si128(reinterpret_cast<__m128i const*>(p));
         __m128i const mask2 = _mm_cmpeq_epi8(kQuotes, bytes);
         __m128i const mask1 = _mm_or_si128(mask2, _mm_cmpeq_epi8(kBackslashes, bytes));
         __m128i const mask0 = _mm_or_si128(mask1, _mm_cmpgt_epi8(kSpaces, bytes));
-        if (! _mm_testz_si128(mask0, mask0))
+        int const mmask = _mm_movemask_epi8(mask0);
+        if (mmask != 0)
         {
-            p += CountTrailingZeros(_mm_movemask_epi8(mask0));
-            goto L1;
+            p += CountTrailingZeros(mmask);
+            if (*p == '"')
+                goto L_done;
+            sc = StringClass::needs_cleaning;
+            break;
         }
     }
-    while (p != end && (CharClass(*p) & (CC_string_special | CC_needs_cleaning)) == 0)
-    {
-        ++p;
-    }
 
-L1:
-    if (p != end && *p != '"')
+    for ( ; /*likely*/ end - p >= 16; p += 16)
     {
-        sc = StringClass::needs_cleaning;
-        for (;;)
+        __m128i const bytes = _mm_loadu_si128(reinterpret_cast<__m128i const*>(p));
+        __m128i const mask1 = _mm_cmpeq_epi8(kQuotes, bytes);
+        __m128i const mask0 = _mm_or_si128(mask1, _mm_cmpeq_epi8(kBackslashes, bytes));
+        int const mmask = _mm_movemask_epi8(mask0);
+        if (mmask != 0)
         {
-            for ( ; end - p >= 16; p += 16)
-            {
-                __m128i const bytes = _mm_loadu_si128(reinterpret_cast<__m128i const*>(p));
-                __m128i const mask1 = _mm_cmpeq_epi8(kQuotes, bytes);
-                __m128i const mask0 = _mm_or_si128(mask1, _mm_cmpeq_epi8(kBackslashes, bytes));
-                if (! _mm_testz_si128(mask0, mask0))
-                {
-                    p += CountTrailingZeros(_mm_movemask_epi8(mask0));
-                    goto L2;
-                }
-            }
-            while (p != end && (CharClass(*p) & CC_string_special) == 0)
-            {
-                ++p;
-            }
-
-L2:
-            if (p == end || *p == '"')
-                break;
-
-            JSON_ASSERT(*p == '\\');
-            ++p; // Skip '\\'. The escaped character will be skipped below.
-            if (p == end)
-                break;
-            ++p;
+            p += CountTrailingZeros(mmask);
+            if (*p == '"' || ++p == end)
+                goto L_done;
+            p += -15;
         }
     }
+
+    for ( ; p != end; ++p)
+    {
+        if (*p == '"')
+            break;
+        if (*p == '\\') {
+            sc = StringClass::needs_cleaning;
+            if (++p == end)
+                break;
+        } else if (' ' > static_cast<int8_t>(*p)) {
+            sc = StringClass::needs_cleaning;
+        }
+    }
+
+L_done:
 #else // ^^^ JSON_USE_SSE42 ^^^
 #if 1
     while (p != end && (CharClass(*p) & (CC_string_special | CC_needs_cleaning)) == 0)
@@ -1109,7 +1105,7 @@ L_parse_value:
 }
 
 template <typename ParseCallbacks>
-inline ParseStatus Parser<ParseCallbacks>::ParseString()
+JSON_FORCE_INLINE/*msvc*/ ParseStatus Parser<ParseCallbacks>::ParseString()
 {
     Token const curr = lexer.LexString();
     JSON_ASSERT(curr.kind == TokenKind::string || curr.kind == TokenKind::incomplete_string);
@@ -1423,7 +1419,7 @@ JSON_FORCE_INLINE double ConvertParsedNumber(ParsedNumber const& number, NumberC
 
 #if JSON_CONVERT_NUMBERS
 template <typename ParseCallbacks>
-inline ParseStatus Parser<ParseCallbacks>::ParseNumber()
+JSON_FORCE_INLINE/*msvc*/ ParseStatus Parser<ParseCallbacks>::ParseNumber()
 {
     using json::charclass::IsSeparator;
 
@@ -1449,7 +1445,7 @@ inline ParseStatus Parser<ParseCallbacks>::ParseNumber()
 }
 #else // ^^^ JSON_CONVERT_NUMBERS ^^^
 template <typename ParseCallbacks>
-inline ParseStatus Parser<ParseCallbacks>::ParseNumber()
+JSON_FORCE_INLINE/*msvc*/ ParseStatus Parser<ParseCallbacks>::ParseNumber()
 {
     Token const curr = lexer.LexNumber();
     JSON_ASSERT(curr.kind == TokenKind::number);
@@ -1459,7 +1455,7 @@ inline ParseStatus Parser<ParseCallbacks>::ParseNumber()
 #endif // ^^^ !JSON_CONVERT_NUMBERS ^^^
 
 template <typename ParseCallbacks>
-inline ParseStatus Parser<ParseCallbacks>::ParseIdentifier()
+JSON_FORCE_INLINE/*msvc*/ ParseStatus Parser<ParseCallbacks>::ParseIdentifier()
 {
     Token const curr = lexer.LexIdentifier();
     JSON_ASSERT(curr.kind == TokenKind::identifier);

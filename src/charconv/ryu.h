@@ -70,7 +70,7 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 */
 
-CC_INLINE int BitLength(uint64_t x) // DEBUG only
+inline int BitLength(uint64_t x) // DEBUG only
 {
     int n = 0;
     for ( ; x != 0; x >>= 1, ++n)
@@ -212,7 +212,7 @@ CC_FORCE_INLINE uint32_t Mod1e8(uint64_t x, uint64_t q) {
     return static_cast<uint32_t>(x) - 100000000 * static_cast<uint32_t>(q);
 }
 
-CC_INLINE int Pow5Factor(uint64_t value)
+inline int Pow5Factor(uint64_t value)
 {
     // For 64-bit integers: result <= 27
     // Since value here has at most 55-bits: result <= 23
@@ -231,12 +231,12 @@ CC_INLINE int Pow5Factor(uint64_t value)
     }
 }
 
-CC_INLINE bool MultipleOfPow5(uint64_t value, int p)
+inline bool MultipleOfPow5(uint64_t value, int p)
 {
     return Pow5Factor(value) >= p;
 }
 
-CC_INLINE bool MultipleOfPow2(uint64_t value, int p)
+inline bool MultipleOfPow2(uint64_t value, int p)
 {
     CC_ASSERT(p >= 0);
     CC_ASSERT(p <= 63);
@@ -250,7 +250,7 @@ struct DoubleToDecimalResult {
     int exponent;
 };
 
-CC_INLINE DoubleToDecimalResult DoubleToDecimal(double value)
+inline DoubleToDecimalResult DoubleToDecimal(double value)
 {
     CC_ASSERT(Double(value).IsFinite());
     CC_ASSERT(value > 0);

@@ -50,10 +50,6 @@ static_assert(std::numeric_limits<double>::is_iec559 &&
 #define CC_ASSERT(X) assert(X)
 #endif
 
-#ifndef CC_INLINE
-#define CC_INLINE inline
-#endif
-
 #if defined(__GNUC__)
 #define CC_FORCE_INLINE __attribute__((always_inline)) inline
 #define CC_NEVER_INLINE __attribute__((noinline)) inline
@@ -72,7 +68,7 @@ namespace charconv {
 //==================================================================================================
 
 template <typename Dest, typename Source>
-CC_INLINE Dest ReinterpretBits(Source source)
+inline Dest ReinterpretBits(Source source)
 {
     static_assert(sizeof(Dest) == sizeof(Source), "size mismatch");
 
@@ -169,8 +165,8 @@ struct Double
     }
 };
 
-CC_INLINE bool operator==(Double x, Double y) { return x.bits == y.bits; }
-CC_INLINE bool operator!=(Double x, Double y) { return x.bits != y.bits; }
+inline bool operator==(Double x, Double y) { return x.bits == y.bits; }
+inline bool operator!=(Double x, Double y) { return x.bits != y.bits; }
 
 //==================================================================================================
 //
@@ -301,7 +297,7 @@ CC_FORCE_INLINE int CountLeadingZeros64(uint64_t x)
 // Technically, right shifting negative integers is implementation-defined.
 
 // Returns: floor(log_2(5^e))
-CC_INLINE int FloorLog2Pow5(int e)
+inline int FloorLog2Pow5(int e)
 {
     CC_ASSERT(e >= -1764);
     CC_ASSERT(e <=  1763);
@@ -309,7 +305,7 @@ CC_INLINE int FloorLog2Pow5(int e)
 }
 
 // Returns: ceil(log_2(5^e))
-CC_INLINE int CeilLog2Pow5(int e)
+inline int CeilLog2Pow5(int e)
 {
     CC_ASSERT(e >= -1764);
     CC_ASSERT(e <=  1763);
@@ -318,7 +314,7 @@ CC_INLINE int CeilLog2Pow5(int e)
 
 // Returns: floor(log_2(10^e))
 // Equivalent to: e + FloorLog2Pow5(e)
-CC_INLINE int FloorLog2Pow10(int e)
+inline int FloorLog2Pow10(int e)
 {
     CC_ASSERT(e >= -1233);
     CC_ASSERT(e <=  1232);
@@ -327,7 +323,7 @@ CC_INLINE int FloorLog2Pow10(int e)
 
 // Returns: ceil(log_2(10^e))
 // Equivalent to: e + CeilLog2Pow5(e)
-CC_INLINE int CeilLog2Pow10(int e)
+inline int CeilLog2Pow10(int e)
 {
     CC_ASSERT(e >= -1233);
     CC_ASSERT(e <=  1232);
@@ -335,7 +331,7 @@ CC_INLINE int CeilLog2Pow10(int e)
 }
 
 // Returns: floor(log_5(2^e))
-CC_INLINE int FloorLog5Pow2(int e)
+inline int FloorLog5Pow2(int e)
 {
     CC_ASSERT(e >= -1831);
     CC_ASSERT(e <=  1831);
@@ -343,7 +339,7 @@ CC_INLINE int FloorLog5Pow2(int e)
 }
 
 // Returns: ceil(log_5(2^e))
-CC_INLINE int CeilLog5Pow2(int e)
+inline int CeilLog5Pow2(int e)
 {
     CC_ASSERT(e >= -1831);
     CC_ASSERT(e <=  1831);
@@ -352,7 +348,7 @@ CC_INLINE int CeilLog5Pow2(int e)
 
 // Returns: floor(log_5(10^e))
 // Equivalent to: e + FloorLog5Pow2(e)
-CC_INLINE int FloorLog5Pow10(int e)
+inline int FloorLog5Pow10(int e)
 {
     CC_ASSERT(e >= -1831);
     CC_ASSERT(e <=  1831);
@@ -361,7 +357,7 @@ CC_INLINE int FloorLog5Pow10(int e)
 
 // Returns: ceil(log_5(10^e))
 // Equivalent to: e + CeilLog5Pow2(e)
-CC_INLINE int CeilLog5Pow10(int e)
+inline int CeilLog5Pow10(int e)
 {
     CC_ASSERT(e >= -1831);
     CC_ASSERT(e <=  1831);
@@ -369,7 +365,7 @@ CC_INLINE int CeilLog5Pow10(int e)
 }
 
 // Returns: floor(log_10(2^e))
-CC_INLINE int FloorLog10Pow2(int e)
+inline int FloorLog10Pow2(int e)
 {
     CC_ASSERT(e >= -2620);
     CC_ASSERT(e <=  2620);
@@ -377,7 +373,7 @@ CC_INLINE int FloorLog10Pow2(int e)
 }
 
 // Returns: ceil(log_10(2^e))
-CC_INLINE int CeilLog10Pow2(int e)
+inline int CeilLog10Pow2(int e)
 {
     CC_ASSERT(e >= -2620);
     CC_ASSERT(e <=  2620);
@@ -385,7 +381,7 @@ CC_INLINE int CeilLog10Pow2(int e)
 }
 
 // Returns: floor(log_10(5^e))
-CC_INLINE int FloorLog10Pow5(int e)
+inline int FloorLog10Pow5(int e)
 {
     CC_ASSERT(e >= -2620);
     CC_ASSERT(e <=  2620);
@@ -393,7 +389,7 @@ CC_INLINE int FloorLog10Pow5(int e)
 }
 
 // Returns: ceil(log_10(5^e))
-CC_INLINE int CeilLog10Pow5(int e)
+inline int CeilLog10Pow5(int e)
 {
     CC_ASSERT(e >= -2620);
     CC_ASSERT(e <=  2620);
