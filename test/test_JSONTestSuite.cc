@@ -26,45 +26,45 @@
 #include "catch.hpp"
 #include "../src/json.h"
 
-inline char const* TokenKindDescr(json::TokenKind kind)
-{
-    switch (kind) {
-    case json::TokenKind::unknown:
-        assert(false && "unreachable");
-        return "unknown";
-    case json::TokenKind::invalid_character:
-        return "invalid_character";
-    case json::TokenKind::eof:
-        return "eof";
-    case json::TokenKind::l_brace:
-        return "l_brace";
-    case json::TokenKind::r_brace:
-        return "r_brace";
-    case json::TokenKind::l_square:
-        return "l_square";
-    case json::TokenKind::r_square:
-        return "r_square";
-    case json::TokenKind::comma:
-        return "comma";
-    case json::TokenKind::colon:
-        return "colon";
-    case json::TokenKind::string:
-        return "string";
-    case json::TokenKind::incomplete_string:
-        return "incomplete_string";
-    case json::TokenKind::number:
-        return "number";
-    case json::TokenKind::identifier:
-        return "identifier";
-    case json::TokenKind::comment:
-        return "comment";
-    case json::TokenKind::incomplete_comment:
-        return "incomplete_comment";
-    }
-
-    assert(false && "unreachable");
-    return "<unknown>";
-}
+//inline char const* TokenKindDescr(json::TokenKind kind)
+//{
+//    switch (kind) {
+//    case json::TokenKind::unknown:
+//        assert(false && "unreachable");
+//        return "unknown";
+//    case json::TokenKind::invalid_character:
+//        return "invalid_character";
+//    case json::TokenKind::eof:
+//        return "eof";
+//    case json::TokenKind::l_brace:
+//        return "l_brace";
+//    case json::TokenKind::r_brace:
+//        return "r_brace";
+//    case json::TokenKind::l_square:
+//        return "l_square";
+//    case json::TokenKind::r_square:
+//        return "r_square";
+//    case json::TokenKind::comma:
+//        return "comma";
+//    case json::TokenKind::colon:
+//        return "colon";
+//    case json::TokenKind::string:
+//        return "string";
+//    case json::TokenKind::incomplete_string:
+//        return "incomplete_string";
+//    case json::TokenKind::number:
+//        return "number";
+//    case json::TokenKind::identifier:
+//        return "identifier";
+//    case json::TokenKind::comment:
+//        return "comment";
+//    case json::TokenKind::incomplete_comment:
+//        return "incomplete_comment";
+//    }
+//
+//    assert(false && "unreachable");
+//    return "<unknown>";
+//}
 
 inline char const* ParseStatusDescr(json::ParseStatus ec)
 {

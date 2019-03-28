@@ -126,7 +126,7 @@ struct TestImplementation {
 };
 
 const auto SECONDS_PER_WARMUP = std::chrono::seconds(2);
-const auto SECONDS_PER_TEST = std::chrono::seconds(2);
+const auto SECONDS_PER_TEST = std::chrono::seconds(8);
 //const auto SECONDS_PER_WARMUP = std::chrono::seconds(0);
 //const auto SECONDS_PER_TEST = std::chrono::seconds(0);
 
@@ -140,11 +140,11 @@ struct TestResult {
 
 TestImplementation test_implementations[] = {
     { "Json1", &json1_dom_test::test },
-#if !defined(__MINGW32__) || !defined(_WIN32)
-    { "simdjson", &simdjson_dom_test::test },
-#endif
-    { "sajson", &sajson_dom_test::test },
-    { "RapidJSON", &rapidjson_dom_test::test },
+//#if !defined(__MINGW32__) || !defined(_WIN32)
+//    { "simdjson", &simdjson_dom_test::test },
+//#endif
+    //{ "sajson", &sajson_dom_test::test },
+    //{ "RapidJSON", &rapidjson_dom_test::test },
     //{ "nlohmann", &nlohmann_dom_test::test },
 };
 
@@ -166,18 +166,18 @@ const char* benchmark_files[] = {
     "test_data/examples/update-center.json",
 #endif
 #if 1
-    "test_data/examples/minified/apache_builds.json",
-    "test_data/examples/minified/canada.json",
-    "test_data/examples/minified/citm_catalog.json",
-    "test_data/examples/minified/github_events.json",
-    "test_data/examples/minified/gsoc-2018.json",
+    //"test_data/examples/minified/apache_builds.json",
+    //"test_data/examples/minified/canada.json",
+    //"test_data/examples/minified/citm_catalog.json",
+    //"test_data/examples/minified/github_events.json",
+    //"test_data/examples/minified/gsoc-2018.json",
     "test_data/examples/minified/instruments.json",
-    "test_data/examples/minified/marine_ik.json",
-    "test_data/examples/minified/mesh.json",
-    "test_data/examples/minified/numbers.json",
-    "test_data/examples/minified/random.json",
-    "test_data/examples/minified/twitter.json",
-    "test_data/examples/minified/update-center.json",
+    //"test_data/examples/minified/marine_ik.json",
+    //"test_data/examples/minified/mesh.json",
+    //"test_data/examples/minified/numbers.json",
+    //"test_data/examples/minified/random.json",
+    //"test_data/examples/minified/twitter.json",
+    //"test_data/examples/minified/update-center.json",
 #endif
 };
 

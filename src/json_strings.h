@@ -172,7 +172,7 @@ inline DecodeUTF8SequenceResult ValidateUTF8Sequence(char const* next, char cons
 }
 
 template <typename YieldChar>
-void EncodeUTF8(char32_t U, YieldChar yield)
+inline void EncodeUTF8(char32_t U, YieldChar yield)
 {
     JSON_ASSERT(IsValidCodepoint(U));
 
@@ -248,7 +248,7 @@ inline DecodeUTF16SequenceResult DecodeUTF16Sequence(char16_t const* next, char1
 }
 
 template <typename YieldChar16>
-void EncodeUTF16(char32_t U, YieldChar16 yield)
+inline void EncodeUTF16(char32_t U, YieldChar16 yield)
 {
     JSON_ASSERT(IsValidCodepoint(U));
 
@@ -388,7 +388,7 @@ struct UnescapeStringResult {
 };
 
 template <typename Yield1, typename YieldN>
-UnescapeStringResult UnescapeString(char const* curr, char const* last, bool allow_invalid_unicode, Yield1 yield, YieldN yield_n)
+inline UnescapeStringResult UnescapeString(char const* curr, char const* last, bool allow_invalid_unicode, Yield1 yield, YieldN yield_n)
 {
     namespace unicode = json::impl::unicode;
 
@@ -530,7 +530,7 @@ UnescapeStringResult UnescapeString(char const* curr, char const* last, bool all
 }
 
 template <typename Yield1>
-UnescapeStringResult UnescapeString(char const* curr, char const* last, bool allow_invalid_unicode, Yield1 yield)
+inline UnescapeStringResult UnescapeString(char const* curr, char const* last, bool allow_invalid_unicode, Yield1 yield)
 {
     auto yield_n = [&](char const* p, intptr_t n)
     {
@@ -549,7 +549,7 @@ struct EscapeStringResult {
 };
 
 template <typename Yield1, typename YieldN>
-EscapeStringResult EscapeString(char const* curr, char const* last, bool allow_invalid_unicode, Yield1 yield, YieldN yield_n)
+inline EscapeStringResult EscapeString(char const* curr, char const* last, bool allow_invalid_unicode, Yield1 yield, YieldN yield_n)
 {
     namespace unicode = json::impl::unicode;
 
@@ -685,7 +685,7 @@ EscapeStringResult EscapeString(char const* curr, char const* last, bool allow_i
 }
 
 template <typename Yield1>
-EscapeStringResult EscapeString(char const* curr, char const* last, bool allow_invalid_unicode, Yield1 yield)
+inline EscapeStringResult EscapeString(char const* curr, char const* last, bool allow_invalid_unicode, Yield1 yield)
 {
     auto yield_n = [&](char const* p, intptr_t n)
     {
@@ -700,17 +700,3 @@ EscapeStringResult EscapeString(char const* curr, char const* last, bool allow_i
 
 } // namespace strings
 } // namespace json
-
-//size_t UnescapedStringLength(char const* next, char const* last)
-//{
-//    size_t num_bytes = 0;
-//    json::strings::UnescapeString(next, last, [&](char) { ++num_bytes; });
-//    return num_bytes;
-//}
-
-//size_t EscapedStringLength(char const* next, char const* last)
-//{
-//    size_t num_bytes = 0;
-//    json::strings::EscapeString(next, last, [&](char) { ++num_bytes; });
-//    return num_bytes;
-//}

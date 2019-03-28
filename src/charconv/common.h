@@ -20,17 +20,30 @@
 
 #pragma once
 
+#include "double.h"
+
 #include <cassert>
 #include <climits>
 #include <cstdint>
 #include <cstring>
 #include <limits>
-#include <type_traits>
+#if defined(_MSC_VER)
+#include <intrin.h>
+#endif
 
-static_assert(std::numeric_limits<double>::is_iec559 &&
-              std::numeric_limits<double>::digits == 53 &&
-              std::numeric_limits<double>::max_exponent == 1024,
-    "The strtod/dtoa implementation requires an IEEE-754 double-precision implementation");
+#ifndef CC_ASSERT
+#define CC_ASSERT(X) assert(X)
+#endif
+
+#ifndef CC_NEVER_INLINE
+#if defined(__GNUC__)
+#define CC_NEVER_INLINE __attribute__((noinline)) inline
+#elif defined(_MSC_VER)
+#define CC_NEVER_INLINE __declspec(noinline) inline
+#else
+#define CC_NEVER_INLINE inline
+#endif
+#endif
 
 #if defined(_M_IX86) || defined(_M_ARM) || defined(__i386__) || defined(__arm__)
 #define CC_32_BIT_PLATFORM 1
@@ -42,131 +55,7 @@ static_assert(std::numeric_limits<double>::is_iec559 &&
 #define CC_HAS_64_BIT_INTRINSICS 1
 #endif
 
-#if defined(_MSC_VER)
-#include <intrin.h>
-#endif
-
-#ifndef CC_ASSERT
-#define CC_ASSERT(X) assert(X)
-#endif
-
-#if defined(__GNUC__)
-#define CC_FORCE_INLINE __attribute__((always_inline)) inline
-#define CC_NEVER_INLINE __attribute__((noinline)) inline
-#elif defined(_MSC_VER)
-#define CC_FORCE_INLINE __forceinline
-#define CC_NEVER_INLINE __declspec(noinline) inline
-#else
-#define CC_FORCE_INLINE inline
-#define CC_NEVER_INLINE inline
-#endif
-
 namespace charconv {
-
-//==================================================================================================
-// IEEE double-precision inspection
-//==================================================================================================
-
-template <typename Dest, typename Source>
-inline Dest ReinterpretBits(Source source)
-{
-    static_assert(sizeof(Dest) == sizeof(Source), "size mismatch");
-
-    Dest dest;
-    std::memcpy(&dest, &source, sizeof(Source));
-    return dest;
-}
-
-struct Double
-{
-    static_assert(std::numeric_limits<double>::is_iec559
-                  && (std::numeric_limits<double>::digits == 53 && std::numeric_limits<double>::max_exponent == 1024),
-        "IEEE-754 double-precision implementation required");
-
-    using value_type = double;
-    using bits_type = uint64_t;
-
-    static constexpr int       SignificandSize         = std::numeric_limits<value_type>::digits; // = p   (includes the hidden bit)
-    static constexpr int       PhysicalSignificandSize = SignificandSize - 1;                     // = p-1 (excludes the hidden bit)
-    static constexpr int       UnbiasedMinExponent     = 1;
-    static constexpr int       UnbiasedMaxExponent     = 2 * std::numeric_limits<value_type>::max_exponent - 1 - 1;
-    static constexpr int       ExponentBias            = 2 * std::numeric_limits<value_type>::max_exponent / 2 - 1 + (SignificandSize - 1);
-    static constexpr int       MinExponent             = UnbiasedMinExponent - ExponentBias;
-    static constexpr int       MaxExponent             = UnbiasedMaxExponent - ExponentBias;
-    static constexpr bits_type HiddenBit               = bits_type{1} << (SignificandSize - 1);   // = 2^(p-1)
-    static constexpr bits_type SignificandMask         = HiddenBit - 1;                           // = 2^(p-1) - 1
-    static constexpr bits_type ExponentMask            = bits_type{2 * std::numeric_limits<value_type>::max_exponent - 1} << PhysicalSignificandSize;
-    static constexpr bits_type SignMask                = ~(~bits_type{0} >> 1);
-
-    bits_type /*const*/ bits;
-
-    explicit Double(bits_type bits_) : bits(bits_) {}
-    explicit Double(value_type value) : bits(ReinterpretBits<bits_type>(value)) {}
-
-    bits_type PhysicalSignificand() const {
-        return bits & SignificandMask;
-    }
-
-    bits_type PhysicalExponent() const {
-        return (bits & ExponentMask) >> PhysicalSignificandSize;
-    }
-
-    // Returns whether x is zero, subnormal or normal (not infinite or NaN).
-    bool IsFinite() const {
-        return (bits & ExponentMask) != ExponentMask;
-    }
-
-    // Returns whether x is infinite.
-    bool IsInf() const {
-        return (bits & ExponentMask) == ExponentMask && (bits & SignificandMask) == 0;
-    }
-
-    // Returns whether x is a NaN.
-    bool IsNaN() const {
-        return (bits & ExponentMask) == ExponentMask && (bits & SignificandMask) != 0;
-    }
-
-    // Returns whether x is +0 or -0 or subnormal.
-    bool IsSubnormalOrZero() const {
-        return (bits & ExponentMask) == 0;
-    }
-
-    // Returns whether x is subnormal (not zero or normal or infinite or NaN).
-    bool IsSubnormal() const {
-        return (bits & ExponentMask) == 0 && (bits & SignificandMask) != 0;
-    }
-
-    // Returns whether x is +0 or -0.
-    bool IsZero() const {
-        return (bits & ~SignMask) == 0;
-    }
-
-    // Returns whether x is -0.
-    bool IsMinusZero() const {
-        return bits == SignMask;
-    }
-
-    // Returns whether x has negative sign. Applies to zeros and NaNs as well.
-    bool SignBit() const {
-        return (bits & SignMask) != 0;
-    }
-
-    value_type Value() const {
-        return ReinterpretBits<value_type>(bits);
-    }
-
-    value_type AbsValue() const {
-        return ReinterpretBits<value_type>(bits & ~SignMask);
-    }
-
-    value_type NextValue() const {
-        CC_ASSERT(!SignBit());
-        return ReinterpretBits<value_type>(IsInf() ? bits : bits + 1);
-    }
-};
-
-inline bool operator==(Double x, Double y) { return x.bits == y.bits; }
-inline bool operator!=(Double x, Double y) { return x.bits != y.bits; }
 
 //==================================================================================================
 //
@@ -177,7 +66,7 @@ struct Uint64x2 {
     uint64_t lo;
 };
 
-CC_FORCE_INLINE Uint64x2 Mul128(uint64_t a, uint64_t b)
+inline Uint64x2 Mul128(uint64_t a, uint64_t b)
 {
 #if CC_HAS_UINT128
     __extension__ using uint128_t = unsigned __int128;
@@ -219,7 +108,7 @@ CC_FORCE_INLINE Uint64x2 Mul128(uint64_t a, uint64_t b)
 #endif
 }
 
-CC_FORCE_INLINE uint64_t ShiftRight128(uint64_t lo, uint64_t hi, unsigned char dist)
+inline uint64_t ShiftRight128(uint64_t lo, uint64_t hi, unsigned char dist)
 {
     // TODO:
     // Move into charconv_ryu? The 32-bit path actually requires dist >= 32...
@@ -242,58 +131,50 @@ CC_FORCE_INLINE uint64_t ShiftRight128(uint64_t lo, uint64_t hi, unsigned char d
 #if CC_32_BIT_PLATFORM
     // Avoid a 64-bit shift by taking advantage of the range of shift values.
     // We know that 0 <= 64 - dist < 32 and 0 <= dist - 32 < 32.
-    const unsigned char lshift = -dist & 31; // == (64 - dist) % 32
-    const unsigned char rshift =  dist & 31; // == (dist - 32) % 32
+    int const lshift = -dist & 31; // == (64 - dist) % 32
+    int const rshift =  dist & 31; // == (dist - 32) % 32
 #if defined(_MSC_VER) && !defined(__clang__)
     return __ll_lshift(hi, lshift) | (static_cast<uint32_t>(lo >> 32) >> rshift);
 #else
     return (hi << lshift) | (static_cast<uint32_t>(lo >> 32) >> rshift);
 #endif
-#else // ^^^ CC_32_BIT_PLATFORM ^^^
-    return (hi << (64 - dist)) | (lo >> dist);
-#endif // ^^^ not CC_32_BIT_PLATFORM ^^^
+#else
+    int const lshift = -dist & 63;
+    int const rshift =  dist & 63;
+    return (hi << lshift) | (lo >> rshift);
+#endif
 #endif
 }
 
 // Returns the number of leading 0-bits in x, starting at the most significant bit position.
 // If x is 0, the result is undefined.
-CC_FORCE_INLINE int CountLeadingZeros64(uint64_t x)
+inline int CountLeadingZeros64(uint64_t x)
 {
     CC_ASSERT(x != 0);
 
-#if defined(_MSC_VER) && (defined(_M_ARM) || defined(_M_ARM64)) && !defined(__clang__)
-
+#if defined(__GNUC__) || defined(__clang__)
+    return __builtin_clzll(x);
+#elif defined(_MSC_VER) && (defined(_M_ARM) || defined(_M_ARM64))
     return static_cast<int>(_CountLeadingZeros64(x));
-
-#elif defined(_MSC_VER) && defined(_M_X64) && !defined(__clang__)
-
+#elif defined(_MSC_VER) && defined(_M_X64)
     return static_cast<int>(__lzcnt64(x));
-
-#elif defined(_MSC_VER) && defined(_M_IX86) && !defined(__clang__)
-
+#elif defined(_MSC_VER) && defined(_M_IX86)
     int lz = static_cast<int>( __lzcnt(static_cast<uint32_t>(x >> 32)) );
     if (lz == 32) {
         lz += static_cast<int>( __lzcnt(static_cast<uint32_t>(x)) );
     }
     return lz;
-
-#elif defined(__GNUC__) || defined(__clang__)
-
-    return __builtin_clzll(x);
-
 #else
-
     int lz = 0;
     while ((x >> 63) == 0) {
         x <<= 1;
         ++lz;
     }
     return lz;
-
 #endif
 }
 
-// TODO:
+// FIXME(?)
 // Technically, right shifting negative integers is implementation-defined.
 
 // Returns: floor(log_2(5^e))
@@ -316,18 +197,20 @@ inline int CeilLog2Pow5(int e)
 // Equivalent to: e + FloorLog2Pow5(e)
 inline int FloorLog2Pow10(int e)
 {
-    CC_ASSERT(e >= -1233);
-    CC_ASSERT(e <=  1232);
-    return (e * 1741647) >> 19;
+    //CC_ASSERT(e >= -1233);
+    //CC_ASSERT(e <=  1232);
+    //return (e * 1741647) >> 19;
+    return e + FloorLog2Pow5(e);
 }
 
 // Returns: ceil(log_2(10^e))
 // Equivalent to: e + CeilLog2Pow5(e)
 inline int CeilLog2Pow10(int e)
 {
-    CC_ASSERT(e >= -1233);
-    CC_ASSERT(e <=  1232);
-    return (e * 1741647 + ((1 << 19) - 1)) >> 19;
+    //CC_ASSERT(e >= -1233);
+    //CC_ASSERT(e <=  1232);
+    //return (e * 1741647 + ((1 << 19) - 1)) >> 19;
+    return e + CeilLog2Pow5(e);
 }
 
 // Returns: floor(log_5(2^e))

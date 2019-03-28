@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include "json_parser.h" // Mode
+#include "json_defs.h" // Mode
 #include "json_number_conversions.h"
 
 #include <cassert>
