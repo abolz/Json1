@@ -56,22 +56,19 @@ inline uint64_t DoubleToSmallInt(double x, bool& is_small_int)
 
     if (0x3FF0000000000000ull <= d.bits && d.bits < 0x4340000000000000ull) // 1 <= x < 2^53
     {
-        // x = significand * 2^exponent is a normalized floating-point number.
-        uint64_t const F = d.PhysicalSignificand();
-        uint64_t const E = d.PhysicalExponent();
-
-        auto const significand = Double::HiddenBit | F;
-        auto const exponent = static_cast<int>(E) - Double::ExponentBias;
-        JSON_ASSERT(-exponent >= 0);
-        JSON_ASSERT(-exponent < Double::SignificandSize);
+        // x = f * 2^e is a normalized floating-point number.
+        auto const f = d.NormalizedSignificand();
+        auto const e = d.NormalizedExponent();
+        JSON_ASSERT(-e >= 0);
+        JSON_ASSERT(-e < Double::SignificandSize);
 
         // Test whether the lower -exponent bits are 0, i.e.
         // whether the fractional part of x is 0.
-        uint64_t const mask = (uint64_t{1} << -exponent) - 1;
-        uint64_t const fraction = significand & mask;
+        uint64_t const mask = (uint64_t{1} << -e) - 1;
+        uint64_t const fraction = f & mask;
 
         is_small_int = (fraction == 0);
-        return significand >> -exponent;
+        return f >> -e;
     }
     else
     {
@@ -323,7 +320,7 @@ namespace numbers {
 // Convert the double-precision number `value` to a decimal floating-point
 // number.
 // The buffer must be large enough! (size >= 32 is sufficient.)
-inline char* NumberToString(char* buffer, int buffer_length, double value, bool force_trailing_dot_zero = true)
+JSON_NEVER_INLINE char* NumberToString(char* buffer, int buffer_length, double value, bool force_trailing_dot_zero = true)
 {
     JSON_ASSERT(buffer_length >= 32);
     static_cast<void>(buffer_length);
@@ -597,7 +594,7 @@ namespace numbers {
 // Convert the string `[first, last)` to a double-precision value.
 // The string must be valid according to the JSON grammar and match the number
 // class defined by `nc` (which must not be `NumberClass::invalid`).
-inline double StringToNumber(char const* next, char const* last, NumberClass nc)
+JSON_NEVER_INLINE double StringToNumber(char const* next, char const* last, NumberClass nc)
 {
     if (next == last)
         return 0.0;
@@ -631,7 +628,7 @@ inline double StringToNumber(char const* next, char const* last, NumberClass nc)
 // Convert the string `[next, last)` to a double-precision value.
 // Returns true if the string is a valid number according to the JSON grammar.
 // Otherwise returns false and stores 'NaN' in `result`.
-inline bool StringToNumber(double& result, char const* next, char const* last)
+JSON_NEVER_INLINE bool StringToNumber(double& result, char const* next, char const* last)
 {
     if (next == last)
     {

@@ -4,7 +4,7 @@
 
 #define JSON_STRICT 1
 #if !BENCH_FULLPREC
-#define JSON_CONVERT_NUMBERS 1
+//#define JSON_CONVERT_NUMBERS 0
 #endif
 #include "../src/json_parser.h"
 #include "../src/json_strings.h"
@@ -237,7 +237,7 @@ struct RapidjsonDocumentReader
         return HandleStringImpl(first, last, sc);
     }
 
-    JSON_FORCE_INLINE ParseStatus HandleStringImpl(char const* first, char const* last, StringClass sc)
+    inline ParseStatus HandleStringImpl(char const* first, char const* last, StringClass sc)
     {
 #if USE_STRING_BUFFER
         if (sc != StringClass::clean)
@@ -248,7 +248,7 @@ struct RapidjsonDocumentReader
             auto const res = json::strings::UnescapeString(first, last, /*allow_invalid_unicode*/ false,
                 [&](char ch) {
                     str[len++] = ch;
-                },
+                }/*,
                 [&](char const* p, intptr_t n) {
                     switch (n) {
                     case 0: break;
@@ -265,7 +265,7 @@ struct RapidjsonDocumentReader
                         break;
                     }
                     len += n;
-                });
+                }*/);
 
             if (res.ec != json::strings::Status::success) {
                 return ParseStatus::invalid_string;

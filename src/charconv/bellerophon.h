@@ -1,4 +1,4 @@
-// Copyright 2017 Alexander Bolz
+// Copyright 2018 Alexander Bolz
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -1040,7 +1040,7 @@ inline int MulCompare(DiyInt& lhs, int lhs_decimal_exponent, DiyInt& rhs, int rh
 // PRE: num_digits + exponent <= kDoubleMaxDecimalPower
 // PRE: num_digits + exponent >  kDoubleMinDecimalPower
 // PRE: num_digits            <= kDoubleMaxSignificantDigits
-CC_NEVER_INLINE int CompareBufferWithDiyFp(char const* digits, int num_digits, int exponent, bool nonzero_tail, DiyFp v)
+inline int CompareBufferWithDiyFp(char const* digits, int num_digits, int exponent, bool nonzero_tail, DiyFp v)
 {
     CC_ASSERT(num_digits > 0);
     CC_ASSERT(num_digits + exponent <= kDoubleMaxDecimalPower);
@@ -1061,7 +1061,7 @@ CC_NEVER_INLINE int CompareBufferWithDiyFp(char const* digits, int num_digits, i
     return MulCompare(lhs, exponent, rhs, v.e);
 }
 
-CC_FORCE_INLINE void TrimDigits(char const*& digits, int& num_digits, int& exponent, bool& nonzero_tail)
+inline void TrimDigits(char const*& digits, int& num_digits, int& exponent, bool& nonzero_tail)
 {
     // Ignore leading zeros
     while (num_digits > 0 && digits[0] == '0')
@@ -1104,7 +1104,7 @@ CC_FORCE_INLINE void TrimDigits(char const*& digits, int& num_digits, int& expon
 // PRE: digits must contain only ASCII characters in the range '0'...'9'.
 // PRE: num_digits >= 0
 // PRE: num_digits + exponent must not overflow.
-inline double DigitsToDouble(char const* digits, int num_digits, int exponent, bool nonzero_tail = false)
+CC_NEVER_INLINE double DigitsToDouble(char const* digits, int num_digits, int exponent, bool nonzero_tail = false)
 {
     CC_ASSERT(num_digits >= 0);
     CC_ASSERT(exponent <= INT_MAX - num_digits);

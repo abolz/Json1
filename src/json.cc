@@ -18,6 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+#include "json_number_conversions.h"
 #include "json.h"
 #include "json_numbers.h"
 #include "json_strings.h"
@@ -793,19 +794,6 @@ struct ParseValueCallbacks
         return {};
     }
 
-#if JSON_CONVERT_NUMBERS
-    ParseStatus HandleNumber(double value, NumberClass nc)
-    {
-        if (nc == NumberClass::invalid)
-            return ParseStatus::invalid_number;
-
-        if (mode == Mode::strict && !IsFinite(nc))
-            return ParseStatus::invalid_number;
-
-        stack.emplace_back(value);
-        return {};
-    }
-#else
     ParseStatus HandleNumber(char const* first, char const* last, NumberClass nc)
     {
         if (nc == NumberClass::invalid)
@@ -817,7 +805,6 @@ struct ParseValueCallbacks
         stack.emplace_back(numbers::StringToNumber(first, last, nc));
         return {};
     }
-#endif
 
     ParseStatus HandleString(char const* first, char const* last, StringClass string_class)
     {
@@ -883,12 +870,15 @@ struct ParseValueCallbacks
     {
         if (string_class != StringClass::clean)
         {
-            keys.emplace_back();
-            keys.back().reserve(static_cast<size_t>(last - first));
+            String str;
 
-            auto const res = strings::UnescapeString(first, last, /*allow_invalid_unicode*/ mode != Mode::strict, [&](char ch) { keys.back().push_back(ch); });
+            str.reserve(static_cast<size_t>(last - first));
+
+            auto const res = strings::UnescapeString(first, last, /*allow_invalid_unicode*/ mode != Mode::strict, [&](char ch) { str.push_back(ch); });
             if (res.ec != strings::Status::success)
-                return ParseStatus::invalid_string; // return ParseStatus::invalid_key;
+                return ParseStatus::invalid_string;
+
+            keys.emplace_back(std::move(str));
         }
         else
         {
