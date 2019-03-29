@@ -46,6 +46,7 @@ struct int53_t
         int64_t s : 53;
         uint64_t u : 53;
     };
+
     int53_t(signed int v) : s(v) {}
 #if LONG_MAX == INT_MAX
     int53_t(signed long v) : s(v) {}
@@ -55,10 +56,7 @@ struct int53_t
     explicit int53_t(signed long long v) : s(v) {}
     explicit int53_t(uint53_t v);
 
-    explicit operator signed int() const { return static_cast<signed int>(s); }
-#if LONG_MAX == INT_MAX
-    explicit operator signed long() const { return static_cast<signed long>(s); }
-#else
+#if LONG_MAX == LLONG_MAX
     operator signed long() const { return s; }
 #endif
     operator signed long long() const { return s; }
@@ -70,6 +68,7 @@ struct uint53_t
         int64_t s : 53;
         uint64_t u : 53;
     };
+
     uint53_t(unsigned int v) : u(v) {}
 #if LONG_MAX == INT_MAX
     uint53_t(unsigned long v) : u(v) {}
@@ -79,10 +78,7 @@ struct uint53_t
     explicit uint53_t(unsigned long long v) : u(v) {}
     explicit uint53_t(int53_t v);
 
-    explicit operator unsigned int() const { return static_cast<unsigned int>(u); }
-#if LONG_MAX == INT_MAX
-    explicit operator unsigned long() const { return static_cast<unsigned long>(u); }
-#else
+#if LONG_MAX == LLONG_MAX
     operator unsigned long() const { return u; }
 #endif
     operator unsigned long long() const { return u; }
@@ -323,7 +319,7 @@ inline uint53_t ToUint53(double x)
     }
     else if (e < 53)
     {
-        bits64 = (f << e) & ((uint64_t{1} << 53) - 1);
+        bits64 = f << e;
     }
     else
     {
