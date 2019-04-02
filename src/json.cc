@@ -419,6 +419,8 @@ bool Value::less_than(Value const& rhs) const noexcept
 
 static size_t HashCombine(size_t h1, size_t h2) noexcept
 {
+    // Constant = floor(2^N / phi)
+    //  where phi = 1/2 (1 + sqrt(5)) is the golden ratio.
 #if SIZE_MAX == UINT32_MAX
     h1 ^= h2 + 0x9E3779B9 + (h1 << 6) + (h1 >> 2);
 #else
